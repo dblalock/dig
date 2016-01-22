@@ -1,0 +1,7 @@
+build/
+*.pyc
+*.so
+*.dll
+*.dylib
+*/timekit.py
+*_wrap.c*

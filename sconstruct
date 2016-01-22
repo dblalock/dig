@@ -1,0 +1,42 @@
+# Set our required libraries
+libraries 		= []
+library_paths 	= ''
+cppDefines 		= {'VERSION': 1}
+cFlags 			= ['-std=c99','-Wall']
+cppFlags 		= []
+cxxFlags 		= ['-std=c++0x','-Wall','-fno-rtti'] # don't need RTTI
+
+# Let's define a common build environment first...
+env = Environment()
+env.Append(LIBS 			= libraries)
+env.Append(LIBPATH 			= library_paths)
+env.Append(CPPDEFINES 		= cppDefines)
+env.Append(CFLAGS 			= cFlags)
+env.Append(CPPFLAGS 		= cppFlags)
+env.Append(CXXFLAGS 		= cxxFlags)
+
+# # env.VariantDir('build/src', 'src', duplicate=0)
+# # env.VariantDir('build/test', 'test', duplicate=0)
+# env.VariantDir('build/src', 'src')
+# env.VariantDir('build/test', 'test')
+# env.SConscript('build/src/sconscript', {'env': env})
+# env.SConscript('build/test/sconscript', {'env': env})
+
+# Our release build is derived from the common build environment...
+release_env = env.Clone()
+release_env.Append(CPPDEFINES=['RELEASE'])
+release_env.VariantDir('build/release/src', 'cpp/src', duplicate=0)
+release_env.VariantDir('build/release/test', 'cpp/test', duplicate=0)
+
+# We define our debug build environment in a similar fashion...
+debug_env = env.Clone()
+debug_env.Append(CPPDEFINES=['DEBUG'])
+debug_env.VariantDir('build/debug/src', 'cpp/src', duplicate=0)
+debug_env.VariantDir('build/debug/test', 'cpp/test', duplicate=0)
+
+# Now that all build environment have been defined, let's iterate over
+# them and invoke the lower level SConscript files.
+for mode, env in dict(release=release_env, debug=debug_env).items():
+	modeDir = 'build/%s' % mode
+	env.SConscript('%s/src/sconscript' % modeDir, {'env': env})
+	env.SConscript('%s/test/sconscript' % modeDir, {'env': env})
