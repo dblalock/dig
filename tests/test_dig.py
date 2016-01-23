@@ -1,5 +1,7 @@
 import numpy as np
+# from ..src import dig
 import dig
+# import _dig as dig
 
 testNum = 0
 def passedTest():

@@ -6,6 +6,7 @@ import io
 import os
 import re
 import sys
+# import shutil
 from glob import glob
 from os.path import basename
 from os.path import dirname
@@ -18,7 +19,7 @@ from setuptools import setup
 from setuptools import Extension
 
 
-# ================================ C++ extension
+# # ================================ C++ extension
 
 import numpy
 
@@ -32,12 +33,14 @@ except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
 # gather up all the source files
-srcFiles = ['swig/Dig.i']
+srcFiles = ['python/dig/native.i']
 includeDirs = [numpy_include]
 # paths = [CPP_SRC_PATH, CPP_INCLUDE_PATH]
 paths = [CPP_SRC_PATH]
 for path in paths:
-    srcDir = os.path.abspath(path)
+    # srcDir = os.path.abspath(path)
+    # srcDir = os.path.relpath(path)
+    srcDir = path
     for root, dirNames, fileNames in os.walk(srcDir):
         for dirName in dirNames:
             absPath = os.path.join(root, dirName)
@@ -71,12 +74,11 @@ else:
     extra_args = ['-std=c++11','-fno-rtti']
 
 # inplace extension module
-_dig = Extension("_dig", # NOTE: this is the name users will import
-# _dig = Extension("dig", # NOTE: this is the name users will import
+nativeExt = Extension("_dig", # must match cpp header name with leading _
                   srcFiles,
                   define_macros=[('NDEBUG', '1')],
                   include_dirs=includeDirs,
-                  swig_opts=['-c++'],
+                  swig_opts=['-c++', '-modern'],
                   extra_compile_args=extra_args
                   # extra_link_args=['-stdlib=libc++'],
                   )
@@ -96,6 +98,25 @@ def read(*names, **kwargs):
 if 'TOXENV' in os.environ and 'SETUPPY_CFLAGS' in os.environ:
     os.environ['CFLAGS'] = os.environ['SETUPPY_CFLAGS']
 
+# for subdir in ('python/dig', 'python/test'):
+# for subdir in ['python/dig']:
+#     for f in ('native.py', 'dig-native.so'):
+#         pth = os.path.join(subdir, f)
+#         if os.path.exists(pth):
+#             os.remove(pth) # freaks out when building if present...
+
+# os.system('cd swig && python setup.py build')
+
+modules = [splitext(basename(path))[0] for path in glob('python/dig/*.py')]
+# modules += [splitext(basename(path))[0] for path in glob('python/dig/*.so')]
+
+packages = find_packages('python')
+
+print("------------------------")
+print("installing modules: ", modules)
+print("found packages: ", packages)
+print("------------------------")
+
 setup(
     name='dig',
     version='0.1.0',
@@ -109,9 +130,10 @@ setup(
     author_email='dblalock@mit.edu',
     url='https://github.com/dblalock/dig',
     # packages='dig',#find_packages('dig'),
-    packages=find_packages('python'),
-    package_dir={'dig': 'python/src'},
-    py_modules=[splitext(basename(path))[0] for path in glob('python/src/*.py')],
+    packages=packages,
+    # package_dir={'': 'python'},
+    package_dir={'': 'python'},
+    py_modules=modules,
     include_package_data=True,
     zip_safe=False,
     classifiers=[
@@ -125,10 +147,10 @@ setup(
         'Programming Language :: C++',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
+        # 'Programming Language :: Python :: 3',
+        # 'Programming Language :: Python :: 3.3',
+        # 'Programming Language :: Python :: 3.4',
+        # 'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         # uncomment if you test on these interpreters:
@@ -143,7 +165,8 @@ setup(
     ],
     install_requires=[
         'scons>=2.3',
-        'numpy'
+        'numpy',
+        'sphinx_rtd_theme' # for docs
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
     ],
     extras_require={
@@ -152,6 +175,17 @@ setup(
         #   ':python_version=="2.6"': ['argparse'],
     },
     ext_modules=[
-        _dig
+        nativeExt
     ],
+    # setup_requires=['pytest-runner'],
+    # tests_require=['pytest'],
 )
+
+# shutil.copy('swig/dig.py', 'python/src/')
+# shutil.copy('swig/dig.py', 'python/test/')
+# libs = glob('build/*/*.so')
+# for lib in libs:
+#     print("moving lib: ", lib)
+#     shutil.copy(lib, 'python/src/')
+#     shutil.copy(lib, 'python/test/')
+

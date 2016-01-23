@@ -1,34 +1,25 @@
 language: python
-python: '3.5'
+python: '2.7'
 sudo: false
 env:
   global:
     - LD_PRELOAD=/lib/x86_64-linux-gnu/libSegFault.so
     - SEGFAULT_SIGNALS=all
-  matrix:
-    - TOXENV=check
-    - TOXENV=docs
-
-    - TOXENV=py27,codecov
-    - TOXENV=py33,codecov
-    - TOXENV=py34,codecov
-    - TOXENV=py35,codecov
-    - TOXENV=pypy,codecov
 before_install:
   - python --version
   - uname -a
   - lsb_release -a
+  - pip install codecov
 install:
   - pip install tox
   - virtualenv --version
   - easy_install --version
   - pip --version
-  - tox --version
+  - python setup.py install
 script:
-  - tox -v
-after_failure:
-  - more .tox/log/* | cat
-  - more .tox/*/log/* | cat
+  - py.test python/
+after_success:
+  - codecov
 before_cache:
   - rm -rf $HOME/.cache/pip/log
 cache:

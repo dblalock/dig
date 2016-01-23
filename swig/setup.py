@@ -3,6 +3,7 @@
 import sys
 import glob
 import os
+import shutil
 from setuptools import setup, Extension
 
 import numpy
@@ -17,7 +18,7 @@ except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
 # gather up all the source files
-srcFiles = ['Dig.i']
+srcFiles = ['native.i']
 includeDirs = [numpy_include]
 paths = [CPP_SRC_PATH, CPP_INCLUDE_PATH]
 for path in paths:
@@ -55,7 +56,8 @@ else:
     extra_args = ['-std=c++11','-fno-rtti']
 
 # inplace extension module
-_dig = Extension("_dig",
+_dig = Extension("_dig", # has to match name of cpp header to actually load
+# _dig = Extension("dig-native",
                   srcFiles,
                   include_dirs=includeDirs,
                   swig_opts=['-c++'],
@@ -64,10 +66,18 @@ _dig = Extension("_dig",
                   )
 
 # ezrange setup
-setup(name        = "Dig",
+setup(name        = "libdig",
       description = "A time series data mining library",
       author      = "Davis Blalock",
       version     = "0.1",
       license     = 'MIT',
       ext_modules = [_dig]
       )
+
+
+# shutil.copy('dig.py', '../python/dig/native.py')
+libs = glob.glob('build/*/*.so')
+for lib in libs:
+    # shutil.copy(lib, '../python/dig/')
+    shutil.copy(lib, './')
+
