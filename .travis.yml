@@ -12,6 +12,7 @@ before_install:
   - pip install codecov
 install:
   - pip install tox
+  - pip install swig
   - virtualenv --version
   - easy_install --version
   - pip --version
