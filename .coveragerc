@@ -1,0 +1,14 @@
+[paths]
+source =
+   src/dig
+   */site-packages/dig
+
+[run]
+branch = True
+source = dig
+parallel = true
+
+[report]
+show_missing = true
+precision = 2
+omit = *migrations*

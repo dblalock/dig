@@ -5,11 +5,10 @@ import glob
 import os
 from setuptools import setup, Extension
 
-# Third-party modules - we depend on numpy for everything
 import numpy
 
 CPP_SRC_PATH = '../cpp/src'
-CPP_INCLUDE_PATH = '../cpp/include'
+CPP_INCLUDE_PATH = '../cpp/src/include'
 
 # Obtain the numpy include directory.  This logic works across numpy versions.
 try:
