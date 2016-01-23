@@ -5,6 +5,9 @@ env:
   global:
     - LD_PRELOAD=/lib/x86_64-linux-gnu/libSegFault.so
     - SEGFAULT_SIGNALS=all
+addons:
+  apt_packages:
+    - swig
 before_install:
   - python --version
   - uname -a
@@ -12,7 +15,6 @@ before_install:
   - pip install codecov
 install:
   - pip install tox
-  - pip install swig
   - virtualenv --version
   - easy_install --version
   - pip --version
