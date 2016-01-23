@@ -1,9 +1,8 @@
 //
-//  array_utils.c
-//  edtw
+//  array_utils.hpp
 //
-//  Created By <Anonymous> on 1/14/14.
-//  Copyright (c) 2014 University of <Anonymous>. All rights reserved.
+//  Created By Davis Blalock on 1/14/14.
+//  Copyright (c) 2014 Davis Blalock. All rights reserved.
 //
 
 #include <stdlib.h>
@@ -357,7 +356,7 @@ data_t** array_split(const data_t* data, len_t len, len_t newNumDims) {
 /** Returns the maximum value in data[0..len-1] */
 template <class data_t, class len_t=size_t>
 data_t array_max(const data_t *data, len_t len) {
-	data_t max = -INFINITY;
+	data_t max = std::numeric_limits<data_t>::min();
 	for (len_t i = 0; i < len; i++) {
 		if (data[i] > max) {
 			max = data[i];
@@ -376,7 +375,7 @@ data_t array_max(const Container<data_t>& data) {
 /** Returns the minimum value in data[0..len-1] */
 template <class data_t, class len_t=size_t>
 data_t array_min(const data_t *data, len_t len) {
-	data_t min = INFINITY;
+	data_t min = std::numeric_limits<data_t>::max();
 	for (len_t i = 0; i < len; i++) {
 		if (data[i] < min) {
 			min = data[i];
