@@ -70,9 +70,9 @@ if sys.platform == 'darwin':
           "-mmacosx-version-min=10.7","-fno-rtti",
           "-std=c++0x"]  # c++11
           # "-std=c++1y"]   # c++14
-else:
-    os.environ["CC"] = "g++" # force g++, not gcc
-    extra_args = ['-std=gnu++11','-fno-rtti']
+else: # only tested on travis ci linux servers
+    # os.environ["CC"] = "g++" # force g++, not gcc
+    extra_args = ['-std=c++0x','-fno-rtti']
 
 # inplace extension module
 nativeExt = Extension("_dig", # must match cpp header name with leading _
