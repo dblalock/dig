@@ -71,6 +71,7 @@ if sys.platform == 'darwin':
           "-std=c++0x"]  # c++11
           # "-std=c++1y"]   # c++14
 else:
+    os.environ["CC"] = "g++" # force g++, not gcc
     extra_args = ['-std=gnu++11','-fno-rtti']
 
 # inplace extension module
