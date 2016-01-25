@@ -4,6 +4,10 @@ Overview
 
 .. start-badges
 
+.. image:: https://travis-ci.org/dblalock/dig.svg?branch=master
+	:alt: Travis-CI Build Status
+    :target: https://travis-ci.org/dblalock/dig
+
 .. end-badges
 
 A time series data mining library
