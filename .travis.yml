@@ -21,7 +21,7 @@ install:
   - gcc --version
   - python setup.py install
 script:
-  - py.test tests/
+  - py.test python/
 after_success:
   - codecov
 before_cache:
