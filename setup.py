@@ -71,14 +71,15 @@ if sys.platform == 'darwin':
           "-std=c++0x"]  # c++11
           # "-std=c++1y"]   # c++14
 else:
-    extra_args = ['-std=c++11','-fno-rtti']
+    extra_args = ['-std=gnu++11','-fno-rtti']
 
 # inplace extension module
 nativeExt = Extension("_dig", # must match cpp header name with leading _
                   srcFiles,
                   define_macros=[('NDEBUG', '1')],
                   include_dirs=includeDirs,
-                  swig_opts=['-c++', '-modern'],
+                  # swig_opts=['-c++', '-modern'],
+                  swig_opts=['-c++'],
                   extra_compile_args=extra_args
                   # extra_link_args=['-stdlib=libc++'],
                   )
