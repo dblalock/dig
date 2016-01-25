@@ -11,6 +11,7 @@
 
 #include "distance_utils.h"
 
+#include <algorithm>
 #include <vector>
 
 template <class T, class T2>
@@ -32,7 +33,7 @@ template <class data_t, class len_t>
 void z_normalize(data_t* ar, len_t len) {
 	data_t sumx = 0, sumx2 = 0;
 	float x, mean, std;
-	
+
 	//compute mean and standard deviation
 	for (len_t i = 0; i < len; i++) {
 		x = ar[i];
@@ -44,7 +45,7 @@ void z_normalize(data_t* ar, len_t len) {
 	if (std == 0) {
 		return;
 	}
-	
+
 	//z-normalize array in-place
 	for (len_t i = 0; i < len; i++) {
 		ar[i] = (ar[i] - mean) / std;
