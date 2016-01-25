@@ -71,7 +71,7 @@ if sys.platform == 'darwin':
           "-std=c++0x"]  # c++11
           # "-std=c++1y"]   # c++14
 else: # only tested on travis ci linux servers
-    # os.environ["CC"] = "g++" # force g++, not gcc
+    os.environ["CC"] = "g++" # force compiling c as c++
     extra_args = ['-std=c++0x','-fno-rtti']
 
 # inplace extension module
