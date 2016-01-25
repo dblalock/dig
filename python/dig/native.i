@@ -1,7 +1,7 @@
 %module dig
 %{
 #define SWIG_FILE_WITH_INIT
-#include "../../cpp/src/include/Dig.hpp"
+#include "../../cpp/src/include/dig.hpp"
 %}
 
 // include numpy swig stuff
@@ -62,4 +62,4 @@ import_array();
 // ================================================================
 // actually have swig parse + wrap the files
 // ================================================================
-%include "../../cpp/src/include/Dig.hpp"
+%include "../../cpp/src/include/dig.hpp"
