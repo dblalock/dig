@@ -6,6 +6,7 @@
 //  Copyright (c) 2014 DB. All rights reserved.
 //
 
+#include <algorithm>
 #include <math.h>
 
 #include "catch.hpp"
@@ -616,4 +617,70 @@ TEST_CASE("at_idxs", "array_utils") {
 		INFO("output = " + array_to_string(v))
 		REQUIRE(equal);
 	}
+}
+
+TEST_CASE("unique", "array_utils") {
+	vector<int> x = {10,20,20,20,30,30,20,20,10};
+	
+	auto uniq = array_unique(x);
+	REQUIRE(uniq.size() == 3);
+	REQUIRE(uniq[0] == 10);
+	REQUIRE(uniq[1] == 20);
+	REQUIRE(uniq[2] == 30);
+}
+
+TEST_CASE("random", "array_utils") {
+	
+	SECTION("intsWithReplace") {
+		int howMany = 7;
+		bool replace = true;
+		auto ints = rand_ints(0, 5, howMany, replace); // must have duplicate
+		std::sort(std::begin(ints), std::end(ints));
+		bool worked = false;
+		for (int i = 0; i < ints.size() - 1; i++) {
+			worked = worked || ints[i] == ints[i+1];
+		}
+		INFO("Sampled ints with replacement = " + array_to_string(ints));
+		REQUIRE(worked);
+	}
+	
+	SECTION("intsNoReplace1") {
+		int howMany = 100;
+		bool replace = false;
+		int maxVal = howMany;
+		auto ints = rand_ints(1, maxVal, howMany, replace); // no duplicates
+		
+		INFO("Sampled ints without replacement = " + array_to_string(ints));
+		REQUIRE(array_unique(ints).size() == howMany);
+	}
+	
+	SECTION("intsNoReplace2") {
+		int howMany = 100;
+		bool replace = false;
+		int maxVal = 10*1000;
+		auto ints = rand_ints(0, maxVal, howMany, replace); // no duplicates
+		INFO("Sampled ints without replacement = " + array_to_string(ints));
+		REQUIRE(array_unique(ints).size() == howMany);
+	}
+	
+	SECTION("intsNoReplaceReturn0Samples") {
+		int howMany = 0;
+		bool replace = false;
+		int maxVal = howMany;
+		auto ints = rand_ints(-5, maxVal, howMany, replace); // no duplicates
+		
+		INFO("Sampled ints without replacement = " + array_to_string(ints));
+		REQUIRE(ints.size() == howMany);
+	}
+	
+	SECTION("intsNoReplaceReturn1Sample") {
+		int howMany = 1;
+		bool replace = false;
+		int maxVal = howMany;
+		auto ints = rand_ints(0, maxVal, howMany, replace); // no duplicates
+		
+		INFO("Sampled ints without replacement = " + array_to_string(ints));
+		REQUIRE(ints.size() == howMany);
+	}
+	
 }

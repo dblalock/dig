@@ -10,10 +10,13 @@
 #include <math.h>
 #include <memory>
 #include <sstream>
+#include <random>
+#include <unordered_map>
 #include "debug_utils.hpp"
 
 using std::unique_ptr;
 using std::vector;
+using std::unordered_map;
 
 //TODO massively refactor this to just use map() for basically everything
 
@@ -293,18 +296,36 @@ Container1<Args1...> at_idxs(const Container1<Args1...>& container,
 // Sequence creation
 // ================================================================
 
-/** Fills the array with a sequence of values; equivalent to Python
+/** Create an array containing a sequence of values; equivalent to Python
  * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
 template <class data_t, class len_t=size_t>
 unique_ptr<data_t[]> array_range(data_t startVal, data_t stopVal, data_t step=1) {
 	assertf( (stopVal - startVal) * step > 0,
-			"ERROR: array_sequence: invalid args min=%.3f, max=%.3f, step=%.3f\n",
+			"ERROR: array_range: invalid args min=%.3f, max=%.3f, step=%.3f\n",
 			startVal, stopVal, step);
 
 	//allocate a new array
 	len_t len = (len_t) floor( (stopVal - startVal) / step ) + 1;
 	unique_ptr<data_t[]> data(new data_t[len]);
 
+	data[0] = startVal;
+	for (len_t i = 1; i < len; i++ ) {
+		data[i] = data[i-1] + step;
+	}
+	return data;
+}
+/** Create an array containing a sequence of values; equivalent to Python
+ * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
+template <class data_t, class len_t=size_t>
+vector<data_t> array_range_vect(data_t startVal, data_t stopVal, data_t step=1) {
+	assertf( (stopVal - startVal) * step > 0,
+			"ERROR: array_range_vect: invalid args min=%.3f, max=%.3f, step=%.3f\n",
+			startVal, stopVal, step);
+	
+	//allocate a new array
+	len_t len = (len_t) floor( (stopVal - startVal) / step ) + 1;
+	vector<data_t> data(len);
+	
 	data[0] = startVal;
 	for (len_t i = 1; i < len; i++ ) {
 		data[i] = data[i-1] + step;
@@ -925,8 +946,7 @@ unique_ptr<data_t[]> array_resample(const data_t* data,
 }
 // template <class data_t, class len_t=size_t>
 // vector<data_t> array_resample(const vector<data_t>& data, len_t newLen) {
-template<template <class...> class Container,
-	class data_t, class len_t>
+template<template <class...> class Container, class data_t, class len_t>
 Container<data_t> array_resample(const Container<data_t>& data, len_t newLen) {
 	Container<data_t> ret(newLen);
 	array_resample(&data[0], &ret[0], data.size(), newLen);
@@ -959,6 +979,20 @@ bool array_equal(const Container1<data_t1>& x, const Container2<data_t2>& y) {
 	if (x.size() != y.size()) return 0;
 	return array_equal(&x[0], &y[0], x.size());
 }
+
+// ================================ Unique
+template<template <class...> class Container, class data_t>
+Container<data_t> array_unique(const Container<data_t>& data) {
+	Container<data_t> sorted(data);
+	auto begin = std::begin(sorted);
+	auto end = std::end(sorted);
+	std::sort(begin, end);
+	
+	Container<data_t> ret;
+	std::unique_copy(begin, end, std::back_inserter(ret));
+	return ret;
+}
+
 
 // ================================================================
 // Stringification / IO
@@ -1022,3 +1056,75 @@ template<template <class...> class Container, class data_t>
 void array_print_with_name(const Container<data_t>& data, const char* name) {
 	array_print_with_name(&data[0], data.size(), name);
 }
+
+// ================================================================
+// Randomness
+// ================================================================
+
+// ================================ Random Number Generation
+
+template<template <class...> class Container, typename K, typename V>
+V map_get(Container<K, V> map, K key, V defaultVal) {
+	if (map.count(key)) {
+		return map[key];
+	}
+	return defaultVal;
+}
+
+vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
+						 bool replace=false) {
+	vector<int64_t> ret;
+	
+	int64_t numPossibleVals = maxVal - minVal + 1;
+	assertf(numPossibleVals >= 1, "No values between min %lld and max %lld",
+			minVal, maxVal);
+	
+	if (replace) {
+		for (size_t i = 0; i < howMany; i++) {
+			int64_t val = (rand() % numPossibleVals) + minVal;
+			ret.push_back(val);
+		}
+		return ret;
+	}
+	
+	assertf(numPossibleVals >= howMany,
+			"Can't sample %llu values without replacement between min %lld and max %lld",
+			howMany, minVal, maxVal);
+	
+	// sample without replacement; each returned int is unique
+	unordered_map<int64_t, int64_t> possibleIdxs;
+	for (size_t i = 0; i < howMany; i++) {
+		int64_t idx = (rand() % (numPossibleVals - i)) + minVal;
+		
+		// next value to add to array; just the idx, unless we've picked this
+		// idx before, in which case it's whatever the highest unused value
+		// was the last time we picked it
+		auto val = map_get(possibleIdxs, idx, idx);
+
+		// move highest unused idx into this idx; the result is that the
+		// first numPossibleVals-i idxs are all available idxs
+		int64_t highestUnusedIdx = maxVal - i;
+		possibleIdxs[idx] = map_get(possibleIdxs, highestUnusedIdx,
+									highestUnusedIdx);
+		
+		ret.push_back(val);
+		
+	}
+	return ret;
+}
+
+// ================================ Random Sampling
+
+template<template <class...> class Container, class data_t>
+vector<data_t> rand_choice(const Container<data_t>& data, size_t howMany,
+							   bool replace=false) {
+	auto maxIdx = data.size() - 1;
+	auto idxs = rand_ints(0, maxIdx, howMany=howMany, replace=replace);
+	
+	vector<data_t> ret(howMany);
+	for (auto idx : idxs) {
+		ret.push_back(data[idx]);
+	}
+	return ret;
+}
+
