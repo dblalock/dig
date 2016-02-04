@@ -1,6 +1,6 @@
 //
 //  test_array_utils.cpp
-//  TimeKit
+//  Dig
 //
 //  Created by DB on 10/24/14.
 //  Copyright (c) 2014 DB. All rights reserved.

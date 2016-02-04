@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
 		72C4195C1C5337AD004689A2 /* deque.c in Sources */ = {isa = PBXBuildFile; fileRef = 72C4192C1C5337AD004689A2 /* deque.c */; };
 		72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C4192E1C5337AD004689A2 /* distance_utils.cpp */; };
@@ -38,6 +39,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		72247DAA1C600AA300B74A64 /* test_tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_tree.cpp; sourceTree = "<group>"; };
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
 		728F85DE1C55B565004E4AA0 /* tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tree.cpp; sourceTree = "<group>"; };
 		728F85DF1C55B565004E4AA0 /* tree.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = tree.hpp; sourceTree = "<group>"; };
@@ -416,6 +418,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		72247DA91C600AA300B74A64 /* neighbors */ = {
+			isa = PBXGroup;
+			children = (
+				72247DAA1C600AA300B74A64 /* test_tree.cpp */,
+			);
+			path = neighbors;
+			sourceTree = "<group>";
+		};
 		724AD31D1C4F3C170063719C = {
 			isa = PBXGroup;
 			children = (
@@ -1173,6 +1183,7 @@
 		72C4194C1C5337AD004689A2 /* test */ = {
 			isa = PBXGroup;
 			children = (
+				72247DA91C600AA300B74A64 /* neighbors */,
 				72C4194D1C5337AD004689A2 /* distance */,
 				72C419521C5337AD004689A2 /* external */,
 				72C419541C5337AD004689A2 /* main.cpp */,
@@ -1282,6 +1293,7 @@
 				72C4195F1C5337AD004689A2 /* global_test_vals.c in Sources */,
 				72C4196A1C5337AD004689A2 /* test_array_utils.cpp in Sources */,
 				72C4195E1C5337AD004689A2 /* ucr_funcs.c in Sources */,
+				72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */,
 				72C419671C5337AD004689A2 /* test_ucr_funcs.c in Sources */,
 				72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */,
 				72C4195C1C5337AD004689A2 /* deque.c in Sources */,
