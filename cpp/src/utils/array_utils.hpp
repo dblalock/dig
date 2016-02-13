@@ -268,7 +268,76 @@ static inline Container<size_t> wherei(const F&& func, const Container<Args...>&
 	return ret;
 }
 
+// ================================ Find (All)
+
+template<template <class...> class Container, class... Args,
+class data_t>
+static inline int32_t array_find(const Container<Args...>& container,
+	data_t val) {
+	int32_t i = 0;
+	for (auto it = std::begin(container); it != std::end(container); it++) {
+		if ((*it) == val) {
+			return i;
+		}
+		i++;
+	}
+	return -1;
+}
+
+template<template <class...> class Container, class... Args,
+class data_t>
+static inline int32_t array_rfind(const Container<Args...>& container,
+	data_t val) {
+	int32_t i = container.size() - 1;
+	for (auto it = std::end(container)-1; it >= std::begin(container); it--) {
+		if ((*it) == val) {
+			return i;
+		}
+		i--;
+	}
+	return -1;
+}
+
+template<template <class...> class Container, class... Args,
+class data_t>
+static inline Container<size_t> array_findall(const Container<Args...>& container,
+	data_t val) {
+	return where([&val](data_t a) {return a == val;} );
+	// vector<size_t> ret;
+	// size_t i = 0;
+	// for (auto it = std::begin(container); it != std::end(container); it++) {
+	// 	if ((*it) == val) {
+	// 		ret.push_back(i);
+	// 	}
+	// 	i++;
+	// }
+	// return ret;
+}
+
+
+template<template <class...> class Container, class... Args,
+class data_t>
+static inline size_t array_contains(const Container<Args...>& container,
+	data_t val) {
+	auto idx = array_find(container, val);
+	return idx >= 0;
+}
+
+
 // ================================ at_idxs
+
+/** note that this requires that the container implement operator[] */
+template<class data_t,
+	template <class...> class Container2, class... Args2>
+static inline vector<data_t> at_idxs(const data_t data[],
+		const Container2<Args2...>& indices) {
+	vector<data_t> ret;
+	for (auto idx : indices) {
+		auto val = data[idx];
+		ret.push_back(val);
+	}
+	return ret;
+}
 
 /** note that this requires that the container implement operator[] */
 template<template <class...> class Container1, class... Args1,
@@ -1138,7 +1207,7 @@ static inline vector<data_t> rand_choice(const Container<data_t>& data, size_t h
 // ================================ Sorting
 
 template<template <class...> class Container, class data_t>
-static inline void array_sort(const Container<data_t>& data) {
+static inline void array_sort(Container<data_t>& data) {
 	std::sort(std::begin(data), std::end(data));
 }
 

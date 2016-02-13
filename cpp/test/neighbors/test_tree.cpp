@@ -48,11 +48,28 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 
 	VectorXd q(D);
 	q.setRandom();
+//	q = (q.array() + 100).matrix(); // TODO remove
+	
+//	INFO("Running range test with N, D, r, P = %ld, %ld, %g, %d", N, D, r, P);
+	CAPTURE(N);
+	CAPTURE(D);
+	CAPTURE(r);
+	CAPTURE(P);
+	CAPTURE(binWidth);
+	
+//	array_print_with_name(&q[0], q.size(), "q");
 
 	cputime_t t0 = timeNow();
 	MatrixXd projectionVects = computeProjectionVects(X, P);
 	auto rootPtr = constructIndex(X, projectionVects, binWidth);
 
+//	std::cout << "binWidth: " << binWidth << std::endl;
+	
+//	std::cout << projectionVects << std::endl; // random nums in [-1, 1]
+//	std::cout << "projection vect norms, VVT" << std::endl;
+//	std::cout << projectionVects.rowwise().squaredNorm() << std::endl; // all 1s
+//	std::cout << projectionVects * projectionVects.transpose() << std::endl;
+	
 	cputime_t t1 = timeNow();
 	vector<length_t> neighbors = findNeighbors(q, X, *rootPtr, projectionVects, r, binWidth);
 
@@ -78,15 +95,17 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 	REQUIRE(array_unique(trueNeighbors).size() == trueNeighbors.size());
 
 	// sort true and returned neighbors
-	std::sort(std::begin(neighbors), std::end(neighbors));
+	array_sort(neighbors);
 	// array_sort(neighbors);
 	// array_sort(trueNeighbors);
 
 	// TODO remove
 	array_print_with_name(neighbors, "neighbors");
 	array_print_with_name(trueNeighbors, "trueNeighbors");
+	auto true_neighbor_dists = at_idxs(&trueDists[0], trueNeighbors);
+	array_print_with_name(true_neighbor_dists, "trueDists");
 	
-	printf("found %ld vs %ld neighbors in %g vs %g ms (index %gms)\n",
+	printf("> found %ld vs %ld neighbors in %g vs %g ms (index %gms)\n",
 		   neighbors.size(), trueNeighbors.size(),
 		   queryDuration, bruteDuration, indexDuration);
 	
@@ -102,10 +121,25 @@ TEST_CASE("notCrashing", "Tree") {
 }
 
 TEST_CASE("rangeQueries", "Tree") {
-	int N = 100;
+	srand(123);
+	
+	int N = 30;
 	int D = 10;
 	double r = 10.;
-	depth_t P=16;
+	depth_t P = 4;
 
-	runRangeTest(N, D, r, P);
+//	runRangeTest(N, D, r, P);
+	
+	r = 1.;
+	N = 10*1000; // consistently errors with seed 123, r = 1.
+//	r = 2.;
+//	N = 1000;
+//	double binWidth = 999.;
+//	double binWidth = -1; // ok, so almost all 0, but a few nonzero with this
+	double binWidth = .2; // slightly smaller than .31 that above yields
+	runRangeTest(N, D, r, P, binWidth);
+	
+	for (double r = .01; r <= 10.; r *= 10) {
+		runRangeTest(N, D, r, P, binWidth);
+	}
 }

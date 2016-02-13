@@ -18,6 +18,8 @@
 #include "redsvd.hpp"
 #include "array_utils.hpp" // for rand_ints
 
+#define DEBUG_POINT 2997
+
 // ================================================================
 // Typedefs and usings
 // ================================================================
@@ -92,7 +94,7 @@ HashMat binsForPositions(const MatrixXd& positions, double binWidth) {
 //	for (size_t i = 0; i < positions.size(); i++) {
 	for (size_t j = 0; j < bins.cols(); j++) { // column major order
 		for (size_t i = 0; i < bins.rows(); i++) {
-			int bin = (int) (positions(i, j) / binWidth);
+			int64_t bin = (int64_t) (positions(i, j) / binWidth);
 			bins(i, j) = clamp(bin, MIN_HASH_VALUE, MAX_HASH_VALUE);
 		}
 	}
@@ -101,9 +103,13 @@ HashMat binsForPositions(const MatrixXd& positions, double binWidth) {
 
 vector<hash_t> binsForVectPositions(const VectorXd& positions, double binWidth) {
 	size_t ndims = positions.size();
-	vector<hash_t>bins(ndims);
-	for (size_t i; i < ndims; i++) {
+	vector<hash_t> bins;
+	// std::cout << "binsForVectPositions, positions: " << positions << std::endl;
+	// std::cout << "binsForVectPositions, ndims: " << ndims << std::endl;
+	// std::cout << "binsForVectPositions, binWidth: " << binWidth << std::endl;
+	for (size_t i = 0; i < ndims; i++) {
 		int64_t bin = (int64_t) (positions(i) / binWidth);
+		// printf("projection #%lu: bin = %lld\n", i, bin);
 		bins.push_back(clamp(bin, MIN_HASH_VALUE, MAX_HASH_VALUE));
 	}
 	return bins;
@@ -122,10 +128,24 @@ ArrayXd squaredDistsToVectors(const MatrixXd& X, const MatrixXd& V) {
 	MatrixXd dists = prods;
 	VectorXd rowSquaredNorms = X.rowwise().squaredNorm();
 	VectorXd colSquaredNorms = V.rowwise().squaredNorm();
-//	RowVectorXd colSquaredNormsAsRow = colSquaredNorms.transposeInPlace();
 	RowVectorXd colSquaredNormsAsRow = colSquaredNorms.transpose();
 	dists.colwise() += rowSquaredNorms;
 	dists.rowwise() += colSquaredNormsAsRow;
+
+	// // does the above compute the distances properly? -> yes
+	// ArrayXd trueDists = ArrayXd(X.rows(), V.rows());
+	// for (int i = 0; i < X.rows(); i++) {
+	// 	for (int j = 0; j < V.rows(); j++) {
+	// 		VectorXd diff = X.row(i) - V.row(j);
+	// 		trueDists(i, j) = diff.squaredNorm();
+
+	// 		auto gap = fabs(trueDists(i, j) - dists(i, j));
+	// 		if (gap > .001) {
+	// 			printf("WE'RE COMPUTING THE DISTANCES WRONG!!!");
+	// 		}
+	// 		assert(gap < .001);
+	// 	}
+	// }
 
 	return dists.array();
 }
@@ -134,60 +154,99 @@ ArrayXd distsToVectors(const MatrixXd& X, const MatrixXd& V) {
 	return squaredDistsToVectors(X, V).sqrt();
 }
 
-pair<Node&, depth_t> leafNodeForPointBins(Node& table, const HashVect& bins) {
+pair<Node*, depth_t> leafNodeForPointBins(Node* table, const HashVect& bins) {
 	depth_t dim = 0;
-	Node& node = table;
-	while (node.is_internal) {
-		auto key = bins(dim);
+	// Node* node = &table;
+	// printf("----- received table %p\n", table);
+	Node* node = table;
+	while (node->is_internal) {
+		// printf("----- find leaf node loop: examining node %p\n", node);
+		hash_t key = bins(dim);
 //		node.children.emplace(key); // create key, Node() entry // TODO uncomment
-		node.children.emplace(key, Node{}); // creates Node() iff key not present // TODO uncommment
-		node = node.children[key]; // get the created node
+		node->children.emplace(key, Node{}); // creates Node() iff key not present // TODO uncommment
+		node = &(node->children[key]); // get ptr to the created node
 		dim++;
 	}
 
-	return pair<Node&, depth_t>(node, dim);
+	return pair<Node*, depth_t>(node, dim);
 }
 
-void splitLeafNode(Node& node, depth_t nodeDepth, const HashMat& allBins) {
-	node.is_internal = true;
-	auto points = node.points;
+void splitLeafNode(Node* node, depth_t nodeDepth, const HashMat& allBins) {
+	//TODO go back to pass by ref after debug
+
+	node->is_internal = true;
+	auto points = node->points;
+
+	// std::cout << "splitting node " << node << " with " << points.size() << " points" << std::endl;
+
+	if (array_contains(points, DEBUG_POINT)) {
+		printf("splitting node %p containing point %d\n", node, DEBUG_POINT);
+	}
 
 	auto depth = nodeDepth;
 	for (length_t point : points) {
 		HashVect bins = allBins.row(point); // point is an index
-		auto key = bins[depth];
+		hash_t key = bins[depth];
 
 //		node.children.emplace(key); // creates Node() iff key not present // TODO uncommment
-		node.children.emplace(key, Node{}); // creates Node() iff key not present // TODO uncommment
-		Node& child = node.children[key];
+		if (! node->children.count(key)) { // TODO remove
+			node->children.emplace(key, Node{}); // creates Node() iff key not present // TODO uncommment
+		}
+
+		Node& child = node->children[key];
 		child.points.push_back(point);
+
+		// TODO remove
+		if (key == DEBUG_POINT) {
+			printf("moved node %d to child %p at depth %d", DEBUG_POINT, &child, depth+1);
+		}
 	}
 }
 
-void insert(Node& table, const HashVect& bins, length_t id,
+void insert(Node* table, const HashVect& bins, length_t id,
 	const HashMat& allBins) {
 
-	auto nodeAndDepth = leafNodeForPointBins(table, bins);
-	auto node = nodeAndDepth.first;
-	auto depth = nodeAndDepth.second;
+	// printf("========\n");
 
-	node.points.push_back(id); // append point to list
+	auto nodeAndDepth = leafNodeForPointBins(table, bins);
+	Node* node = nodeAndDepth.first;
+	depth_t depth = nodeAndDepth.second;
+
+	node->points.push_back(id); // append point to list
+
+	// here's the problem: this is always the only point it has
+	if (id == DEBUG_POINT) { // TODO remove
+		printf("inserted %ldth point %d into node %p at depth %d\n",
+			   node->points.size(), id, node, depth);
+		std::cout << "debug point bins: " << bins << std::endl;
+	}
 
 	auto maxDepth = bins.rows() - 1;
-	if (node.points.size() > MAX_POINTS_PER_LEAF && depth < maxDepth) {
+	if (node->points.size() > MAX_POINTS_PER_LEAF && depth < maxDepth) {
 		splitLeafNode(node, depth, allBins);
 	}
 }
 
 unique_ptr<Node> constructIndex(const MatrixXd& X, const MatrixXd& projectionVects,
 								double binWidth) {
-//	auto V = computeProjectionVects(X, numProjections);
+	// auto V = computeProjectionVects(X, numProjections);
 	MatrixXd positions = X * projectionVects.transpose();
 	auto bins = binsForPositions(positions, binWidth);
 
+	// this is right
+	std::cout << "X rows, X cols: " << X.rows() << ", " << X.cols() << std::endl;
+	std::cout << "V rows, V cols: " << projectionVects.rows() << ", " << projectionVects.cols() << std::endl;
+	std::cout << "bins rows, bins cols: " << bins.rows() << ", " << bins.cols() << std::endl;
+
+	std::cout << "sum of bins: " << bins.array().abs().sum() << std::endl;
+
+	// everything is in bin 0 cuz r is huge...
+	// std::cout << "positions: " << positions << std::endl;
+	// std::cout << "bins: " << bins << std::endl;
+
 	auto root = unique_ptr<Node>(new Node());
 	for (length_t i = 0; i < bins.rows(); i++) {
-		insert(*root, bins.row(i), i, bins);
+		insert(root.get(), bins.row(i), i, bins);
 	}
 
 	return root;
@@ -197,27 +256,73 @@ unique_ptr<Node> constructIndex(const MatrixXd& X, const MatrixXd& projectionVec
 #pragma mark Queries
 // ================================================================
 
-// ------------------------------------------------ Main funcs
+// ------------------------------------------------ Main funcs
 
 vector<length_t> findNeighborsForBins(Node& node, const hash_t bins[],
+// vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 									  double binWidth, double maxDistSq) {
+									  // double binWidth, double radiusL2) {
+
+	assert(binWidth == .2);
+
+	// printf("node %p, current bin %d\n", &node, bins[0]);
+
+	// if (bins[0] != 0) {
+	// 	printf("bins[0] != 0 for node %p\n", &node);
+	// }
+
+	// if (array_contains(node.points, DEBUG_POINT)) {
+	// 	printf("node %p contains point %d\n", &node, DEBUG_POINT);
+	// }
 
 	// ------------------------ leaf node
-	if (!node.is_internal) { // leaf node
+	if (!node.is_internal) {
+		if (array_contains(node.points, DEBUG_POINT)) {
+			printf("leaf node %p contains point %d\n", &node, DEBUG_POINT);
+		}
+		// printf("found leaf node %p: number of points: %ld\n", &node, node.points.size());
 		return node.points; // don't test for actually being in range here
 	}
+//	if (!node->is_internal) {
+//		if (array_contains(node->points, DEBUG_POINT)) {
+//			printf("leaf node %p contains point %d\n", &node, DEBUG_POINT);
+//		}
+//		// printf("found leaf node %p: number of points: %ld\n", &node, node.points.size());
+//		return node->points; // don't test for actually being in range here
+//	}
 
 	// ------------------------ internal node
 	vector<length_t> neighbors;
 	hash_t key = bins[0];
-	hash_t maxBinGap = hash_t(floor(sqrt(maxDistSq / binWidth)));
+	hash_t maxBinGap = static_cast<hash_t>(floor(sqrt(maxDistSq) / binWidth));
+	// hash_t maxBinGap = static_cast<hash_t>(floor(radiusL2 / binWidth));
 	hash_t maxBinOffset = maxBinGap + 1;
 
-	for (hash_t offsetMag = 0; offsetMag < maxBinOffset; offsetMag++) {
-		hash_t binGap = std::max(offsetMag - 1, 0);
+	// recurse in query's bin
+	if (node.children.count(key)) { // no child node for this offset
+		auto child = node.children[key];
+		auto childNeighbors = findNeighborsForBins(child, bins + 1,
+												   binWidth, maxDistSq);
+												   // binWidth, radiusL2);
+	// if (node->children.count(key)) { // no child node for this offset
+	// 	auto child = node->children[key];
+	// 	auto childNeighbors = findNeighborsForBins(&child, bins + 1,
+	// 											   binWidth, maxDistSq);
+		// binWidth, radiusL2);
+		std::move(std::begin(childNeighbors), std::end(childNeighbors),
+				  std::back_inserter(neighbors));
+	}
+
+	// recurse in adjacent bins and append results to overall list
+	for (hash_t offsetMag = 1; offsetMag <= maxBinOffset; offsetMag++) {
+		hash_t binGap = offsetMag - 1;
 		double binDist = binWidth * binGap;
-		binDist *= binDist;
+		// double distBound = sqrt(radiusL2*radiusL2 - binDist*binDist);
+		binDist *= binDist; //TODO use exact query position within bin
 		double distBound = maxDistSq - binDist;
+
+//		distBound = 999.; // TODO remove
+//		distBound = maxDistSq; // interesting; this doesn't fix it... TODO remove
 
 		for (int8_t sign = -1; sign <= 1; sign += 2) { // +/- each offset
 			hash_t offset = sign * offsetMag;
@@ -225,22 +330,27 @@ vector<length_t> findNeighborsForBins(Node& node, const hash_t bins[],
 			if (! node.children.count(kk)) { // no child node for this offset
 				continue;
 			}
-
 			// recurse and append results to overall list
 			auto child = node.children[kk];
 			auto childNeighbors = findNeighborsForBins(child, bins + 1,
 													   binWidth, distBound);
-			std::move(childNeighbors.begin(), childNeighbors.end(),
+			// if (! node->children.count(kk)) { // no child node for this offset
+			// 	continue;
+			// }
+			// // recurse and append results to overall list
+			// auto child = node->children[kk];
+			// auto childNeighbors = findNeighborsForBins(&child, bins + 1,
+			// 										   binWidth, distBound);
+
+			std::move(std::begin(childNeighbors), std::end(childNeighbors),
 					  std::back_inserter(neighbors));
 		}
 	}
-
 	return neighbors;
 }
 
 Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node& node,
-									  const hash_t bins[], double binWidth,
-									  double d_lb, double d_bsf) {
+	const hash_t bins[], double binWidth, double d_lb, double d_bsf) {
 	length_t nn = -1;
 
 	// ------------------------ leaf node
@@ -258,10 +368,10 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node& node,
 	// ------------------------ internal node
 	double d_cushion = d_bsf - d_lb;
 	hash_t key = bins[0];
-	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion / binWidth)));
+	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
 	hash_t maxBinOffset = maxBinGap + 1;
 
-	for (hash_t offsetMag = 0; offsetMag < maxBinOffset; offsetMag++) {
+	for (hash_t offsetMag = 0; offsetMag <= maxBinOffset; offsetMag++) {
 		hash_t binGap = std::max(offsetMag - 1, 0);
 		double binDist = binWidth * binGap;
 		binDist *= binDist;
@@ -322,10 +432,10 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 	// ------------------------ internal node
 	double d_cushion = d_bsf - d_lb;
 	hash_t key = bins[0];
-	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion / binWidth)));
+	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
 	hash_t maxBinOffset = maxBinGap + 1;
 
-	for (hash_t offsetMag = 0; offsetMag < maxBinOffset; offsetMag++) {
+	for (hash_t offsetMag = 0; offsetMag <= maxBinOffset; offsetMag++) {
 		hash_t binGap = std::max(offsetMag - 1, 0);
 		double binDist = binWidth * binGap;
 		binDist *= binDist;
@@ -349,24 +459,42 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 	}
 }
 
-// ------------------------------------------------ Top-level funcs
+// ------------------------------------------------ Top-level funcs
 
 vector<hash_t> binsForQuery(VectorXd q, MatrixXd projectionVects,
 							double binWidth) {
 	VectorXd positions = projectionVects * q;
+	// std::cout << "query: " << q << std::endl;
+	// std::cout << "query positions: " << positions << std::endl;
 	return binsForVectPositions(positions, binWidth);
 }
 
 vector<length_t> findNeighbors(const VectorXd& q, const MatrixXd& X,
 	Node& root, const MatrixXd& projectionVects, double radiusL2,
 	double binWidth) {
+
 	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth);
 	double maxDistSq = radiusL2 * radiusL2;
 
+	// array_print_with_name(bins, "query bins");
+	// printf("initial maxDistSq: %g\n", maxDistSq);
+	// printf("initial binWidth: %g\n", binWidth);
+
+	// auto neighbors = findNeighborsForBins(root, &bins[0], binWidth, radiusL2);
 	auto neighbors = findNeighborsForBins(root, &bins[0], binWidth, maxDistSq);
+	// auto neighbors = findNeighborsForBins(&root, &bins[0], binWidth, maxDistSq);
+
+	// TODO remove
+	// array_print_with_name(array_unique(&bins[0]), bins.size(), "uniqBins");
+	// array_sort(neighbors);
+	// array_print_with_name(neighbors, "neighborsInBuckets");
+
+	// double maxDistSq = radiusL2*radiusL2;
 	return filter([&X, &q, maxDistSq](length_t i) { // prune false positives
+		// return squaredL2Dist(X.row(i), q) <= maxDistSq;
 		return squaredL2Dist(X.row(i), q) <= maxDistSq;
 	}, neighbors);
+	// return neighbors; // TODO remove
 }
 
 Neighbor find1nn(const VectorXd& q, const MatrixXd& X, Node& root,
