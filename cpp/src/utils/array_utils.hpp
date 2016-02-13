@@ -1,5 +1,5 @@
 //
-//  array_utils.hpp
+//  utils.hpp
 //
 //  Created By Davis Blalock on 1/14/14.
 //  Copyright (c) 2014 Davis Blalock. All rights reserved.
@@ -26,7 +26,7 @@ using std::unordered_map;
 
 //TODO put everything in this namespace and then add using
 //statement in files to unbreak them
-//namespace ar {
+namespace ar {
 
 // ================================================================
 // Functional Programming
@@ -272,7 +272,7 @@ static inline Container<size_t> wherei(const F&& func, const Container<Args...>&
 
 template<template <class...> class Container, class... Args,
 class data_t>
-static inline int32_t array_find(const Container<Args...>& container,
+static inline int32_t find(const Container<Args...>& container,
 	data_t val) {
 	int32_t i = 0;
 	for (auto it = std::begin(container); it != std::end(container); it++) {
@@ -286,7 +286,7 @@ static inline int32_t array_find(const Container<Args...>& container,
 
 template<template <class...> class Container, class... Args,
 class data_t>
-static inline int32_t array_rfind(const Container<Args...>& container,
+static inline int32_t rfind(const Container<Args...>& container,
 	data_t val) {
 	int32_t i = container.size() - 1;
 	for (auto it = std::end(container)-1; it >= std::begin(container); it--) {
@@ -300,7 +300,7 @@ static inline int32_t array_rfind(const Container<Args...>& container,
 
 template<template <class...> class Container, class... Args,
 class data_t>
-static inline Container<size_t> array_findall(const Container<Args...>& container,
+static inline Container<size_t> findall(const Container<Args...>& container,
 	data_t val) {
 	return where([&val](data_t a) {return a == val;} );
 	// vector<size_t> ret;
@@ -317,9 +317,9 @@ static inline Container<size_t> array_findall(const Container<Args...>& containe
 
 template<template <class...> class Container, class... Args,
 class data_t>
-static inline size_t array_contains(const Container<Args...>& container,
+static inline size_t contains(const Container<Args...>& container,
 	data_t val) {
-	auto idx = array_find(container, val);
+	auto idx = find(container, val);
 	return idx >= 0;
 }
 
@@ -372,9 +372,9 @@ static inline Container1<Args1...> at_idxs(const Container1<Args1...>& container
 /** Create an array containing a sequence of values; equivalent to Python
  * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_range(data_t startVal, data_t stopVal, data_t step=1) {
+static inline unique_ptr<data_t[]> range(data_t startVal, data_t stopVal, data_t step=1) {
 	assertf( (stopVal - startVal) / step > 0,
-			"ERROR: array_range: invalid args min=%.3f, max=%.3f, step=%.3f\n",
+			"ERROR: range: invalid args min=%.3f, max=%.3f, step=%.3f\n",
 			startVal, stopVal, step);
 
 	//allocate a new array
@@ -390,9 +390,9 @@ static inline unique_ptr<data_t[]> array_range(data_t startVal, data_t stopVal, 
 /** Create an array containing a sequence of values; equivalent to Python
  * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
 template <class data_t, class len_t=size_t>
-static inline vector<data_t> array_range_vect(data_t startVal, data_t stopVal, data_t step=1) {
+static inline vector<data_t> range_vect(data_t startVal, data_t stopVal, data_t step=1) {
 	assertf( (stopVal - startVal) / step > 0,
-			"ERROR: array_range_vect: invalid args min=%.3f, max=%.3f, step=%.3f\n",
+			"ERROR: range_vect: invalid args min=%.3f, max=%.3f, step=%.3f\n",
 			startVal, stopVal, step);
 
 	//allocate a new array
@@ -412,11 +412,11 @@ static inline vector<data_t> array_range_vect(data_t startVal, data_t stopVal, d
 
 // reads in a 1D array and returns an array of ND arrays
 template <class data_t, class len_t=size_t>
-static data_t** array_split(const data_t* data, len_t len, len_t newNumDims) {
+static data_t** split(const data_t* data, len_t len, len_t newNumDims) {
 	size_t newArraysLen = len / newNumDims;
 
 	if ( newArraysLen * newNumDims != len) {
-		printf("WARNING: array_reshape: newNumDims %d is not factor of array length %d\n",
+		printf("WARNING: reshape: newNumDims %d is not factor of array length %d\n",
 			newNumDims, len);
 		return nullptr;
 	}
@@ -449,7 +449,7 @@ static data_t** array_split(const data_t* data, len_t len, len_t newNumDims) {
 
 /** Returns the maximum value in data[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline data_t array_max(const data_t *data, len_t len) {
+static inline data_t max(const data_t *data, len_t len) {
 	data_t max = std::numeric_limits<data_t>::min();
 	for (len_t i = 0; i < len; i++) {
 		if (data[i] > max) {
@@ -460,15 +460,15 @@ static inline data_t array_max(const data_t *data, len_t len) {
 }
 /** Returns the maximum value in data[0..len-1] */
 template<template <class...> class Container, class data_t>
-static inline data_t array_max(const Container<data_t>& data) {
-	return array_max(&data[0], data.size());
+static inline data_t max(const Container<data_t>& data) {
+	return max(&data[0], data.size());
 }
 
 // ================================ Min
 
 /** Returns the minimum value in data[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline data_t array_min(const data_t *data, len_t len) {
+static inline data_t min(const data_t *data, len_t len) {
 	data_t min = std::numeric_limits<data_t>::max();
 	for (len_t i = 0; i < len; i++) {
 		if (data[i] < min) {
@@ -479,22 +479,22 @@ static inline data_t array_min(const data_t *data, len_t len) {
 }
 /** Finds the minimum of the elements in data */
 template<template <class...> class Container, class data_t>
-static inline data_t array_min(const Container<data_t>& data) {
-	return array_min(&data[0], data.size());
+static inline data_t min(const Container<data_t>& data) {
+	return min(&data[0], data.size());
 }
 
 // ================================ Sum
 
 /** Computes the sum of data[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline data_t array_sum(const data_t *data, len_t len) {
+static inline data_t sum(const data_t *data, len_t len) {
 	return reduce([](data_t x, data_t y){ return x+y;}, data, len);
 }
 /** Computes the sum of the elements in data */
 // template <class data_t>
-// data_t array_sum(const vector<data_t>& data) {
+// data_t sum(const vector<data_t>& data) {
 template<template <class...> class Container, class data_t>
-static inline data_t array_sum(const Container<data_t>& data) {
+static inline data_t sum(const Container<data_t>& data) {
 	return reduce([](data_t x, data_t y){ return x+y;}, data);
 }
 
@@ -502,7 +502,7 @@ static inline data_t array_sum(const Container<data_t>& data) {
 
 /** Computes the sum of data[i]^2 for i = [0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline data_t array_sumsquares(const data_t *data, len_t len) {
+static inline data_t sumsquares(const data_t *data, len_t len) {
 	data_t sum = 0;
 	for (len_t i=0; i < len; i++) {
 		sum += data[i]*data[i];
@@ -511,33 +511,33 @@ static inline data_t array_sumsquares(const data_t *data, len_t len) {
 }
 /** Computes the sum of data[i]^2 for i = [0..len-1] */
 template<template <class...> class Container, class data_t>
-static inline data_t array_sumsquares(const Container<data_t>& data) {
-	return array_sumsquares(&data[0], data.size());
+static inline data_t sumsquares(const Container<data_t>& data) {
+	return sumsquares(&data[0], data.size());
 }
 
 // ================================ Mean
 
 /** Computes the arithmetic mean of data[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline double array_mean(const data_t* data, len_t len) {
-	return array_sum(data, len) / ((double) len);
+static inline double mean(const data_t* data, len_t len) {
+	return sum(data, len) / ((double) len);
 }
 /** Computes the arithmetic mean of data[0..len-1] */
 // template <class data_t>
-// data_t array_mean(const vector<data_t>& data) {
+// data_t mean(const vector<data_t>& data) {
 template<template <class...> class Container, class data_t>
-static inline double array_mean(const Container<data_t>& data) {
-	return array_sum(data) / ((double) data.size());
+static inline double mean(const Container<data_t>& data) {
+	return sum(data) / ((double) data.size());
 }
 
 // ================================ Variance
 
 /** Computes the population variance of data[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline double array_variance(const data_t *data, len_t len) {
+static inline double variance(const data_t *data, len_t len) {
 	if (len <= 1) {
 		if (len < 1) {
-			printf("WARNING: array_variance(): received length %lu, returning 0",
+			printf("WARNING: variance(): received length %lu, returning 0",
 				len);
 		}
 		return 0;
@@ -555,24 +555,24 @@ static inline double array_variance(const data_t *data, len_t len) {
 	return sse / len;
 }
 // template <class data_t>
-// data_t array_variance(const vector<data_t>& data) {
+// data_t variance(const vector<data_t>& data) {
 template<template <class...> class Container, class data_t>
-static inline double array_variance(const Container<data_t>& data) {
-	return array_variance(&data[0], data.size());
+static inline double variance(const Container<data_t>& data) {
+	return variance(&data[0], data.size());
 }
 
 // ================================ Standard deviation
 
 /** Computes the population standard deviation of data[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline double array_std(const data_t *data, len_t len) {
-	return sqrt(array_variance(data,len));
+static inline double stdev(const data_t *data, len_t len) {
+	return sqrt(variance(data,len));
 }
 
 /** Computes the population standard deviation of data[0..len-1] */
 template<template <class...> class Container, class data_t>
-static inline double array_std(const Container<data_t>& data) {
-	return sqrt(array_variance(data));
+static inline double stdev(const Container<data_t>& data) {
+	return sqrt(variance(data));
 }
 
 // ================================================================
@@ -582,7 +582,7 @@ static inline double array_std(const Container<data_t>& data) {
 // ================================ Dot Product
 /** Returns the the dot product of x and y */
 template <class data_t, class len_t=size_t>
-static inline data_t array_dot(const data_t* x, const data_t* y, len_t len) {
+static inline data_t dot(const data_t* x, const data_t* y, len_t len) {
 	data_t sum = 0;
 	for (len_t i = 0; i < len; i++) {
 		sum += x[i] * y[i];
@@ -591,9 +591,9 @@ static inline data_t array_dot(const data_t* x, const data_t* y, len_t len) {
 }
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
-static inline double array_dot(const Container1<data_t1>& x, const Container2<data_t2>& y) {
+static inline double dot(const Container1<data_t1>& x, const Container2<data_t2>& y) {
 	assert(x.size() == y.size());
-	return array_dot(&x[0],&y[0],x.size());
+	return dot(&x[0],&y[0],x.size());
 }
 
 // ================================================================
@@ -604,7 +604,7 @@ static inline double array_dot(const Container1<data_t1>& x, const Container2<da
 
 /** Cumulative sum of elements in src, storing the result in dest */
 template <class data_t, class len_t=size_t>
-static inline void array_cum_sum(const data_t* src, data_t* dest, len_t len) {
+static inline void cum_sum(const data_t* src, data_t* dest, len_t len) {
 	dest[0] = src[0];
 	for (len_t i=1; i < len; i++) {
 		dest[i] = src[i] + dest[i-1];
@@ -612,14 +612,14 @@ static inline void array_cum_sum(const data_t* src, data_t* dest, len_t len) {
 }
 /** Returns a new array composed of the cumulative sum of the data */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_cumsum(data_t *data, len_t len) {
+static inline unique_ptr<data_t[]> cumsum(data_t *data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	array_cumsum(data, ret, len);
 	return ret;
 }
 /** Returns a new array composed of the cumulative sum of the data */
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> array_cumsum(const Container<data_t>& data) {
+static inline Container<data_t> cumsum(const Container<data_t>& data) {
 	Container<data_t> ret{data.size()};
 	array_cumsum(&data[0],&ret[0],data.size());
 	return ret;
@@ -629,7 +629,7 @@ static inline Container<data_t> array_cumsum(const Container<data_t>& data) {
 
 /** Cumulative mean of elements in src, storing the result in dest */
 template <class data_t, class len_t=size_t>
-static inline void array_cummean(const data_t* src, data_t* dest, len_t len) {
+static inline void cummean(const data_t* src, data_t* dest, len_t len) {
 	double sum = 0;
 	for (len_t i=0; i < len; i++) {
 		sum += src[i];
@@ -638,14 +638,14 @@ static inline void array_cummean(const data_t* src, data_t* dest, len_t len) {
 }
 /** Returns a new array composed of the cumulative mean of the data */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_cummean(data_t* data, len_t len) {
+static inline unique_ptr<data_t[]> cummean(data_t* data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	array_cummean(data, ret, len);
 	return ret;
 }
 /** Returns a new array composed of the cumulative mean of the data */
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> array_cummean(const Container<data_t>& data) {
+static inline Container<data_t> cummean(const Container<data_t>& data) {
 	Container<data_t> ret{data.size()};
 	array_cummean(&data[0],&ret[0],data.size());
 	return ret;
@@ -655,9 +655,9 @@ static inline Container<data_t> array_cummean(const Container<data_t>& data) {
 
 /** Cumulative SSE of elements in src, storing the result in dest */
 template <class data_t, class len_t=size_t>
-static inline void array_cumsxx(const data_t* src, data_t* dest, len_t len) {
+static inline void cumsxx(const data_t* src, data_t* dest, len_t len) {
 	if (len < 1) {
-		printf("WARNING: array_cumsxx(): received length %lu, returning 0",
+		printf("WARNING: cumsxx(): received length %lu, returning 0",
 			len);
 		return;
 	}
@@ -679,14 +679,14 @@ static inline void array_cumsxx(const data_t* src, data_t* dest, len_t len) {
 }
 /** Returns the sum of squared differences from the mean of data[0..i] */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_cumsxx(data_t *data, len_t len) {
+static inline unique_ptr<data_t[]> cumsxx(data_t *data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	array_cumsxx(data, ret, len);
 	return ret;
 }
 /** Returns the sum of squared differences from the mean of data[0..i] */
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> array_cumsxx(const Container<data_t>& data) {
+static inline Container<data_t> cumsxx(const Container<data_t>& data) {
 	Container<data_t> ret{data.size()};
 	array_cumsxx(&data[0],&ret[0],data.size());
 	return ret;
@@ -700,14 +700,14 @@ static inline Container<data_t> array_cumsxx(const Container<data_t>& data) {
 
 /** Elementwise x + y, storing the result in dest */
 template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
-static inline void array_add(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
+static inline void add(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		dest[i] = x[i] + y[i];
 	}
 }
 /** Returns a new array composed of elementwise x + y */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_add(const data_t1* x, const data_t2* y, len_t len)
+static inline auto add(const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(x[0]+y[0])[]>
 {
 	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y, len);
@@ -715,7 +715,7 @@ static inline auto array_add(const data_t1* x, const data_t2* y, len_t len)
 /** Returns a new array composed of elementwise x + y */
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
-static inline auto array_add(const Container1<data_t1>& x, const Container2<data_t2>& y)
+static inline auto add(const Container1<data_t1>& x, const Container2<data_t2>& y)
 	-> Container1<decltype(x[0]+y[0])>
 {
 	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y);
@@ -725,14 +725,14 @@ static inline auto array_add(const Container1<data_t1>& x, const Container2<data
 
 /** Elementwise x - y, storing the result in dest */
 template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
-static inline void array_sub(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
+static inline void sub(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		dest[i] = x[i] - y[i];
 	}
 }
 /** Returns a new array composed of elementwise x - y */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_sub(const data_t1* x, const data_t2* y, len_t len)
+static inline auto sub(const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(x[0]+y[0])[]>
 {
 	return map([](data_t1 a, data_t2 b){ return a - b;}, x, y, len);
@@ -740,7 +740,7 @@ static inline auto array_sub(const data_t1* x, const data_t2* y, len_t len)
 /** Returns a new array composed of elementwise x - y */
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
-static inline auto array_sub(const Container1<data_t1>& x, const Container2<data_t2>& y)
+static inline auto sub(const Container1<data_t1>& x, const Container2<data_t2>& y)
 	-> Container1<decltype(x[0]+y[0])>
 {
 	return map([](data_t1 a, data_t2 b){ return a - b;}, x, y);
@@ -750,14 +750,14 @@ static inline auto array_sub(const Container1<data_t1>& x, const Container2<data
 
 /** Elementwise x * y, storing the result in dest */
 template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
-static inline void array_mul(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
+static inline void mul(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		dest[i] = x[i] * y[i];
 	}
 }
 /** Returns a new array composed of elementwise x * y */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_mul(const data_t1* x, const data_t2* y, len_t len)
+static inline auto mul(const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(x[0]*y[0])[]>
 {
 	return map([](data_t1 a, data_t2 b){ return a * b;}, x, y, len);
@@ -765,7 +765,7 @@ static inline auto array_mul(const data_t1* x, const data_t2* y, len_t len)
 /** Returns a new array composed of elementwise x * y */
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
-static inline auto array_mul(const Container1<data_t1>& x, const Container2<data_t2>& y)
+static inline auto mul(const Container1<data_t1>& x, const Container2<data_t2>& y)
 	-> Container1<decltype(x[0]+y[0])>
 {
 	return map([](data_t1 a, data_t2 b){ return a * b;}, x, y);
@@ -777,20 +777,20 @@ static inline auto array_mul(const Container1<data_t1>& x, const Container2<data
 
 /** Elementwise x / y, storing the result in dest */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void array_div(const data_t1* x, const data_t2* y, double* dest, len_t len) {
+static inline void div(const data_t1* x, const data_t2* y, double* dest, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		dest[i] = x[i] / (double) y[i];
 	}
 }
 /** Returns a new array composed of elementwise x / y */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline unique_ptr<double[]> array_div(const data_t1* x, const data_t2* y, len_t len) {
+static inline unique_ptr<double[]> div(const data_t1* x, const data_t2* y, len_t len) {
 	return map([](data_t1 a, data_t2 b){ return (double)a / b;}, x, y, len);
 }
 /** Returns a new array composed of elementwise x / y */
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
-static inline Container1<double> array_div(const Container1<data_t1>& x,
+static inline Container1<double> div(const Container1<data_t1>& x,
 	const Container2<data_t2>& y)
 {
 	return map([](data_t1 a, data_t2 b){ return (double) a / b;}, x, y);
@@ -799,7 +799,7 @@ static inline Container1<double> array_div(const Container1<data_t1>& x,
 // ================================ Concatenate
 
 template <class data_t, class len_t1=size_t, class len_t2=size_t>
-static inline unique_ptr<data_t[]> array_concat(const data_t* x, const data_t* y,
+static inline unique_ptr<data_t[]> concat(const data_t* x, const data_t* y,
 	len_t1 len1, len_t2 len2)
 {
 	auto combinedLen = len1 + len2;
@@ -816,7 +816,7 @@ static inline unique_ptr<data_t[]> array_concat(const data_t* x, const data_t* y
 
 template<template <class...> class Container1,
 	template <class...> class Container2, class data_t>
-static inline Container1<data_t> array_concat(const Container1<data_t>& x,
+static inline Container1<data_t> concat(const Container1<data_t>& x,
 	const Container1<data_t>& y, data_t val)
 {
 	Container1<data_t> ret(x);
@@ -832,21 +832,21 @@ static inline Container1<data_t> array_concat(const Container1<data_t>& x,
 
 /** Adds each element in data[0..len-1] by the scalar val */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void array_adds_inplace(data_t1* data, data_t2 val, len_t len) {
+static inline void adds_inplace(data_t1* data, data_t2 val, len_t len) {
 	map_inplace([val](data_t1 x){return x + val;}, data, len);
 }
 /** Returns a new array composed of (data[i] + val) for all i */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_adds(const data_t1* data, data_t2 val, len_t len)
+static inline auto adds(const data_t1* data, data_t2 val, len_t len)
 	-> unique_ptr<decltype(data[0] + val)[]>
 {
 	return map([val](data_t1 x) {return x + val;}, data, len);
 }
 /** Returns a new vector composed of (data[i] + val) for all i */
 // template <class data_t>
-// vector<data_t> array_add(const vector<data_t>& data, data_t val) {
+// vector<data_t> add(const vector<data_t>& data, data_t val) {
 template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto array_adds(const Container<data_t1>& data, data_t2 val)
+static inline auto adds(const Container<data_t1>& data, data_t2 val)
 	-> Container<decltype(*begin(data) + val)>
 {
 	return map([val](data_t1 x) {return x + val;}, data);
@@ -856,19 +856,19 @@ static inline auto array_adds(const Container<data_t1>& data, data_t2 val)
 
 /** Adds each element in data[0..len-1] by the scalar val */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void array_subs_inplace(data_t1* data, data_t2 val, len_t len) {
+static inline void subs_inplace(data_t1* data, data_t2 val, len_t len) {
 	map_inplace([val](data_t1 x){return x - val;}, data, len);
 }
 /** Returns a new array composed of (data[i] + val) for all i */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_subs(const data_t1* data, data_t2 val, len_t len)
+static inline auto subs(const data_t1* data, data_t2 val, len_t len)
 	-> unique_ptr<decltype(data[0] + val)[]>
 {
 	return map([val](data_t1 x) {return x - val;}, data, len);
 }
 /** Returns a new vector composed of (data[i] + val) for all i */
 template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto array_subs(const Container<data_t1>& data, data_t2 val)
+static inline auto subs(const Container<data_t1>& data, data_t2 val)
 	-> Container<decltype(*begin(data) + val)>
 {
 	return map([val](data_t1 x) {return x - val;}, data);
@@ -878,19 +878,19 @@ static inline auto array_subs(const Container<data_t1>& data, data_t2 val)
 
 /** Multiplies each element in data[0..len-1] by the scalar val */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void array_muls_inplace(data_t1* data, data_t2 val, len_t len) {
+static inline void muls_inplace(data_t1* data, data_t2 val, len_t len) {
 	map_inplace([val](data_t1 x){return x * val;}, data, len);
 }
 /** Returns a new array composed of (data[i] * val) for all i */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_muls(const data_t1* data, data_t2 val, len_t len)
+static inline auto muls(const data_t1* data, data_t2 val, len_t len)
 	-> unique_ptr<decltype(data[0] + val)[]>
 {
 	return map([val](data_t1 x) {return x * val;}, data, len);
 }
 /** Returns a new vector composed of (data[i] * val) for all i */
 template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto array_muls(const Container<data_t1>& data, data_t2 val)
+static inline auto muls(const Container<data_t1>& data, data_t2 val)
 	-> Container<decltype(*begin(data) + val)>
 {
 	return map([val](data_t1 x) {return x * val;}, data);
@@ -900,19 +900,19 @@ static inline auto array_muls(const Container<data_t1>& data, data_t2 val)
 
 /** Divides each element in data[0..len-1] by the scalar val */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void array_divs_inplace(data_t1* data, data_t2 val, len_t len) {
+static inline void divs_inplace(data_t1* data, data_t2 val, len_t len) {
 	map_inplace([val](data_t1 x){return x / val;}, data, len);
 }
 /** Returns a new array composed of (data[i] / val) for all i */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto array_divs(const data_t1* data, data_t2 val, len_t len)
+static inline auto divs(const data_t1* data, data_t2 val, len_t len)
 	-> unique_ptr<decltype(data[0] + val)[]>
 {
 	return map([val](data_t1 x) {return x / val;}, data, len);
 }
 /** Returns a new vector composed of (data[i] / val) for all i */
 template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto array_divs(const Container<data_t1>& data, data_t2 val)
+static inline auto divs(const Container<data_t1>& data, data_t2 val)
 	-> Container<decltype(*begin(data) + val)>
 {
 	return map([val](data_t1 x) {return x / val;}, data);
@@ -922,19 +922,19 @@ static inline auto array_divs(const Container<data_t1>& data, data_t2 val)
 
 /** Copies src[0..len-1] to dest[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline void array_copy_inplace(const data_t* src, data_t* dest, len_t len) {
+static inline void copy_inplace(const data_t* src, data_t* dest, len_t len) {
 	std::copy(src, src+len, dest);
 }
 /** Returns a copy of the provided array */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_copy(const data_t* data, len_t len) {
+static inline unique_ptr<data_t[]> copy(const data_t* data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	std::copy(data, data+len, ret);
 	return ret;
 }
 /** Returns a copy of the provided array */
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> array_copy(const Container<data_t>& data) {
+static inline Container<data_t> copy(const Container<data_t>& data) {
 	Container<data_t> ret(data);
 	return ret;
 }
@@ -943,7 +943,7 @@ static inline Container<data_t> array_copy(const Container<data_t>& data) {
 
 /** Copies src[0..len-1] to dest[len-1..0] */
 template <class data_t, class len_t=size_t>
-static inline void array_reverse(const data_t *src, data_t *dest, len_t len) {
+static inline void reverse(const data_t *src, data_t *dest, len_t len) {
 	len_t j = len - 1;
 	for (len_t i = 0; i < len; i++, j--) {
 		dest[i] = src[j];
@@ -951,14 +951,14 @@ static inline void array_reverse(const data_t *src, data_t *dest, len_t len) {
 }
 /** Returns data[len-1..0] */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_reverse(const data_t* data, len_t len) {
+static inline unique_ptr<data_t[]> reverse(const data_t* data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	array_reverse(data, ret, len);
 	return ret;
 }
 /** Returns data[len-1..0] */
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> array_add(const Container<data_t>& data) {
+static inline Container<data_t> add(const Container<data_t>& data) {
 	Container<data_t> ret(data.size());
 	array_reverse(data, &ret[0], data.size());
 	return ret;
@@ -968,27 +968,27 @@ static inline Container<data_t> array_add(const Container<data_t>& data) {
 
 /** Sets each element of the array to the value specified */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void array_set_to_constant(data_t1 *x, data_t2 value, len_t len) {
+static inline void set_to_constant(data_t1 *x, data_t2 value, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		x[i] = value;
 	}
 }
 template<template <class...> class Container,
 	class data_t1, class data_t2>
-static inline void array_set_to_constant(const Container<data_t1>& data, data_t2 value) {
+static inline void set_to_constant(const Container<data_t1>& data, data_t2 value) {
 	array_set_to_constant(&data[0], value, data.size());
 }
 
 /** Returns an array of length len with all elements equal to value */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_constant(data_t value, len_t len) {
+static inline unique_ptr<data_t[]> constant(data_t value, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	array_set_to_constant(ret, value, len);
 	return ret;
 }
 /** Returns an array of length len with all elements equal to value */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_constant_vect(data_t value, len_t len) {
+static inline unique_ptr<data_t[]> constant_vect(data_t value, len_t len) {
 	vector<data_t> ret(len, value);
 	return ret;
 }
@@ -999,7 +999,7 @@ static inline unique_ptr<data_t[]> array_constant_vect(data_t value, len_t len) 
  * dest[i] = src[ floor(i*srcLen/destLen) ]; note that this function does no
  * filtering of any kind */
 template <class data_t, class len_t=size_t>
-static inline void array_resample(const data_t *src, data_t *dest,
+static inline void resample(const data_t *src, data_t *dest,
 	len_t srcLen, len_t destLen)
 {
 	len_t srcIdx;
@@ -1010,7 +1010,7 @@ static inline void array_resample(const data_t *src, data_t *dest,
 	}
 }
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> array_resample(const data_t* data,
+static inline unique_ptr<data_t[]> resample(const data_t* data,
 	len_t currentLen, len_t newLen)
 {
 	unique_ptr<data_t[]> ret(new data_t[newLen]);
@@ -1018,9 +1018,9 @@ static inline unique_ptr<data_t[]> array_resample(const data_t* data,
 	return ret;
 }
 // template <class data_t, class len_t=size_t>
-// vector<data_t> array_resample(const vector<data_t>& data, len_t newLen) {
+// vector<data_t> resample(const vector<data_t>& data, len_t newLen) {
 template<template <class...> class Container, class data_t, class len_t>
-static inline Container<data_t> array_resample(const Container<data_t>& data, len_t newLen) {
+static inline Container<data_t> resample(const Container<data_t>& data, len_t newLen) {
 	Container<data_t> ret(newLen);
 	array_resample(&data[0], &ret[0], data.size(), newLen);
 	return ret;
@@ -1030,7 +1030,7 @@ static inline Container<data_t> array_resample(const Container<data_t>& data, le
 
 /** Returns true if elements 0..(len-1) of x and y are equal, else false */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline bool array_equal(const data_t1 *x, const data_t2 *y, len_t len) {
+static inline bool all_eq(const data_t1 *x, const data_t2 *y, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		//TODO define as a const somewhere
 		if (std::fabs(x[i] - y[i]) > .00001) return false;
@@ -1039,7 +1039,7 @@ static inline bool array_equal(const data_t1 *x, const data_t2 *y, len_t len) {
 }
 //template <class Ptr1, class Ptr2, class data_t1, class data_t2,
 //	class len_t=size_t>
-//bool array_equal(const Ptr1<data_t1> x, const Ptr2<data_t2> y, len_t len) {
+//bool equal(const Ptr1<data_t1> x, const Ptr2<data_t2> y, len_t len) {
 //	for (len_t i = 0; i < len; i++) {
 //		//TODO define as a const somewhere
 //		if ( fabs(x[i] - y[i]) > .00001 ) return false;
@@ -1048,14 +1048,14 @@ static inline bool array_equal(const data_t1 *x, const data_t2 *y, len_t len) {
 //}
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
-static inline bool array_equal(const Container1<data_t1>& x, const Container2<data_t2>& y) {
+static inline bool all_eq(const Container1<data_t1>& x, const Container2<data_t2>& y) {
 	if (x.size() != y.size()) return 0;
-	return array_equal(&x[0], &y[0], x.size());
+	return all_eq(&x[0], &y[0], x.size());
 }
 
 // ================================ Unique
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> array_unique(const Container<data_t>& data) {
+static inline Container<data_t> unique(const Container<data_t>& data) {
 	Container<data_t> sorted(data);
 	auto begin = std::begin(sorted);
 	auto end = std::end(sorted);
@@ -1073,7 +1073,7 @@ static inline Container<data_t> array_unique(const Container<data_t>& data) {
 
 // ================================ Stringification
 template <class data_t, class len_t=size_t>
-static std::string array_to_string(const data_t *x, len_t len) {
+static std::string to_string(const data_t *x, len_t len) {
 	std::ostringstream os;
 	os.precision(3);
 	os << "[";
@@ -1087,7 +1087,7 @@ static std::string array_to_string(const data_t *x, len_t len) {
 // in setting stream precision unnecessarily
 //
 //template<>
-//std::string array_to_string<float>(const float *x, size_t len) {
+//std::string to_string<float>(const float *x, size_t len) {
 //	std::ostringstream os;
 //	os.precision(3);
 //	os << "[";
@@ -1098,7 +1098,7 @@ static std::string array_to_string(const data_t *x, len_t len) {
 //	return os.str();
 //}
 //template<>
-//std::string array_to_string<double>(const double *x, size_t len) {
+//std::string to_string<double>(const double *x, size_t len) {
 //	std::ostringstream os;
 //	os.precision(3);
 //	os << "[";
@@ -1109,31 +1109,31 @@ static std::string array_to_string(const data_t *x, len_t len) {
 //	return os.str();
 //}
 //template<>
-//std::string array_to_string<char>(const char *x, size_t len) {
+//std::string to_string<char>(const char *x, size_t len) {
 //	return std::string(x);
 //}
 
 template<template <class...> class Container, class data_t>
-static inline std::string array_to_string(const Container<data_t>& data) {
-	return array_to_string(&data[0], data.size());
+static inline std::string to_string(const Container<data_t>& data) {
+	return to_string(&data[0], data.size());
 }
 
 // ================================ Printing
 template <class data_t, class len_t=size_t>
-static inline void array_print(const data_t *x, len_t len) {
-	printf("%s\n", array_to_string(x, len));
+static inline void print(const data_t *x, len_t len) {
+	printf("%s\n", to_string(x, len));
 }
 template<template <class...> class Container, class data_t>
-static inline void array_print(const Container<data_t>& data) {
+static inline void print(const Container<data_t>& data) {
 	array_print(&data[0], data.size());
 }
 
 template <class data_t, class len_t=size_t>
-static inline void array_print_with_name(const data_t *data, len_t len, const char* name) {
-	printf("%s:\t%s\n", name, array_to_string(data, len).c_str());
+static inline void print_with_name(const data_t *data, len_t len, const char* name) {
+	printf("%s:\t%s\n", name, to_string(data, len).c_str());
 }
 template<template <class...> class Container, class data_t>
-static inline void array_print_with_name(const Container<data_t>& data, const char* name) {
+static inline void print_with_name(const Container<data_t>& data, const char* name) {
 	array_print_with_name(&data[0], data.size(), name);
 }
 
@@ -1207,8 +1207,10 @@ static inline vector<data_t> rand_choice(const Container<data_t>& data, size_t h
 // ================================ Sorting
 
 template<template <class...> class Container, class data_t>
-static inline void array_sort(Container<data_t>& data) {
+static inline void sort(Container<data_t>& data) {
 	std::sort(std::begin(data), std::end(data));
 }
+	
 
+} // namespace ar
 #endif

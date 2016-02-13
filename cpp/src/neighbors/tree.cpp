@@ -27,15 +27,19 @@
 typedef Eigen::Matrix<hash_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> HashMat;
 typedef Eigen::Matrix<hash_t, Eigen::Dynamic, 1> HashVect;
 
-using std::unordered_map;
+// using std::unordered_map;
+using std::map;
 using RedSVD::RedSVD;
 
 // ================================================================
 // Constants
 // ================================================================
 
-const hash_t MAX_HASH_VALUE = 32767; // because int16_t
-const hash_t MIN_HASH_VALUE = -32768;
+const hash_t MAX_HASH_VALUE = 127; // int8_t
+const hash_t MIN_HASH_VALUE = -128;
+// const hash_t MAX_HASH_VALUE = 32767; // int16_t
+// const hash_t MIN_HASH_VALUE = -32768;
+const double TARGET_HASH_SPREAD_STDS = 3.0; // +/- 3 std deviations
 
 const uint16_t MAX_POINTS_PER_LEAF = 8;
 
@@ -44,7 +48,8 @@ const uint16_t MAX_POINTS_PER_LEAF = 8;
 // ================================================================
 
 Node::Node() :
-	children(unordered_map<hash_t, Node>()),
+	// children(unordered_map<hash_t, Node>()),
+	children(map<hash_t, Node>()),
 	points(vector<length_t>()),
 	is_internal(false)
 {
@@ -80,6 +85,17 @@ U clamp(const T x, const U lower, const U upper) {
 		return lower;
 	}
 	return static_cast<U>(x);
+}
+
+double computeBinWidth(const MatrixXd& positions) {
+	// assumes first col of positions corresponds to dominant eigenvect
+	ArrayXd firstCol = positions.col(0).array();
+	firstCol -= firstCol.mean();
+	double SSE = firstCol.matrix().squaredNorm();
+	double variance = SSE / firstCol.size();
+	double std = sqrt(variance);
+	double targetBinsPerStd = MAX_HASH_VALUE / TARGET_HASH_SPREAD_STDS;
+	return std / targetBinsPerStd;
 }
 
 MatrixXd computeProjectionVects(const MatrixXd& X, depth_t numVects) {
@@ -179,7 +195,7 @@ void splitLeafNode(Node* node, depth_t nodeDepth, const HashMat& allBins) {
 
 	// std::cout << "splitting node " << node << " with " << points.size() << " points" << std::endl;
 
-	if (array_contains(points, DEBUG_POINT)) {
+	if (ar::contains(points, DEBUG_POINT)) {
 		printf("splitting node %p containing point %d\n", node, DEBUG_POINT);
 	}
 
@@ -196,10 +212,10 @@ void splitLeafNode(Node* node, depth_t nodeDepth, const HashMat& allBins) {
 		Node& child = node->children[key];
 		child.points.push_back(point);
 
-		// TODO remove
-		if (key == DEBUG_POINT) {
-			printf("moved node %d to child %p at depth %d", DEBUG_POINT, &child, depth+1);
-		}
+//		// TODO remove
+//		if (key == DEBUG_POINT) {
+//			printf("moved node %d to child %p at depth %d", DEBUG_POINT, &child, depth+1);
+//		}
 	}
 }
 
@@ -214,12 +230,12 @@ void insert(Node* table, const HashVect& bins, length_t id,
 
 	node->points.push_back(id); // append point to list
 
-	// here's the problem: this is always the only point it has
-	if (id == DEBUG_POINT) { // TODO remove
-		printf("inserted %ldth point %d into node %p at depth %d\n",
-			   node->points.size(), id, node, depth);
-		std::cout << "debug point bins: " << bins << std::endl;
-	}
+	// // here's the problem: this is always the only point it has
+	// if (id == DEBUG_POINT) { // TODO remove
+	// 	printf("inserted %ldth point %d into node %p at depth %d\n",
+	// 		   node->points.size(), id, node, depth);
+	// 	std::cout << "debug point bins: " << bins << std::endl;
+	// }
 
 	auto maxDepth = bins.rows() - 1;
 	if (node->points.size() > MAX_POINTS_PER_LEAF && depth < maxDepth) {
@@ -277,7 +293,7 @@ vector<length_t> findNeighborsForBins(Node& node, const hash_t bins[],
 
 	// ------------------------ leaf node
 	if (!node.is_internal) {
-		if (array_contains(node.points, DEBUG_POINT)) {
+		if (ar::contains(node.points, DEBUG_POINT)) {
 			printf("leaf node %p contains point %d\n", &node, DEBUG_POINT);
 		}
 		// printf("found leaf node %p: number of points: %ld\n", &node, node.points.size());
@@ -490,7 +506,7 @@ vector<length_t> findNeighbors(const VectorXd& q, const MatrixXd& X,
 	// array_print_with_name(neighbors, "neighborsInBuckets");
 
 	// double maxDistSq = radiusL2*radiusL2;
-	return filter([&X, &q, maxDistSq](length_t i) { // prune false positives
+	return ar::filter([&X, &q, maxDistSq](length_t i) { // prune false positives
 		// return squaredL2Dist(X.row(i), q) <= maxDistSq;
 		return squaredL2Dist(X.row(i), q) <= maxDistSq;
 	}, neighbors);
@@ -517,7 +533,7 @@ vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 
 	// sample a number of points at random
 	int numNeighborGuesses = numGuessesMultipleOfK * k;
-	auto idxs = rand_ints(0, X.rows(), numNeighborGuesses);
+	auto idxs = ar::rand_ints(0, X.rows(), numNeighborGuesses);
 	vector<Neighbor> sampleNeighbors;
 	for (int i = 0; i < numNeighborGuesses; i++) {
 		double dist = squaredL2Dist(X.row(i), q);

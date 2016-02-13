@@ -10,7 +10,8 @@
 #define tree_hpp
 
 #include <stdio.h>
-#include <unordered_map>
+//#include <unordered_map>
+#include <map>
 #include <vector>
 
 #include "Dense"
@@ -23,7 +24,8 @@ using std::pair;
 using std::make_pair;
 using std::unique_ptr;
 
-using std::unordered_map;
+//using std::unordered_map;
+using std::map;
 using std::vector;
 
 using Eigen::MatrixXd;
@@ -33,7 +35,8 @@ using Eigen::RowVectorXd;
 using Eigen::MatrixXi;
 using Eigen::ArrayXi;
 
-typedef int16_t hash_t;
+// typedef int16_t hash_t;
+typedef int8_t hash_t; // note: causes weird debug output since is signed char
 typedef int32_t length_t; // only handle up to length 2 billion
 typedef int16_t depth_t;
 typedef int64_t obj_id_t;
@@ -45,7 +48,7 @@ typedef int64_t obj_id_t;
 // ------------------------------------------------ Node
 typedef struct Node {
 	//	std::map<hash_t, struct Node> children;
-	unordered_map<hash_t, struct Node> children;
+	map<hash_t, struct Node> children;
 	//	std::array<length_t, MAX_POINTS_PER_LEAF> points;
 	vector<length_t> points; // TODO array of fixed size
 	bool is_internal; /// flag indicating that this is not a leaf node
