@@ -39,16 +39,31 @@ double durationMs(cputime_t t1, cputime_t t0) {
 
 void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 				  bool printNeighbors=false, bool printCount=true) {
-	double binWidthDivisor = sqrt(D);
-	if (binWidth < 0) {
-		binWidth = r / binWidthDivisor;
-	}
+	r /= sqrt(D);
+	
+//	double binWidthDivisor = sqrt(D);
+//	if (binWidth < 0) {
+//		binWidth = r / binWidthDivisor;
+//	}
 	MatrixXd X(N, D);
 	X.setRandom();
-
+	
+	// hmm...if we mean-normalize X, redSVD seems to return 0s as projection
+	// vects...hopefully this is goes away if X is non-random?
+	// -ya, projection vect norms are 1 for first 1 and 0 for all others
+	// -although vects themselves appear to be wrong size...
+//	VectorXd means = X.rowwise().mean();
+//	VectorXd means(D);
+//	means.setRandom(); // works
+//	means.setConstant(1.); // works
+//	RowVectorXd meansAsRow = means.transpose();
+//	meansAsRow = (meansAsRow.array() + .001).matrix();
+//	X.rowwise() -= meansAsRow;
+	
 	VectorXd q(D);
 	q.setRandom();
 //	q = (q.array() + 100).matrix(); // TODO remove
+//	q = (q.array() - q.mean()).matrix();
 
 //	INFO("Running range test with N, D, r, P = %ld, %ld, %g, %d", N, D, r, P);
 	CAPTURE(N);
@@ -63,7 +78,7 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 	MatrixXd projectionVects = computeProjectionVects(X, P);
 	auto rootPtr = constructIndex(X, projectionVects, binWidth);
 
-//	std::cout << "binWidth: " << binWidth << std::endl;
+	std::cout << "binWidth: " << binWidth << std::endl;
 
 //	std::cout << projectionVects << std::endl; // random nums in [-1, 1]
 //	std::cout << "projection vect norms, VVT" << std::endl;
@@ -121,7 +136,7 @@ TEST_CASE("notCrashing", "Tree") {
 }
 
 TEST_CASE("rangeQueries", "Tree") {
-	srand(123);
+//	srand(123);
 
 	int N = 30;
 	int D = 10;
@@ -131,15 +146,17 @@ TEST_CASE("rangeQueries", "Tree") {
 //	runRangeTest(N, D, r, P);
 
 	r = 1.;
-	N = 10*1000; // consistently errors with seed 123, r = 1.
+	N = 10*1000;
+	D = 30;
+	P = 16;
 //	r = 2.;
 //	N = 1000;
 //	double binWidth = 999.;
-//	double binWidth = -1; // ok, so almost all 0, but a few nonzero with this
-	double binWidth = .2; // slightly smaller than .31 that above yields
+	double binWidth = -1; // ok, so almost all 0, but a few nonzero with this
+//	double binWidth = .2; // slightly smaller than .31 that above yields
 	runRangeTest(N, D, r, P, binWidth);
 
-	for (double r = .01; r <= 10.; r *= 10) {
+	for (double r = 1.; r <= 30.; r += 5) {
 		runRangeTest(N, D, r, P, binWidth);
 	}
 }

@@ -45,7 +45,13 @@ typedef int64_t obj_id_t;
 // Structs
 // ================================================================
 
-// ------------------------------------------------ Node
+// ------------------------------------------------ Node
+
+
+// TODO abstract node class that knows if internal, and child classes
+// for internal and leaf nodes
+
+
 typedef struct Node {
 	//	std::map<hash_t, struct Node> children;
 	map<hash_t, struct Node> children;
@@ -57,7 +63,9 @@ public:
 	//	Node(const Node& other);
 } Node;
 
-// ------------------------------------------------ Neighbor
+typedef std::map<hash_t, Node> map_t;
+
+// ------------------------------------------------ Neighbor
 typedef struct Neighbor {
 	double dist;
 	length_t idx;
@@ -82,7 +90,7 @@ ArrayXd squaredDistsToVectors(const MatrixXd& X, const MatrixXd& V);
 MatrixXd computeProjectionVects(const MatrixXd& X, depth_t numVects=16);
 
 unique_ptr<Node> constructIndex(const MatrixXd& X, const MatrixXd& projectionVects,
-								double binWidth);
+								double& binWidth);
 
 vector<length_t> findNeighbors(const VectorXd& q, const MatrixXd& X,
 	Node& root, const MatrixXd& projectionVects, double radiusL2,
