@@ -11,10 +11,11 @@
 
 #include <stdio.h>
 //#include <unordered_map>
-#include <map>
+//#include <map>
 #include <vector>
 
 #include "Dense"
+#include "intmap.hpp"
 
 // ================================================================
 // Typedefs and usings
@@ -25,7 +26,7 @@ using std::make_pair;
 using std::unique_ptr;
 
 //using std::unordered_map;
-using std::map;
+//using std::map;
 using std::vector;
 
 using Eigen::MatrixXd;
@@ -54,7 +55,7 @@ typedef int64_t obj_id_t;
 
 typedef struct Node {
 	//	std::map<hash_t, struct Node> children;
-	map<hash_t, struct Node> children;
+	intmap64<std::unique_ptr<struct Node> > children;
 	//	std::array<length_t, MAX_POINTS_PER_LEAF> points;
 	vector<length_t> points; // TODO array of fixed size
 	bool is_internal; /// flag indicating that this is not a leaf node
@@ -63,7 +64,8 @@ public:
 	//	Node(const Node& other);
 } Node;
 
-typedef std::map<hash_t, Node> map_t;
+//typedef std::map<hash_t, Node> map_t;
+typedef intmap64<std::unique_ptr<Node> > map_t;
 
 // ------------------------------------------------ Neighbor
 typedef struct Neighbor {

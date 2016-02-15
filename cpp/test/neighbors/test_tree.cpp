@@ -78,6 +78,7 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 	MatrixXd projectionVects = computeProjectionVects(X, P);
 	auto rootPtr = constructIndex(X, projectionVects, binWidth);
 
+	CAPTURE(binWidth); // set by constructIndex
 	std::cout << "binWidth: " << binWidth << std::endl;
 
 //	std::cout << projectionVects << std::endl; // random nums in [-1, 1]
@@ -105,20 +106,21 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 	auto queryDuration = durationMs(t2, t1);
 	auto bruteDuration = durationMs(t3, t2);
 
-	// sanity check neighbors
-	REQUIRE(ar::unique(neighbors).size() == neighbors.size());
-	REQUIRE(ar::unique(trueNeighbors).size() == trueNeighbors.size());
-
 	// sort true and returned neighbors
 	ar::sort(neighbors);
 	// ar::sort(neighbors);
 	// ar::sort(trueNeighbors);
-
-	// TODO remove
-//	ar::print_with_name(neighbors, "neighbors");
-//	ar::print_with_name(trueNeighbors, "trueNeighbors");
-//	auto true_neighbor_dists = at_idxs(&trueDists[0], trueNeighbors);
-//	ar::print_with_name(true_neighbor_dists, "trueDists");
+	
+	if (trueNeighbors.size() < 50) {
+		ar::print_with_name(neighbors, "neighbors");
+		ar::print_with_name(trueNeighbors, "trueNeighbors");
+		//	auto true_neighbor_dists = ar::at_idxs(&trueDists[0], trueNeighbors);
+		//	ar::print_with_name(true_neighbor_dists, "trueDists");
+	}
+	
+	// sanity check neighbors
+	REQUIRE(ar::unique(neighbors).size() == neighbors.size());
+	REQUIRE(ar::unique(trueNeighbors).size() == trueNeighbors.size());
 
 	printf("> found %ld vs %ld neighbors in %g vs %g ms (index %gms)\n",
 		   neighbors.size(), trueNeighbors.size(),
@@ -136,14 +138,14 @@ TEST_CASE("notCrashing", "Tree") {
 }
 
 TEST_CASE("rangeQueries", "Tree") {
-//	srand(123);
+	srand(123);
 
 	int N = 30;
 	int D = 10;
 	double r = 10.;
 	depth_t P = 4;
 
-//	runRangeTest(N, D, r, P);
+	runRangeTest(N, D, r, P);
 
 	r = 1.;
 	N = 10*1000;
@@ -159,4 +161,9 @@ TEST_CASE("rangeQueries", "Tree") {
 	for (double r = 1.; r <= 30.; r += 5) {
 		runRangeTest(N, D, r, P, binWidth);
 	}
+	
+//	P = 8;
+//	for (double r = 1.; r <= 30.; r += 5) {
+//		runRangeTest(N, D, r, P, binWidth);
+//	}
 }

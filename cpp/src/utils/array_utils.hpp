@@ -1,5 +1,5 @@
 //
-//  utils.hpp
+//  array_utils.hpp
 //
 //  Created By Davis Blalock on 1/14/14.
 //  Copyright (c) 2014 Davis Blalock. All rights reserved.
@@ -275,7 +275,7 @@ class data_t>
 static inline int32_t find(const Container<Args...>& container,
 	data_t val) {
 	int32_t i = 0;
-	for (auto it = std::begin(container); it != std::end(container); it++) {
+	for (auto it = std::begin(container); it != std::end(container); ++it) {
 		if ((*it) == val) {
 			return i;
 		}
@@ -289,7 +289,7 @@ class data_t>
 static inline int32_t rfind(const Container<Args...>& container,
 	data_t val) {
 	int32_t i = container.size() - 1;
-	for (auto it = std::end(container)-1; it >= std::begin(container); it--) {
+	for (auto it = std::end(container)-1; it >= std::begin(container); --it) {
 		if ((*it) == val) {
 			return i;
 		}
@@ -303,15 +303,6 @@ class data_t>
 static inline Container<size_t> findall(const Container<Args...>& container,
 	data_t val) {
 	return where([&val](data_t a) {return a == val;} );
-	// vector<size_t> ret;
-	// size_t i = 0;
-	// for (auto it = std::begin(container); it != std::end(container); it++) {
-	// 	if ((*it) == val) {
-	// 		ret.push_back(i);
-	// 	}
-	// 	i++;
-	// }
-	// return ret;
 }
 
 
@@ -1121,11 +1112,11 @@ static inline std::string to_string(const Container<data_t>& data) {
 // ================================ Printing
 template <class data_t, class len_t=size_t>
 static inline void print(const data_t *x, len_t len) {
-	printf("%s\n", to_string(x, len));
+	printf("%s\n", to_string(x, len).c_str());
 }
 template<template <class...> class Container, class data_t>
 static inline void print(const Container<data_t>& data) {
-	array_print(&data[0], data.size());
+	print(&data[0], data.size());
 }
 
 template <class data_t, class len_t=size_t>
@@ -1134,7 +1125,7 @@ static inline void print_with_name(const data_t *data, len_t len, const char* na
 }
 template<template <class...> class Container, class data_t>
 static inline void print_with_name(const Container<data_t>& data, const char* name) {
-	array_print_with_name(&data[0], data.size(), name);
+	print_with_name(&data[0], data.size(), name);
 }
 
 // ================================================================

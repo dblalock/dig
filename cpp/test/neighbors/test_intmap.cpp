@@ -59,6 +59,120 @@ TEST_CASE("unsetBit", "intmap") {
 	}
 }
 
+TEST_CASE("popcount", "intmap") {
+	uint64_t x = 0;
+	REQUIRE(popcount(x) == 0);
+	for (int count = 1; count < 64; count++) {
+		x = 0;
+		auto idxs = ar::rand_ints(0, 63, count);
+		for (auto idx : idxs) {
+//			std::cout << idx << ", ";
+			x = setBit(x, idx);
+		}
+//		std::cout << std::endl;
+//		dumpBits(x);
+		REQUIRE(popcount(x) == count);
+	}
+}
+
+TEST_CASE("msbIdx", "intmap") {
+	uint64_t x = 0;
+	REQUIRE(popcount(x) == 0);
+	REQUIRE(msbIdx(x) == -1);
+	for (int count = 1; count < 64; count++) {
+		CAPTURE(count);
+		x = 0;
+		auto idxs = ar::rand_ints(0, 63, count);
+		ar::sort(idxs);
+		for (auto idx : idxs) {
+			x = setBit(x, idx);
+		}
+		REQUIRE(popcount(x) == count);
+		REQUIRE((int)msbIdx(x) == idxs[count-1]);
+	}
+}
+TEST_CASE("lastKeyBefore", "intmap") {
+	{
+		intmap64<int64_t> m{};
+		REQUIRE(m.lastKeyBefore(0) == -1);
+		REQUIRE(m.lastKeyBefore(1) == -1);
+		REQUIRE(m.lastKeyBefore(63) == -1);
+	}
+	
+	for (int count = 1; count < 64; count++) {
+		CAPTURE(count);
+		
+		intmap64<int64_t> m{};
+		REQUIRE(m.size() == 0);
+
+		auto idxs = ar::rand_ints(0, 63, count);
+		ar::sort(idxs);
+		for (auto idx : idxs) {
+//			std::cout << idx << ", ";
+			m.put(idx, 7);
+		}
+		
+		REQUIRE(m.size() == count);
+//		std::cout << std::endl << "occ:\t";
+//		m._dumpOccupiedArray();
+		
+		for (int i = 1; i < count; i++) {
+			REQUIRE(m.lastKeyBefore(idxs[i]) == idxs[i-1]);
+		}
+		CAPTURE(idxs[0]);
+		
+//		uint64_t lft = m._occupiedArray() << 64;
+//		std::cout << "left:\t";
+//		dumpBits(lft);
+//		std::cout << "right:\t";
+//		dumpBits(lft >> 64);
+//		
+//		std::cout << "shftd:\t";
+//		uint8_t shft = 64 - idxs[0];
+//		auto x = (m._occupiedArray() << shft) >> shft;
+//		dumpBits(x);
+		
+		REQUIRE(m.lastKeyBefore(idxs[0]) == -1);
+	}
+}
+
+TEST_CASE("firstKey[AtOr]After", "intmap") {
+	{
+		intmap64<int64_t> m{};
+		REQUIRE(m.firstKeyAfter(0) == -1);
+		REQUIRE(m.firstKeyAfter(1) == -1);
+		REQUIRE(m.firstKeyAfter(63) == -1);
+		REQUIRE(m.firstKeyAtOrAfter(0) == -1);
+		REQUIRE(m.firstKeyAtOrAfter(1) == -1);
+		REQUIRE(m.firstKeyAtOrAfter(63) == -1);
+	}
+	
+	for (int count = 1; count < 64; count++) {
+		CAPTURE(count);
+		
+		intmap64<int64_t> m{};
+		REQUIRE(m.size() == 0);
+		
+		auto idxs = ar::rand_ints(0, 63, count);
+		ar::sort(idxs);
+		for (auto idx : idxs) {
+			m.put(idx, 7);
+		}
+		REQUIRE(m.size() == count);
+		
+		for (int i = 0; i < count-1; i++) {
+			REQUIRE(m.firstKeyAfter(idxs[i]) == idxs[i+1]);
+		}
+		for (int i = 0; i < count; i++) {
+			REQUIRE(m.firstKeyAtOrAfter(idxs[i]) == idxs[i]);
+		}
+		CAPTURE(idxs[count-1]);
+		REQUIRE(m.firstKeyAfter(idxs[count-1]) == -1);
+		REQUIRE(m.firstKeyAtOrAfter(idxs[count-1]) == idxs[count-1]);
+	}
+}
+
+
 TEST_CASE("insert", "intmap") {
 	intmap64<double> m{};
 	
@@ -99,7 +213,7 @@ TEST_CASE("put+get, value", "intmap") {
 	}
 }
 
-TEST_CASE("put+get, pointer", "intmap") {
+TEST_CASE("put+get, uniq_ptr", "intmap") {
 	intmap64<std::unique_ptr<double>> m{};
 	
 	// knows it's empty
@@ -148,7 +262,7 @@ TEST_CASE("put+get+erase, value", "intmap") {
 	}
 }
 
-TEST_CASE("put+get+erase, pointer", "intmap") {
+TEST_CASE("put+get+erase, uniq_ptr", "intmap") {
 	intmap64<std::unique_ptr<double>> m{};
 	
 	for (int i = 0; i < 64; i+=2) {
