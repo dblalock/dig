@@ -52,7 +52,6 @@ typedef int64_t obj_id_t;
 // TODO abstract node class that knows if internal, and child classes
 // for internal and leaf nodes
 
-
 typedef struct Node {
 	//	std::map<hash_t, struct Node> children;
 	intmap64<std::unique_ptr<struct Node> > children;
@@ -77,7 +76,7 @@ typedef struct Neighbor {
 // Utility funcs
 // ================================================================
 
-double squaredL2Dist(VectorXd x, VectorXd y);
+double squaredL2Dist(const VectorXd& x, const VectorXd& y);
 
 VectorXd distsToVector(const MatrixXd& X, const VectorXd& v);
 ArrayXd distsToVectors(const MatrixXd& X, const MatrixXd& V);

@@ -8,15 +8,19 @@
 
 #include <stdio.h>
 
-//#include <vector> // TODO remove
-//#include <unordered_map> // TODO remove
-
 // unit tests magic
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 
+//#include <map> // TODO remove
+#include <memory>
+
+#include "intmap.hpp"
+
 int main(int argc, char *const argv[]) {
 	printf("running tests...\n");
+	
+	
 	
 //	std::vector<int16_t>v;
 //	std::unordered_map<int16_t, int64_t>m;
@@ -29,5 +33,35 @@ int main(int argc, char *const argv[]) {
 //	printf("after reserve vect size, capacity = %ld, %ld\n", v.size(), v.capacity());
 //	// ^ excellent; this only allocates how much resize asked for
 	
-	return Catch::Session().run( argc, argv );
+	printf("size of unique_ptr: %ld\n", sizeof(std::unique_ptr<double*>));
+	printf("size of raw ptr: %ld\n", sizeof(double*));
+	
+	return Catch::Session().run(argc, argv);
+//
+//	std::map<int,char> example = {{1,'a'},{2,'b'},{3,'c'},{4,'d'}};
+// 
+//	auto it = example.lower_bound(2);
+//	std::map<int,char>::reverse_iterator itr(it);
+//	
+//	int i = 0;
+//	while (it != example.end()) {
+//		std::cout << it->first << ": " << it->second << '\n';
+//		std::cout << "\t" << itr->first << ": " << itr->second << '\n';
+//		++it;
+//		i++;
+//		if (i > 1) {
+//			it = example.end(); // succesfully breaks the loop
+//		}
+//	}
+//	std::cout << "================================\n";
+//	// so reverse itr starts pointing at element *before* forward iterator;
+//	// that's weird. Also unaffected by any modification of forward iter, as
+//	// it should be.
+//	while (itr != example.rend()) {
+//		std::cout << itr->first << ": " << itr->second << '\n';
+//		++itr;
+//	}
+	
+	
+	return 0;
 }

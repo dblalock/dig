@@ -43,11 +43,13 @@ const hash_t HASH_VALUE_OFFSET = 32;
 
 // const hash_t MAX_HASH_VALUE = 32767; // int16_t
 // const hash_t MIN_HASH_VALUE = -32768;
-const double TARGET_HASH_SPREAD_STDS = 3.0; // +/- 3 std deviations
-// const double TARGET_HASH_SPREAD_STDS = 2.0; // +/- this many std deviations
+// const double TARGET_HASH_SPREAD_STDS = 3.0; // +/- 3 std deviations
+const double TARGET_HASH_SPREAD_STDS = 2.0; // +/- this many std deviations
 // const double TARGET_HASH_SPREAD_STDS = 1.0; // +/- this many std deviations
 
-const uint16_t MAX_POINTS_PER_LEAF = 8;
+// const uint16_t MAX_POINTS_PER_LEAF = 8;
+const uint16_t MAX_POINTS_PER_LEAF = 64;
+// const uint16_t MAX_POINTS_PER_LEAF = 256;
 
 // ================================================================
 // Structs
@@ -74,7 +76,7 @@ Node::Node() :
 #pragma mark Utils
 // ================================================================
 
-double squaredL2Dist(VectorXd x, VectorXd y) {
+double squaredL2Dist(const VectorXd& x, const VectorXd& y) {
 	VectorXd diff = x - y;
 	return diff.squaredNorm();
 }
@@ -219,9 +221,9 @@ void splitLeafNode(Node* node, depth_t nodeDepth, const HashMat& allBins) {
 
 	// std::cout << "splitting node " << node << " with " << points.size() << " points" << std::endl;
 
-	if (ar::contains(points, DEBUG_POINT)) {
-		printf("splitting node %p containing point %d\n", node, DEBUG_POINT);
-	}
+	// if (ar::contains(points, DEBUG_POINT)) {
+	// 	printf("splitting node %p containing point %d\n", node, DEBUG_POINT);
+	// }
 
 	for (length_t point : points) {
 		HashVect bins = allBins.row(point); // point is an index
@@ -311,17 +313,29 @@ inline int32_t prettyPtr(P ptr) {
 
 // ------------------------------------------------ Main funcs
 
+inline double binDistanceSq(hash_t largerKey, hash_t smallerKey,
+						  double binWidth) {
+	int32_t binDiff = largerKey - smallerKey; // hash_t could overflow if signed
+	binDiff = std::max(0, binDiff - 1);
+	auto binDist = binWidth * binDiff;
+	return binDist * binDist;
+}
+
+inline double distanceBoundSq(hash_t largerKey, hash_t smallerKey,
+							double binWidth, double maxDistSq) {
+	return maxDistSq - binDistanceSq(largerKey, smallerKey, binWidth);
+}
+
 vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
-// vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 									  double binWidth, double maxDistSq) {
 
 	 // printf("node %p, current bin %d\n", &node, bins[0]);
 
 	// ------------------------ leaf node
 	if (!node->is_internal) {
-//		if (ar::contains(node->points, DEBUG_POINT)) {
-//			printf("leaf node %p contains point %d\n", &node, DEBUG_POINT);
-//		}
+		// if (ar::contains(node->points, DEBUG_POINT)) {
+		// 	printf("leaf node %p contains point %d\n", &node, DEBUG_POINT);
+		// }
 		// printf("found leaf node %p: number of points: %ld\n", node, node->points.size());
 		// printf("\tleaf %d contains %lu points: %s\n", prettyPtr(node),
 		// 	node->points.size(), ar::to_string(node->points).c_str());
@@ -341,14 +355,9 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 	// std::cout << "\n";
 
 	while ((key_fwd >= 0) || (key_rev >= 0)) {
-		// printf("recursing...\n");
 		// printf("bin %d) key_fwd, key_rev = %d, %d\n", key, key_fwd, key_rev);
 		if (key_fwd >= 0) {
-			int32_t binDiff = key_fwd - key; // hash_t could overflow if signed
-			binDiff = std::max(0, binDiff - 1);
-			auto binDist = binWidth * binDiff;
-			binDist *= binDist;
-			double distBound = maxDistSq - binDist;
+			double distBound = distanceBoundSq(key_fwd, key, binWidth, maxDistSq);
 
 			if (distBound < 0) {
 				key_fwd = -1;
@@ -363,11 +372,7 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 			}
 		}
 		if (key_rev >= 0) {
-			int32_t binDiff = key - key_rev; // hash_t could overflow if signed
-			binDiff = std::max(0, binDiff - 1);
-			auto binDist = binWidth * binDiff;
-			binDist *= binDist;
-			double distBound = maxDistSq - binDist;
+			double distBound = distanceBoundSq(key, key_rev, binWidth, maxDistSq);
 
 			if (distBound < 0) {
 				key_rev = -1;
@@ -382,108 +387,22 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 			}
 		}
 	}
-
-	// hash_t maxBinGap = static_cast<hash_t>(floor(sqrt(maxDistSq) / binWidth));
-	// hash_t maxBinOffset = maxBinGap + 1;
-
-	// std::cout << "node number of children: " << node.children.size() << std::endl;
-
-
-
-//	auto it = node.children.lower_bound(key); // first el with key >= query key
-//	// if (it == node.children.end()) { // key > all keys already in map
-//	// 	std::cout << "decrementing it since key was largest: " << key << std::endl;
-//	// 	--it; // point to last element; has at least one element by construction
-//	// }
-//
-//	map_t::reverse_iterator itr(it);
-//	auto end = node.children.end();
-//	auto rend = node.children.rend();
-//	while (it != end || itr != rend) {
-//		if (it != end) {
-//			auto binKey = it->first;
-//			int32_t binDiff = binKey - key; // hash_t could overflow if signed
-//			binDiff = std::max(0, binDiff - 1);
-//			auto binDist = binWidth * binDiff;
-//			binDist *= binDist;
-//			double distBound = maxDistSq - binDist;
-//
-//			if (distBound < 0) {
-//				it = end;
-//			} else {
-//				auto child = it->second;
-//				auto childNeighbors = findNeighborsForBins(child, bins + 1,
-//														   binWidth, distBound);
-//				std::move(std::begin(childNeighbors), std::end(childNeighbors),
-//						  std::back_inserter(neighbors));
-//				++it;
-//			}
-//		}
-//		if (itr != rend) {
-//			auto binKey = it->first;
-//			int32_t binDiff = key - binKey;
-//			binDiff = std::max(0, binDiff - 1);
-//			auto binDist = binWidth * binDiff;
-//			binDist *= binDist;
-//			double distBound = maxDistSq - binDist;
-//
-//			if (distBound < 0) {
-//				itr = rend;
-//			} else {
-//				auto child = itr->second;
-//				auto childNeighbors = findNeighborsForBins(child, bins + 1,
-//														   binWidth, distBound);
-//				std::move(std::begin(childNeighbors), std::end(childNeighbors),
-//						  std::back_inserter(neighbors));
-//				++itr;
-//			}
-//		}
-//		// std::cout << "ran main loop" << std::endl;
-//	}
-
-	// // recurse in query's bin
-	// if (node.children.count(key)) { // no child node for this offset
-	// 	auto child = node.children[key];
-	// 	auto childNeighbors = findNeighborsForBins(child, bins + 1,
-	// 											   binWidth, maxDistSq);
-	// 	std::move(std::begin(childNeighbors), std::end(childNeighbors),
-	// 			  std::back_inserter(neighbors));
-	// }
-
-	// // recurse in adjacent bins and append results to overall list
-	// for (hash_t offsetMag = 1; offsetMag <= maxBinOffset; offsetMag++) {
-	// 	hash_t binGap = offsetMag - 1;
-	// 	double binDist = binWidth * binGap;
-	// 	// double distBound = sqrt(radiusL2*radiusL2 - binDist*binDist);
-	// 	binDist *= binDist; //TODO use exact query position within bin
-	// 	double distBound = maxDistSq - binDist;
-
-	// 	for (int8_t sign = -1; sign <= 1; sign += 2) { // +/- each offset
-	// 		hash_t offset = sign * offsetMag;
-	// 		hash_t kk = key + offset;
-	// 		if (! node.children.count(kk)) { // no child node for this offset
-	// 			continue;
-	// 		}
-	// 		// recurse and append results to overall list
-	// 		auto child = node.children[kk];
-	// 		auto childNeighbors = findNeighborsForBins(child, bins + 1,
-	// 												   binWidth, distBound);
-	// 		std::move(std::begin(childNeighbors), std::end(childNeighbors),
-	// 				  std::back_inserter(neighbors));
-	// 	}
-	// }
 	return neighbors;
 }
 
-Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node& node,
+Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 	const hash_t bins[], double binWidth, double d_lb, double d_bsf) {
 	length_t nn = -1;
 
+	// printf("%d: bin = %d\n", prettyPtr(node), bins[0]);
+
 	// ------------------------ leaf node
-	if (! node.is_internal) { // leaf node
-		for (length_t point : node.points) {
+	if (! node->is_internal) { // leaf node
+		// printf("found leaf node %p\n", node);
+		for (length_t point : node->points) {
 			double dist = squaredL2Dist(X.row(point), q);
 			if (dist < d_bsf) {
+				// std::cout << "found point " << point << " with lower dist " << dist << "\n";
 				d_bsf = dist;
 				nn = point;
 			}
@@ -492,38 +411,78 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node& node,
 	}
 
 	// ------------------------ internal node
-	double d_cushion = d_bsf - d_lb;
 	hash_t key = bins[0];
-	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
-	hash_t maxBinOffset = maxBinGap + 1;
 
-	for (hash_t offsetMag = 0; offsetMag <= maxBinOffset; offsetMag++) {
-		hash_t binGap = std::max(offsetMag - 1, 0);
-		double binDist = binWidth * binGap;
-		binDist *= binDist;
-		double distLowerBound = d_lb + binDist;
+	map_t& map = node->children;
+	auto key_fwd = map.firstKeyAtOrAfter(key);
+	auto key_rev = map.lastKeyBefore(key);
 
-		if (distLowerBound > d_bsf) {
-			continue;
-		}
+	// printf("%d: initial key_fwd, key_rev = %d, %d\n", prettyPtr(node), key_fwd, key_rev);
 
-		for (int8_t sign = -1; sign <= 1; sign += 2) { // +/- each offset
-			hash_t offset = sign * offsetMag;
-			hash_t kk = key + offset;
-//			if (! node.children.count(kk)) { // no child node for this offset
-			if (! node.children.contains(kk)) { // no child node for this offset
-				continue;
+	while ((key_fwd >= 0) || (key_rev >= 0)) {
+		if (key_fwd >= 0) {
+			double distLowerBound = binDistanceSq(key_fwd, key, binWidth) + d_lb;
+			if (distLowerBound < d_bsf) {
+				Node* child = map.get(key_fwd).get();
+				auto neighbor = find1nnForBins(q, X, child, bins + 1, binWidth,
+					distLowerBound, d_bsf);
+				if (neighbor.dist < d_bsf) {
+					d_bsf = neighbor.dist;
+					nn = neighbor.idx;
+				}
+				key_fwd = map.firstKeyAfter(key_fwd);
+			} else {
+				key_fwd = -1;
 			}
-
-			auto neighbor = find1nnForBins(q, X, node, bins + 1, binWidth,
-											 distLowerBound, d_bsf);
-			if (neighbor.dist < d_bsf) {
-				d_bsf = neighbor.dist;
-				nn = neighbor.idx;
+		}
+		if (key_rev >= 0) {
+			double distLowerBound = binDistanceSq(key, key_rev, binWidth) + d_lb;
+			if (distLowerBound < d_bsf) {
+				Node* child = map.get(key_rev).get();
+				auto neighbor = find1nnForBins(q, X, child, bins + 1, binWidth,
+					distLowerBound, d_bsf);
+				if (neighbor.dist < d_bsf) {
+					d_bsf = neighbor.dist;
+					nn = neighbor.idx;
+				}
+				key_rev = map.lastKeyBefore(key_rev);
+			} else {
+				key_rev = -1;
 			}
 		}
 	}
 	return Neighbor{.idx = nn, .dist = d_bsf};
+
+// 	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
+// 	hash_t maxBinOffset = maxBinGap + 1;
+
+// 	for (hash_t offsetMag = 0; offsetMag <= maxBinOffset; offsetMag++) {
+// 		hash_t binGap = std::max(offsetMag - 1, 0);
+// 		double binDist = binWidth * binGap;
+// 		binDist *= binDist;
+// 		double distLowerBound = d_lb + binDist;
+
+// 		if (distLowerBound > d_bsf) {
+// 			continue;
+// 		}
+
+// 		for (int8_t sign = -1; sign <= 1; sign += 2) { // +/- each offset
+// 			hash_t offset = sign * offsetMag;
+// 			hash_t kk = key + offset;
+// //			if (! node.children.count(kk)) { // no child node for this offset
+// 			if (! node.children.contains(kk)) { // no child node for this offset
+// 				continue;
+// 			}
+
+// 			auto neighbor = find1nnForBins(q, X, node, bins + 1, binWidth,
+// 											 distLowerBound, d_bsf);
+// 			if (neighbor.dist < d_bsf) {
+// 				d_bsf = neighbor.dist;
+// 				nn = neighbor.idx;
+// 			}
+// 		}
+// 	}
+// 	return Neighbor{.idx = nn, .dist = d_bsf};
 }
 
 
@@ -551,41 +510,72 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 					neighborsBsf[i] = tmp;
 					i--;
 				}
+				d_bsf = neighborsBsf[lastIdx].dist;
 			}
 		}
 		return;
 	}
 
 	// ------------------------ internal node
-	double d_cushion = d_bsf - d_lb;
+
 	hash_t key = bins[0];
-	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
-	hash_t maxBinOffset = maxBinGap + 1;
 
-	for (hash_t offsetMag = 0; offsetMag <= maxBinOffset; offsetMag++) {
-		hash_t binGap = std::max(offsetMag - 1, 0);
-		double binDist = binWidth * binGap;
-		binDist *= binDist;
-		double distLowerBound = d_lb + binDist;
+	map_t& map = node->children;
+	auto key_fwd = map.firstKeyAtOrAfter(key);
+	auto key_rev = map.lastKeyBefore(key);
 
-		if (distLowerBound > d_bsf) {
-			continue;
-		}
-
-		for (int8_t sign = -1; sign <= 1; sign += 2) { // +/- each offset
-			hash_t offset = sign * offsetMag;
-			hash_t kk = key + offset;
-//			if (! node.children.count(kk)) { // no child node for this offset
-			if (! node->children.contains(kk)) { // no child node for this offset
-				continue;
+	while ((key_fwd >= 0) || (key_rev >= 0)) {
+		if (key_fwd >= 0) {
+			double distLowerBound = binDistanceSq(key_fwd, key, binWidth) + d_lb;
+			if (distLowerBound < d_bsf) {
+				Node* child = map.get(key_fwd).get();
+				findKnnForBins(q, X, k, child, bins + 1, binWidth,
+					distLowerBound, neighborsBsf);
+				key_fwd = map.firstKeyAfter(key_fwd);
+			} else {
+				key_fwd = -1;
 			}
-
-//			auto child = node.children[kk];
-			auto child = node->children.get(kk).get();
-			findKnnForBins(q, X, k, child, bins + 1, binWidth, distLowerBound,
-						   neighborsBsf);
+		}
+		if (key_rev >= 0) {
+			double distLowerBound = binDistanceSq(key, key_rev, binWidth) + d_lb;
+			if (distLowerBound < d_bsf) {
+				Node* child = map.get(key_rev).get();
+				findKnnForBins(q, X, k, child, bins + 1, binWidth,
+					distLowerBound, neighborsBsf);
+				key_rev = map.lastKeyBefore(key_rev);
+			} else {
+				key_rev = -1;
+			}
 		}
 	}
+
+	// double d_cushion = d_bsf - d_lb;
+	// hash_t key = bins[0];
+	// hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
+	// hash_t maxBinOffset = maxBinGap + 1;
+
+	// for (hash_t offsetMag = 0; offsetMag <= maxBinOffset; offsetMag++) {
+	// 	hash_t binGap = std::max(offsetMag - 1, 0);
+	// 	double binDist = binWidth * binGap;
+	// 	binDist *= binDist;
+	// 	double distLowerBound = d_lb + binDist;
+
+	// 	if (distLowerBound > d_bsf) {
+	// 		continue;
+	// 	}
+
+	// 	for (int8_t sign = -1; sign <= 1; sign += 2) { // +/- each offset
+	// 		hash_t offset = sign * offsetMag;
+	// 		hash_t kk = key + offset;
+	// 		if (! node->children.contains(kk)) { // no child node for this offset
+	// 			continue;
+	// 		}
+
+	// 		auto child = node->children.get(kk).get();
+	// 		findKnnForBins(q, X, k, child, bins + 1, binWidth, distLowerBound,
+	// 					   neighborsBsf);
+	// 	}
+	// }
 }
 
 // ------------------------------------------------ Top-level funcs
@@ -635,19 +625,31 @@ Neighbor find1nn(const VectorXd& q, const MatrixXd& X, Node& root,
 	// pick a random point as initial nearest neighbor
 	int idx = rand() % X.rows();
 	double d_bsf = squaredL2Dist(X.row(idx), q) + .0001; // add const in case this is best
+	// printf("initial d_bsf: %g\n", d_bsf);
+	// d_bsf = 999.; // TODO remove
 	double d_lb = 0;
 
-	return find1nnForBins(q, X, root, &bins[0], binWidth, d_lb, d_bsf);
+	return find1nnForBins(q, X, &root, &bins[0], binWidth, d_lb, d_bsf);
 }
 
 vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 						Node& root, const MatrixXd& projectionVects,
 						double binWidth, uint8_t numGuessesMultipleOfK) {
+	assert(k > 0);
+
+	if (k == 1) { // knn query code assumes k > 1
+		Neighbor n = find1nn(q, X, root, projectionVects, binWidth);
+		vector<Neighbor> ret;
+		ret.push_back(n);
+		printf("just returning 1nn\n");
+		return ret;
+	}
 
 	assert(numGuessesMultipleOfK >= 2); // need k points disjoint from the k best
 
 	// sample a number of points at random
 	int numNeighborGuesses = numGuessesMultipleOfK * k;
+	numNeighborGuesses = fmin(numNeighborGuesses, X.rows()); // TODO just brute force it
 	auto idxs = ar::rand_ints(0, X.rows(), numNeighborGuesses);
 	vector<Neighbor> sampleNeighbors;
 	for (int i = 0; i < numNeighborGuesses; i++) {
@@ -663,9 +665,15 @@ vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 			  });
 
 	// create vector containing kth to (2k-1)th best neighbors from sample
-	vector<Neighbor> trueNeighbors(k);
+	vector<Neighbor> trueNeighbors;
 	auto begin = std::begin(sampleNeighbors);
 	std::copy(begin + k, begin + 2*k, std::back_inserter(trueNeighbors));
+
+	printf("knn initial neighbors (%ld): \n\t{", trueNeighbors.size());
+	for (int i = 0; i < trueNeighbors.size(); i++) {
+		printf("%d: %g, ", trueNeighbors[i].idx, trueNeighbors[i].dist);
+	}
+	printf("}\n");
 
 	// find the true k nearest neighbors using this initial guess
 	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth);
