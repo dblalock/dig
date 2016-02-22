@@ -291,7 +291,7 @@ TEST_CASE("notCrashing", "Tree") {
 }
 
 TEST_CASE("knnQueries", "Tree") {
-	srand(123);
+//	srand(123);
 	
 	int N = 30;
 	int D = 10;
@@ -321,10 +321,17 @@ TEST_CASE("knnQueries", "Tree") {
 	for (int i = 0; i < 10; i++) {
 		runKnnTest(N, D, P, K);
 	}
+	
+//	N = 10000;
+//	K = 5;
+//	//	runKnnTest(N, D, P, K);
+//	for (int i = 0; i < 10; i++) {
+//		runKnnTest(N, D, P, K);
+//	}
 }
 
 TEST_CASE("1nnQueries", "Tree") {
-	srand(123);
+//	srand(123);
 	
 	int N = 30;
 	int D = 10;
@@ -344,7 +351,7 @@ TEST_CASE("1nnQueries", "Tree") {
 }
 
 TEST_CASE("rangeQueries", "Tree") {
-	srand(123);
+//	srand(123);
 
 	int N = 30;
 	int D = 10;
@@ -367,9 +374,19 @@ TEST_CASE("rangeQueries", "Tree") {
 //	double binWidth = .2; // slightly smaller than .31 that above yields
 	runRangeTest(N, D, r, P, binWidth);
 
-	for (double r = 1.; r <= 30.; r += 5) {
+	for (double r = .1; r <= 1.; r += .2) {
 		runRangeTest(N, D, r, P, binWidth);
 	}
+	
+//	N = 100*1000;
+//	for (double r = .1; r <= 1.; r += .2) {
+//		runRangeTest(N, D, r, P, binWidth);
+//	}
+	
+//	N = 1000*1000;
+//	for (double r = .1; r <= 1.; r += .2) {
+//		runRangeTest(N, D, r, P, binWidth);
+//	}
 	
 //	P = 8;
 //	for (double r = 1.; r <= 30.; r += 5) {

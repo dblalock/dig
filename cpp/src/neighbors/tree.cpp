@@ -101,6 +101,25 @@ inline hash_t hashValForPosition(double position, double binWidth) {
 	return clamp(quantized, MIN_HASH_VALUE, MAX_HASH_VALUE);
 }
 
+// computes the distance of the position above the lower edge of its bin;
+// eg, if the position 7.7 gets mapped to a bin from [5.5, 8.81), we
+// return (7.7 - 5.5) = 2.2
+inline double distAboveBinCutoff(double position, double binWidth) {
+	int64_t quantized = (int64_t) (position / binWidth);
+	double dist = position - (binWidth * quantized);
+
+	// deal with case when hash value is clipping
+	int64_t offseted = quantized + HASH_VALUE_OFFSET;
+	if (offseted < MIN_HASH_VALUE) {
+		return 0; // not "above" the boundary for this bin at all
+	} else if (offseted > MAX_HASH_VALUE) {
+		dist += binWidth * (offseted - MAX_HASH_VALUE);
+	} else {
+		assert(dist < binWidth); // sanity check
+	}
+	return dist;
+}
+
 double computeBinWidth(const MatrixXd& positions) {
 	// assumes first col of positions corresponds to dominant eigenvect
 	ArrayXd firstCol = positions.col(0).array();
@@ -134,7 +153,8 @@ HashMat binsForPositions(const MatrixXd& positions, double binWidth) {
 	return bins;
 }
 
-vector<hash_t> binsForVectPositions(const VectorXd& positions, double binWidth) {
+vector<hash_t> binsForVectPositions(const VectorXd& positions, double binWidth,
+	double* binDists) {
 	size_t ndims = positions.size();
 	vector<hash_t> bins;
 	// std::cout << "binsForVectPositions, positions: " << positions << std::endl;
@@ -142,6 +162,9 @@ vector<hash_t> binsForVectPositions(const VectorXd& positions, double binWidth) 
 	// std::cout << "binsForVectPositions, binWidth: " << binWidth << std::endl;
 	for (size_t i = 0; i < ndims; i++) {
 		bins.push_back(hashValForPosition(positions(i), binWidth));
+		if (binDists) {
+			binDists[i] = distAboveBinCutoff(positions(i), binWidth);
+		}
 		// int64_t bin = (int64_t) (positions(i) / binWidth);
 		// printf("projection #%lu: bin = %lld\n", i, bin);
 		// bins.push_back(clamp(bin, MIN_HASH_VALUE, MAX_HASH_VALUE));
@@ -219,6 +242,11 @@ void splitLeafNode(Node* node, depth_t nodeDepth, const HashMat& allBins) {
 	node->is_internal = true;
 	auto points = node->points;
 
+	// reclaim memory from storing these points, since
+	// children will now store them
+	node->points.clear();
+	node->points.shrink_to_fit();
+
 	// std::cout << "splitting node " << node << " with " << points.size() << " points" << std::endl;
 
 	// if (ar::contains(points, DEBUG_POINT)) {
@@ -245,6 +273,7 @@ void splitLeafNode(Node* node, depth_t nodeDepth, const HashMat& allBins) {
 //			printf("moved node %d to child %p at depth %d", DEBUG_POINT, &child, depth+1);
 //		}
 	}
+
 }
 
 void insert(Node* table, const HashVect& bins, length_t id,
@@ -314,20 +343,22 @@ inline int32_t prettyPtr(P ptr) {
 // ------------------------------------------------ Main funcs
 
 inline double binDistanceSq(hash_t largerKey, hash_t smallerKey,
-						  double binWidth) {
+						  double binWidth, double distInBin) {
 	int32_t binDiff = largerKey - smallerKey; // hash_t could overflow if signed
-	binDiff = std::max(0, binDiff - 1);
-	auto binDist = binWidth * binDiff;
+	int32_t binGap = std::max(0, binDiff - 1);
+	auto binDist = binWidth * binGap;
+	// binDist += binGap > 0 ? distInBin : 0; // TODO uncomment
+	binDist += distInBin; // assumes we passed in 0 if keys were equal to avoid branch
 	return binDist * binDist;
 }
 
 inline double distanceBoundSq(hash_t largerKey, hash_t smallerKey,
-							double binWidth, double maxDistSq) {
-	return maxDistSq - binDistanceSq(largerKey, smallerKey, binWidth);
+							double binWidth, double maxDistSq, double distInBin) {
+	return maxDistSq - binDistanceSq(largerKey, smallerKey, binWidth, distInBin);
 }
 
 vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
-									  double binWidth, double maxDistSq) {
+	const double binDists[], double binWidth, double maxDistSq) {
 
 	 // printf("node %p, current bin %d\n", &node, bins[0]);
 
@@ -345,6 +376,8 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 	// ------------------------ internal node
 	vector<length_t> neighbors;
 	hash_t key = bins[0];
+	double distInBinRev = binDists[0];
+	double distInBinFwd = binWidth - distInBinRev;
 
 	map_t& map = node->children;
 	auto key_fwd = map.firstKeyAtOrAfter(key);
@@ -357,7 +390,9 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 	while ((key_fwd >= 0) || (key_rev >= 0)) {
 		// printf("bin %d) key_fwd, key_rev = %d, %d\n", key, key_fwd, key_rev);
 		if (key_fwd >= 0) {
-			double distBound = distanceBoundSq(key_fwd, key, binWidth, maxDistSq);
+			double distInBin = key_fwd > key ? distInBinFwd : 0;
+			double distBound = distanceBoundSq(key_fwd, key, binWidth,
+											   maxDistSq, distInBin);
 
 			if (distBound < 0) {
 				key_fwd = -1;
@@ -365,14 +400,15 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 				Node* child = map.get(key_fwd).get();
 				 // printf("fwd child: %p\n", child);
 				auto childNeighbors = findNeighborsForBins(child, bins + 1,
-														   binWidth, distBound);
+					binDists + 1, binWidth, distBound);
 				std::move(std::begin(childNeighbors), std::end(childNeighbors),
 						  std::back_inserter(neighbors));
 				key_fwd = map.firstKeyAfter(key_fwd);
 			}
 		}
 		if (key_rev >= 0) {
-			double distBound = distanceBoundSq(key, key_rev, binWidth, maxDistSq);
+			double distBound = distanceBoundSq(key, key_rev, binWidth,
+											   maxDistSq, distInBinRev);
 
 			if (distBound < 0) {
 				key_rev = -1;
@@ -380,7 +416,7 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 				Node* child = map.get(key_rev).get();
 				// printf("rev child: %p\n", child);
 				auto childNeighbors = findNeighborsForBins(child, bins + 1,
-														   binWidth, distBound);
+					binDists + 1, binWidth, distBound);
 				std::move(std::begin(childNeighbors), std::end(childNeighbors),
 						  std::back_inserter(neighbors));
 				key_rev = map.lastKeyBefore(key_rev);
@@ -391,7 +427,9 @@ vector<length_t> findNeighborsForBins(Node* node, const hash_t bins[],
 }
 
 Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
-	const hash_t bins[], double binWidth, double d_lb, double d_bsf) {
+	const hash_t bins[], const double binDists[], double binWidth,
+	double d_lb, double d_bsf) {
+
 	length_t nn = -1;
 
 	// printf("%d: bin = %d\n", prettyPtr(node), bins[0]);
@@ -412,6 +450,8 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 
 	// ------------------------ internal node
 	hash_t key = bins[0];
+	double distInBinRev = binDists[0];
+	double distInBinFwd = binWidth - distInBinRev;
 
 	map_t& map = node->children;
 	auto key_fwd = map.firstKeyAtOrAfter(key);
@@ -421,11 +461,13 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 
 	while ((key_fwd >= 0) || (key_rev >= 0)) {
 		if (key_fwd >= 0) {
-			double distLowerBound = binDistanceSq(key_fwd, key, binWidth) + d_lb;
+			double distInBin = key_fwd > key ? distInBinFwd : 0;
+			double distLowerBound = binDistanceSq(key_fwd, key, binWidth,
+												  distInBin) + d_lb;
 			if (distLowerBound < d_bsf) {
 				Node* child = map.get(key_fwd).get();
-				auto neighbor = find1nnForBins(q, X, child, bins + 1, binWidth,
-					distLowerBound, d_bsf);
+				auto neighbor = find1nnForBins(q, X, child, bins + 1,
+					binDists + 1, binWidth, distLowerBound, d_bsf);
 				if (neighbor.dist < d_bsf) {
 					d_bsf = neighbor.dist;
 					nn = neighbor.idx;
@@ -436,11 +478,12 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 			}
 		}
 		if (key_rev >= 0) {
-			double distLowerBound = binDistanceSq(key, key_rev, binWidth) + d_lb;
+			double distLowerBound = binDistanceSq(key, key_rev, binWidth,
+												  distInBinRev) + d_lb;
 			if (distLowerBound < d_bsf) {
 				Node* child = map.get(key_rev).get();
-				auto neighbor = find1nnForBins(q, X, child, bins + 1, binWidth,
-					distLowerBound, d_bsf);
+				auto neighbor = find1nnForBins(q, X, child, bins + 1,
+					binDists + 1, binWidth, distLowerBound, d_bsf);
 				if (neighbor.dist < d_bsf) {
 					d_bsf = neighbor.dist;
 					nn = neighbor.idx;
@@ -487,8 +530,8 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 
 
 void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
-	Node* node, const hash_t bins[], double binWidth, double d_lb,
-	Neighbor neighborsBsf[]) {
+	Node* node, const hash_t bins[], const double binDists[],
+	double binWidth, double d_lb, Neighbor neighborsBsf[]) {
 
 	uint16_t lastIdx = k - 1;
 	double d_bsf = neighborsBsf[lastIdx].dist;
@@ -519,6 +562,8 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 	// ------------------------ internal node
 
 	hash_t key = bins[0];
+	double distInBinRev = binDists[0];
+	double distInBinFwd = binWidth - distInBinRev;
 
 	map_t& map = node->children;
 	auto key_fwd = map.firstKeyAtOrAfter(key);
@@ -526,10 +571,11 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 
 	while ((key_fwd >= 0) || (key_rev >= 0)) {
 		if (key_fwd >= 0) {
-			double distLowerBound = binDistanceSq(key_fwd, key, binWidth) + d_lb;
+			double distInBin = key_fwd > key ? distInBinFwd : 0;
+			double distLowerBound = binDistanceSq(key_fwd, key, binWidth, distInBin) + d_lb;
 			if (distLowerBound < d_bsf) {
 				Node* child = map.get(key_fwd).get();
-				findKnnForBins(q, X, k, child, bins + 1, binWidth,
+				findKnnForBins(q, X, k, child, bins + 1, binDists + 1, binWidth,
 					distLowerBound, neighborsBsf);
 				key_fwd = map.firstKeyAfter(key_fwd);
 			} else {
@@ -537,10 +583,10 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 			}
 		}
 		if (key_rev >= 0) {
-			double distLowerBound = binDistanceSq(key, key_rev, binWidth) + d_lb;
+			double distLowerBound = binDistanceSq(key, key_rev, binWidth, distInBinRev) + d_lb;
 			if (distLowerBound < d_bsf) {
 				Node* child = map.get(key_rev).get();
-				findKnnForBins(q, X, k, child, bins + 1, binWidth,
+				findKnnForBins(q, X, k, child, bins + 1, binDists + 1, binWidth,
 					distLowerBound, neighborsBsf);
 				key_rev = map.lastKeyBefore(key_rev);
 			} else {
@@ -581,18 +627,19 @@ void findKnnForBins(const VectorXd& q, const MatrixXd& X, uint16_t k,
 // ------------------------------------------------ Top-level funcs
 
 vector<hash_t> binsForQuery(VectorXd q, MatrixXd projectionVects,
-							double binWidth) {
+							double binWidth, double* binDists) {
 	VectorXd positions = projectionVects * q;
 	// std::cout << "query: " << q << std::endl;
 	// std::cout << "query positions: " << positions << std::endl;
-	return binsForVectPositions(positions, binWidth);
+	return binsForVectPositions(positions, binWidth, binDists);
 }
 
 vector<length_t> findNeighbors(const VectorXd& q, const MatrixXd& X,
 	Node& root, const MatrixXd& projectionVects, double radiusL2,
 	double binWidth) {
 
-	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth);
+	double binDists[q.size()];
+	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth, binDists);
 	double maxDistSq = radiusL2 * radiusL2;
 
 	// array_print_with_name(bins, "query bins");
@@ -600,7 +647,7 @@ vector<length_t> findNeighbors(const VectorXd& q, const MatrixXd& X,
 	// printf("initial binWidth: %g\n", binWidth);
 
 	// auto neighbors = findNeighborsForBins(root, &bins[0], binWidth, radiusL2);
-	auto neighbors = findNeighborsForBins(&root, &bins[0], binWidth, maxDistSq);
+	auto neighbors = findNeighborsForBins(&root, &bins[0], binDists, binWidth, maxDistSq);
 	// auto neighbors = findNeighborsForBins(&root, &bins[0], binWidth, maxDistSq);
 
 	std::cout << "num neighbors before filtering: " << neighbors.size() << std::endl;
@@ -620,7 +667,9 @@ vector<length_t> findNeighbors(const VectorXd& q, const MatrixXd& X,
 
 Neighbor find1nn(const VectorXd& q, const MatrixXd& X, Node& root,
 				 const MatrixXd& projectionVects, double binWidth) {
-	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth);
+
+	double binDists[q.size()];
+	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth, binDists);
 
 	// pick a random point as initial nearest neighbor
 	int idx = rand() % X.rows();
@@ -629,7 +678,7 @@ Neighbor find1nn(const VectorXd& q, const MatrixXd& X, Node& root,
 	// d_bsf = 999.; // TODO remove
 	double d_lb = 0;
 
-	return find1nnForBins(q, X, &root, &bins[0], binWidth, d_lb, d_bsf);
+	return find1nnForBins(q, X, &root, &bins[0], binDists, binWidth, d_lb, d_bsf);
 }
 
 vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
@@ -676,9 +725,11 @@ vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 	printf("}\n");
 
 	// find the true k nearest neighbors using this initial guess
-	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth);
+	double binDists[q.size()];
+	vector<hash_t> bins = binsForQuery(q, projectionVects, binWidth, nullptr);
 	double d_lb = 0;
-	findKnnForBins(q, X, k, &root, &bins[0], binWidth, d_lb, &trueNeighbors[0]);
+	findKnnForBins(q, X, k, &root, &bins[0], binDists, binWidth, d_lb,
+		&trueNeighbors[0]);
 	return trueNeighbors;
 }
 
