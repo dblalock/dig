@@ -28,12 +28,19 @@ for root, dirnames, filenames in os.walk("./"):
 	# print(os.getcwd() )
 	# print("dir names:")
 	# print(dirnames)
+
+	# TODO ah, so this is just walking over the last dir in the path, not
+	# the full relative path from the current working dir
+
 	for dirname in dirnames:
-		# dirname = os.path.abspath(dirname)
-		print('src: adding dir to path: {}'.format(dirname))
-		env.Append(CPPPATH=[dirname])
 		globStr = "%s/*.c*" % dirname
 		matches.append(Glob(globStr))
+		relpath = os.path.join(root, dirname)
+		abspath = os.path.abspath(relpath)
+		# print('src: adding dir to path: {} ({})'.format(relpath, abspath))
+		# print("src: --appending: {}".format(Glob(globStr)))
+		env.Append(CPPPATH=[relpath])
+
 
 # absolute paths for xcode integration (abandoned...couldn't get to work)
 # env['CXXCOM'] = env['CXXCOM'].replace('$SOURCES', '${SOURCES.abspath}')
