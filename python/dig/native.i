@@ -1,7 +1,10 @@
+// %module digpp //doesn't create any file with this name; just fails to find stuff
 %module dig
 %{
 #define SWIG_FILE_WITH_INIT
 #include "../../cpp/src/include/dig.hpp"
+#include "../../cpp/src/include/dist.hpp"
+#include "../../cpp/src/include/neighbors.hpp"
 %}
 
 // include numpy swig stuff
@@ -46,7 +49,10 @@ import_array();
 %apply (double* IN_ARRAY1, int DIM1) {(const double* v2, int len2)};
 
 // ------------------------------- 2D arrays
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* A, int m, int n)};
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* X, int m, int n)};
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(double* A, int m, int n)};
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(double* X, int m, int n)};
 
 // ================================
 // returned arrays
@@ -63,3 +69,5 @@ import_array();
 // actually have swig parse + wrap the files
 // ================================================================
 %include "../../cpp/src/include/dig.hpp"
+%include "../../cpp/src/include/dist.hpp"
+%include "../../cpp/src/include/neighbors.hpp"

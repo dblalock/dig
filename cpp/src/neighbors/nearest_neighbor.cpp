@@ -8,6 +8,7 @@
 
 #include "nearest_neighbor.hpp"
 #include "dig.hpp"
+#include "dist.hpp"
 
 #include <math.h>
 #include <vector>

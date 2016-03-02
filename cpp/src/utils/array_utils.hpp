@@ -1190,7 +1190,7 @@ template<template <class...> class Container, class data_t>
 static inline vector<data_t> rand_choice(const Container<data_t>& data, size_t howMany,
 							   bool replace=false) {
 	auto maxIdx = data.size() - 1;
-	auto idxs = rand_ints(0, maxIdx, howMany=howMany, replace=replace);
+	auto idxs = rand_ints(0, maxIdx, howMany, replace);
 	return at_idxs(data, idxs, false); // false = no bounds check
 }
 
@@ -1201,7 +1201,7 @@ template<template <class...> class Container, class data_t>
 static inline void sort(Container<data_t>& data) {
 	std::sort(std::begin(data), std::end(data));
 }
-	
+
 
 } // namespace ar
 #endif

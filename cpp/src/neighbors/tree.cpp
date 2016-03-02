@@ -20,6 +20,23 @@
 
 #define DEBUG_POINT 2997
 
+using Eigen::Map;
+using Eigen::Dynamic;
+using Eigen::RowMajor;
+using Eigen::Matrix;
+//using Eigen::Array;
+// using Eigen::Array1d;
+
+// ================================================================
+// Temp
+// ================================================================
+
+double swigEigenTest(double* X, int m, int n) {
+	Map<Matrix<double, Dynamic, Dynamic, RowMajor> > A(X, m, n);
+	VectorXd rowSums = A.rowwise().sum();
+	return rowSums.squaredNorm();
+}
+
 // ================================================================
 // Typedefs and usings
 // ================================================================

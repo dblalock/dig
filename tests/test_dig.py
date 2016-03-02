@@ -1,7 +1,7 @@
 import numpy as np
 # from ..src import dig
-# import dig
-from dig import dig
+import dig
+# from dig import dig
 
 testNum = 0
 def passedTest():
@@ -81,3 +81,14 @@ assertEqual(qCls,bCls)
 tsc.setAlgorithm(dig.NN_L1)
 qCls = tsc.classify(q)
 assertEqual(qCls,cCls)
+
+# ================================
+# Test 8 - interfacing with eigen
+# ================================
+
+A = np.arange(12).reshape((4, 3))
+rowSums = np.sum(A, axis=1)
+ans = np.dot(rowSums, rowSums)
+output = dig.swigEigenTest(A)
+assertEqual(ans, output)
+
