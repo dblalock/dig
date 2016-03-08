@@ -1,3 +1,5 @@
+#!/bin/env python
+
 import numpy as np
 # from ..src import dig
 import dig
@@ -18,77 +20,78 @@ def printVar(varName,var):
 	print(varName)
 	print(var)
 
-# ================================
-# Test 1 - calling cpp successfully
-# ================================
+def main_test():
+	# ================================
+	# Test 1 - calling cpp successfully
+	# ================================
 
-output = dig.swigTest(5)
-assertEqual(output,6)
+	output = dig.swigTest(5)
+	assertEqual(output,6)
 
-# ================================
-# Test 2 - sending an array to cpp
-# ================================
+	# ================================
+	# Test 2 - sending an array to cpp
+	# ================================
 
-a = np.array((2,3,4),'d')
-ans = np.sum(a)
-output = dig.swigArrayTest(a)
+	a = np.array((2,3,4),'d')
+	ans = np.sum(a)
+	output = dig.swigArrayTest(a)
 
-assertEqual(output, ans)
+	assertEqual(output, ans)
 
-# ================================
-# Test 3 - dynamic time warping
-# ================================
+	# ================================
+	# Test 3 - dynamic time warping
+	# ================================
 
-a = np.array((5,2,2,3,5.1),'d')
-b = np.array((5,2,3,3,4),'d')
-r = 1
-dist = dig.dist_dtw(a,b,r)
+	a = np.array((5,2,2,3,5.1),'d')
+	b = np.array((5,2,3,3,4),'d')
+	r = 1
+	dist = dig.dist_dtw(a,b,r)
 
-assertEqual(dist, 1.21)	# only last element off
+	assertEqual(dist, 1.21)	# only last element off
 
-# ================================
-# Test 4 - using a struct
-# ================================
+	# ================================
+	# Test 4 - using a struct
+	# ================================
+	p = dig.DistanceMeasureParams(.05, 0)
+	passedTest()	# didn't crash. Huzzah!
 
-p = dig.DistanceMeasureParams(.05, 0)
-passedTest()	# didn't crash. Huzzah!
+	# ================================
+	# Tests 5/6/7 - using a class
+	# ================================
+	a = np.array((5,2, 2,  3,  5), 'd').reshape((5,1)) # closest DTW
+	b = np.array((5,2, 2.5,2.5,5), 'd').reshape((5,1)) # closest L2
+	c = np.array((5,2, 2.2,2.9,5), 'd').reshape((5,1)) # closest L1
+	q = np.array((5,2, 3,  3,  5), 'd').reshape((5,1))
 
-# ================================
-# Tests 5/6/7 - using a class
-# ================================
+	tsc = dig.TSClassifier()
+	aCls = 1
+	bCls = 2
+	cCls = 3
+	tsc.addExample(a, aCls)
+	tsc.addExample(b, bCls)
+	tsc.addExample(c, cCls)
 
-a = np.array((5,2, 2,  3,  5),'d').reshape((5,1))	# closest DTW
-b = np.array((5,2, 2.5,2.5,5),'d').reshape((5,1))	# closest L2
-c = np.array((5,2, 2.2,2.9,5),'d').reshape((5,1))	# closest L1
-q = np.array((5,2, 3,  3,  5),'d').reshape((5,1))
+	tsc.setAlgorithm(dig.NN_DTW)
+	qCls = tsc.classify(q)
+	assertEqual(qCls,aCls)
 
-tsc = dig.TSClassifier()
-aCls = 1
-bCls = 2
-cCls = 3
-tsc.addExample(a, aCls)
-tsc.addExample(b, bCls)
-tsc.addExample(c, cCls)
+	tsc.setAlgorithm(dig.NN_L2)
+	qCls = tsc.classify(q)
+	assertEqual(qCls,bCls)
 
-tsc.setAlgorithm(dig.NN_DTW)
-qCls = tsc.classify(q)
-assertEqual(qCls,aCls)
+	tsc.setAlgorithm(dig.NN_L1)
+	qCls = tsc.classify(q)
+	assertEqual(qCls,cCls)
 
-tsc.setAlgorithm(dig.NN_L2)
-qCls = tsc.classify(q)
-assertEqual(qCls,bCls)
+	# ================================
+	# Test 8 - interfacing with eigen
+	# ================================
 
-tsc.setAlgorithm(dig.NN_L1)
-qCls = tsc.classify(q)
-assertEqual(qCls,cCls)
+	A = np.arange(12).reshape((4, 3))
+	rowSums = np.sum(A, axis=1)
+	ans = np.dot(rowSums, rowSums)
+	output = dig.swigEigenTest(A)
+	assertEqual(ans, output)
 
-# ================================
-# Test 8 - interfacing with eigen
-# ================================
-
-A = np.arange(12).reshape((4, 3))
-rowSums = np.sum(A, axis=1)
-ans = np.dot(rowSums, rowSums)
-output = dig.swigEigenTest(A)
-assertEqual(ans, output)
-
+if __name__ == '__main__':
+	main_test()

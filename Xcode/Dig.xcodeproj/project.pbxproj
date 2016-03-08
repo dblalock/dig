@@ -43,6 +43,9 @@
 		72247DAA1C600AA300B74A64 /* test_tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_tree.cpp; sourceTree = "<group>"; };
 		72247DAC1C6FE64F00B74A64 /* intmap.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = intmap.hpp; sourceTree = "<group>"; };
 		72247DAD1C71087F00B74A64 /* test_intmap.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_intmap.cpp; sourceTree = "<group>"; };
+		72247DAF1C87A49F00B74A64 /* eigen_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = eigen_utils.hpp; sourceTree = "<group>"; };
+		72247DB01C87A5F600B74A64 /* neighbors.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = neighbors.hpp; sourceTree = "<group>"; };
+		72247DB11C87A5F600B74A64 /* dist.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = dist.hpp; sourceTree = "<group>"; };
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
 		728F85DE1C55B565004E4AA0 /* tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tree.cpp; sourceTree = "<group>"; };
 		728F85DF1C55B565004E4AA0 /* tree.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = tree.hpp; sourceTree = "<group>"; };
@@ -1152,6 +1155,8 @@
 		72C4193C1C5337AD004689A2 /* include */ = {
 			isa = PBXGroup;
 			children = (
+				72247DB01C87A5F600B74A64 /* neighbors.hpp */,
+				72247DB11C87A5F600B74A64 /* dist.hpp */,
 				72C4193D1C5337AD004689A2 /* _dig.hpp */,
 				72C4193E1C5337AD004689A2 /* dig.cpp */,
 				72C4193F1C5337AD004689A2 /* dig.hpp */,
@@ -1174,6 +1179,7 @@
 		72C419441C5337AD004689A2 /* utils */ = {
 			isa = PBXGroup;
 			children = (
+				72247DAF1C87A49F00B74A64 /* eigen_utils.hpp */,
 				72C419451C5337AD004689A2 /* array_utils.c */,
 				72C419461C5337AD004689A2 /* array_utils.h */,
 				72C419471C5337AD004689A2 /* array_utils.hpp */,

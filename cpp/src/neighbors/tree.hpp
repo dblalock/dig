@@ -15,6 +15,8 @@
 #include <vector>
 
 #include "Dense"
+
+#include "neighbors.hpp"
 #include "intmap.hpp"
 
 // ================================================================
@@ -64,13 +66,9 @@ public:
 } Node;
 
 //typedef std::map<hash_t, Node> map_t;
-typedef intmap64<std::unique_ptr<Node> > map_t;
+typedef std::unique_ptr<Node> node_ptr_t;
+typedef intmap64<node_ptr_t> map_t;
 
-// ------------------------------------------------ Neighbor
-typedef struct Neighbor {
-	double dist;
-	length_t idx;
-} Neighbor;
 
 // ================================================================
 // Utility funcs

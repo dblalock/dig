@@ -393,3 +393,15 @@ TEST_CASE("rangeQueries", "Tree") {
 //		runRangeTest(N, D, r, P, binWidth);
 //	}
 }
+
+TEST_CASE("rangeQueriesClass", "Tree") {
+	int N = 30;
+	int D = 10;
+	double r = 10.;
+	depth_t P = 4;
+	
+	MatrixXd X(N, D);
+	X.setRandom();
+	
+	volatile BinTree tree(X, P);
+}

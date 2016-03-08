@@ -17,25 +17,22 @@
 
 #include "redsvd.hpp"
 #include "array_utils.hpp" // for rand_ints
+#include "eigen_utils.hpp"
 
-#define DEBUG_POINT 2997
+//#define DEBUG_POINT 2997
 
-using Eigen::Map;
-using Eigen::Dynamic;
-using Eigen::RowMajor;
-using Eigen::Matrix;
-//using Eigen::Array;
-// using Eigen::Array1d;
 
 // ================================================================
-// Temp
+// Temp # TODO remove
 // ================================================================
 
+#include "eigen_utils.hpp"
 double swigEigenTest(double* X, int m, int n) {
-	Map<Matrix<double, Dynamic, Dynamic, RowMajor> > A(X, m, n);
+	auto A = eigenWrap2D_nocopy(X, m, n);
 	VectorXd rowSums = A.rowwise().sum();
 	return rowSums.squaredNorm();
 }
+
 
 // ================================================================
 // Typedefs and usings
@@ -88,6 +85,92 @@ Node::Node() :
 //	is_internal(other.is_internal)
 //{}
 
+
+// ================================================================
+// Classes
+// ================================================================
+
+// ------------------------------------------------ BinTree Impl
+
+class BinTree::Impl {
+private:
+	void initAfterX(depth_t numProjections);
+
+public:
+	MatrixXd _X;
+	MatrixXd _projectionVects;
+	depth_t _numProjections;
+	node_ptr_t _root;
+	double _binWidth;
+
+	//ctors
+	Impl(const MatrixXd& X, depth_t numProjections):
+		_X(X)
+	{
+		initAfterX(numProjections);
+	}
+
+	Impl(double* X, int m, int n, int numProjections):
+		_X(eigenWrap2D_aligned(X, m, n))
+	{
+			initAfterX(numProjections);
+	}
+};
+
+void BinTree::Impl::initAfterX(depth_t numProjections) {
+	_projectionVects = computeProjectionVects(_X, numProjections);
+	_root = constructIndex(_X, _projectionVects, _binWidth); // sets _binWidth
+}
+
+// ------------------------------------------------ BinTree
+
+BinTree::~BinTree() = default; // correct if we could use a unique_ptr
+
+// BinTree::~BinTree() {
+// 	delete _ths;
+// }
+
+BinTree::BinTree(const MatrixXd& X, depth_t numProjections):
+	_ths{new BinTree::Impl{X, numProjections}}
+{}
+
+vector<length_t> BinTree::rangeQuery(const VectorXd& q, double radiusL2) {
+	return findNeighbors(q, _ths->_X, *(_ths->_root), _ths->_projectionVects,
+						 radiusL2, _ths->_binWidth);
+}
+vector<Neighbor> BinTree::knnQuery(const VectorXd& q, int k) {
+	return findKnn(q, _ths->_X, k, *(_ths->_root), _ths->_projectionVects, _ths->_binWidth);
+}
+
+// ------------------------ versions for numpy typemaps
+BinTree::BinTree(double* X, int m, int n, int numProjections):
+	_ths{new BinTree::Impl{X, m, n, numProjections}}
+{}
+
+vector<length_t> BinTree::rangeQuery(const double* q, int len, double radiusL2) {
+	VectorXd qVect = eigenWrap1D_aligned(q, len);
+	return rangeQuery(qVect, radiusL2);
+}
+vector<Neighbor> BinTree::knnQuery(const double* q, int len, int k) {
+	VectorXd qVect = eigenWrap1D_aligned(q, len);
+	return knnQuery(qVect, k);
+}
+// void BinTree::rangeQuery(const double* q, int len, double radiusL2,
+// 				int* outVec, int outLen) {
+// 	VectorXd qVect = eigenWrap1D_aligned(q, len);
+// 	auto neighbors = rangeQuery(qVect, radiusL2);
+// 	for (int i = 0; i < neighbors.size(); i++) {
+// 		outVec[i] = neighbors[i];
+// 	}
+// }
+// void BinTree::knnQuery(const double* q, int len, int k,
+// 			  int* outVec, int outLen) {
+// 	VectorXd qVect = eigenWrap1D_aligned(q, len);
+// 	auto neighbors = knnQuery(qVect, k);
+// 	for (int i = 0; i < neighbors.size(); i++) {
+// 		outVec[i] = neighbors[i].idx;
+// 	}
+// }
 
 // ================================================================
 #pragma mark Utils

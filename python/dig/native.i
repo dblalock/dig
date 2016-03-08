@@ -2,9 +2,12 @@
 %module dig
 %{
 #define SWIG_FILE_WITH_INIT
+#include <vector>
+#include <sys/types.h>
 #include "../../cpp/src/include/dig.hpp"
 #include "../../cpp/src/include/dist.hpp"
 #include "../../cpp/src/include/neighbors.hpp"
+// #include "../../cpp/src/neighbors/tree.hpp"
 %}
 
 // include numpy swig stuff
@@ -12,9 +15,41 @@
 %init %{
 import_array();
 %}
+%include <eigen.i>
+%include <np_vector.i>
 
 // ================================================================
-// apply numpy typemaps to my own funcs based on their parameters
+// stl vector typemaps
+// ================================================================
+
+%np_vector_typemaps(int16_t, NPY_INT)
+%np_vector_typemaps(int32_t, NPY_INT)
+%np_vector_typemaps(int64_t, NPY_LONG)
+%np_vector_typemaps(uint16_t, NPY_UINT)
+%np_vector_typemaps(uint32_t, NPY_UINT)
+%np_vector_typemaps(uint64_t, NPY_ULONG)
+%np_vector_typemaps(int, NPY_INT)
+%np_vector_typemaps(long, NPY_LONG)
+%np_vector_typemaps(float, NPY_FLOAT)
+%np_vector_typemaps(double, NPY_DOUBLE)
+// %np_vector_typemaps(SimpleStruct*, NPY_OBJECT) // breaks
+
+%np_vector_typemaps(length_t, NPY_INT)
+
+// ================================================================
+// eigen typemaps
+// ================================================================
+
+%eigen_typemaps(MatrixXd)
+%eigen_typemaps(VectorXd)
+// %eigen_typemaps(ArrayXd) // breaks
+%eigen_typemaps(MatrixXf)
+%eigen_typemaps(VectorXf)
+%eigen_typemaps(MatrixXi)
+%eigen_typemaps(VectorXi)
+
+// ================================================================
+// raw c array typemaps
 // ================================================================
 
 // ================================
@@ -71,3 +106,4 @@ import_array();
 %include "../../cpp/src/include/dig.hpp"
 %include "../../cpp/src/include/dist.hpp"
 %include "../../cpp/src/include/neighbors.hpp"
+// %include "../../cpp/src/neighbors/tree.hpp"
