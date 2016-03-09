@@ -147,14 +147,14 @@ BinTree::BinTree(double* X, int m, int n, int numProjections):
 	_ths{new BinTree::Impl{X, m, n, numProjections}}
 {}
 
-vector<length_t> BinTree::rangeQuery(const double* q, int len, double radiusL2) {
-	VectorXd qVect = eigenWrap1D_aligned(q, len);
-	return rangeQuery(qVect, radiusL2);
-}
-vector<Neighbor> BinTree::knnQuery(const double* q, int len, int k) {
-	VectorXd qVect = eigenWrap1D_aligned(q, len);
-	return knnQuery(qVect, k);
-}
+// vector<length_t> BinTree::rangeQuery(const double* q, int len, double radiusL2) {
+// 	VectorXd qVect = eigenWrap1D_aligned(q, len);
+// 	return rangeQuery(qVect, radiusL2);
+// }
+// vector<Neighbor> BinTree::knnQuery(const double* q, int len, int k) {
+// 	VectorXd qVect = eigenWrap1D_aligned(q, len);
+// 	return knnQuery(qVect, k);
+// }
 // void BinTree::rangeQuery(const double* q, int len, double radiusL2,
 // 				int* outVec, int outLen) {
 // 	VectorXd qVect = eigenWrap1D_aligned(q, len);

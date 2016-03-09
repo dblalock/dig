@@ -65,8 +65,8 @@ public:
 	// ------------------------ versions for numpy typemaps
 	BinTree(double* X, int m, int n, int numProjections=16);
 
-	vector<length_t> rangeQuery(const double* q, int len, double radiusL2);
-	vector<Neighbor> knnQuery(const double* q, int len, int k);
+	// vector<length_t> rangeQuery(const double* q, int len, double radiusL2);
+	// vector<Neighbor> knnQuery(const double* q, int len, int k);
 
 	// TODO, ya so default args seem to be making SWIG unhappy
 //	void rangeQuery(const double* q, int len, double radiusL2,

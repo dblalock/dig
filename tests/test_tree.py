@@ -33,6 +33,8 @@ def main():
 	assert(len(neighborIdxs) == len(trueNeighborIdxs))
 	assert(np.array_equal(neighborIdxs, trueNeighborIdxs))
 
+	print("test_tree: done")
+
 	# nn1 = tree.knnQuery(q, 1)
 	# nn10 = tree.knnQuery(q, 10)
 
