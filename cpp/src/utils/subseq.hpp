@@ -28,9 +28,10 @@ namespace subs {
 
 // ------------------------ raw arrays, no query, with output array
 
-template<class F, class data_t2, class data_t3, class len_t1=size_t, class len_t2=size_t>
-static inline void mapSubseqs(const F&& func, len_t1 m, const data_t2* x, len_t2 n,
-	data_t3* out)
+template<class F, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void mapSubseqs(const F&& func, len_t1 m, const data_t2* x,
+	len_t2 n, data_t3* out)
 {
 	assert(n >= m);
 	for (size_t i = 0; i < n - m; i++) {
@@ -38,9 +39,10 @@ static inline void mapSubseqs(const F&& func, len_t1 m, const data_t2* x, len_t2
 	}
 }
 
-template<class F, class data_t2, class data_t3, class len_t1=size_t, class len_t2=size_t>
-static inline void mapiSubseqs(const F&& func, len_t1 m, const data_t2* x, len_t2 n,
-	data_t3* out)
+template<class F, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void mapiSubseqs(const F&& func, len_t1 m, const data_t2* x,
+	len_t2 n, data_t3* out)
 {
 	assert(n >= m);
 	for (size_t i = 0; i < n - m; i++) {
@@ -131,36 +133,19 @@ static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
 
 // ------------------------ containers with new container allocated
 
-	// const Container2<Args2...>& x) -> Container2<decltype(func(begin(q), begin(x)))>
-//template<class F, template <class...> class Container1, class... Args1,
-//	template <class...> class Container2, class... Args2>
-//static auto mapSubseqs(const F&& func, const Container1<Args1...>& q,
-//	const Container2<Args2...>& x) -> Container2<double>
-					   //	const Container2<Args2...>& x) -> Container2<decltype(func(&q[0], &x[0]))>
 template<class F, template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
 static auto mapSubseqs(const F&& func, const Container1<data_t1>& q,
 					   const Container2<data_t2>& x)
-//	-> Container2<double>
 	-> Container2<decltype(func(&q[0], &x[0]))>
 {
 	auto m = q.size();
 	auto n = x.size();
 	assert(n >= m);
 	auto l = n - m + 1;
-	// Container2<decltype(func(begin(q), begin(x)))> ret;
-//	Container2<double> ret;
 	Container2<decltype( func(&q[0], &x[0]) )> ret;
-	// for (auto itx = begin(x); itx < end(x); itx++) {
-	// 	ret.emplace_back( func(begin(q), &(*itx)) );
-	// }
-//	double foo = 7;
-//	double bar = 3;
 	for (size_t i = 0; i < l; i++) {
-//		 ret.emplace_back( func(begin(q), begin(x)+i) );
 		ret.emplace_back( func(&q[0], &x[i]) );
-//		 ret.emplace_back( func(&foo, &bar) );
-//		ret.emplace_back( 5.0 );
 	}
 	return ret;
 }
@@ -175,9 +160,7 @@ static auto mapiSubseqs(const F&& func, const Container1<Args1...>& q,
 	assert(n >= m);
 	auto l = n - m + 1;
 	Container2<decltype(func(0, begin(q), begin(x)))> ret;
-	// for (auto itx = begin(x); itx < end(x); itx++) {
 	for (size_t i = 0; i < l; i++) {
-		// ret.emplace_back( func(i, begin(q), begin(x)+i) );
 		ret.emplace_back( func(i, &q[0], &x[i]) );
 	}
 	return ret;
@@ -336,7 +319,6 @@ static auto dists_sq(const Container1<data_t1>& q,
 		return dist_sq(_q, _x, m);
 	}, q, x);
 }
-
 
 
 // ================================================================
