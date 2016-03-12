@@ -26,26 +26,28 @@ namespace subs {
 
 // ================================ Map
 
+// note that only nonnegative strides are supported
+
 // ------------------------ raw arrays, no query, with output array
 
 template<class F, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void mapSubseqs(const F&& func, len_t1 m, const data_t2* x,
-	len_t2 n, data_t3* out)
+	len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	assert(n >= m);
-	for (size_t i = 0; i < n - m; i++) {
+	for (size_t i = 0; i < n - m; i += stride) {
 		out[i] = func(x+i);
 	}
 }
 
 template<class F, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void mapiSubseqs(const F&& func, len_t1 m, const data_t2* x,
-	len_t2 n, data_t3* out)
+	len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	assert(n >= m);
-	for (size_t i = 0; i < n - m; i++) {
+	for (size_t i = 0; i < n - m; i += stride) {
 		out[i] = func(i, x+i);
 	}
 }
@@ -53,50 +55,52 @@ static inline void mapiSubseqs(const F&& func, len_t1 m, const data_t2* x,
 // ------------------------ raw arrays, with output array
 
 template<class F, class data_t1, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void mapSubseqs(const F&& func, const data_t1* q, len_t1 m,
-	const data_t2* x, len_t2 n, data_t3* out)
+	const data_t2* x, len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	assert(n >= m);
-	for (size_t i = 0; i < n - m; i++) {
+	for (size_t i = 0; i < n - m; i += stride) {
 		out[i] = func(q, x+i);
 	}
 }
 
 template<class F, class data_t1, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
-	const data_t2* x, len_t2 n, data_t3* out)
+	const data_t2* x, len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	assert(n >= m);
-	for (size_t i = 0; i < n - m; i++) {
+	for (size_t i = 0; i < n - m; i += stride) {
 		out[i] = func(i, q, x+i);
 	}
 }
 
 // ------------------------ raw arrays with new array allocated, no query
 
-template<class F, class data_t2, class len_t1=size_t, class len_t2=size_t>
+template<class F, class data_t2, class len_t1=size_t,
+	class len_t2=size_t, class len_t3=size_t>
 static inline auto mapSubseqs(const F&& func, len_t1 m,
-	const data_t2* x, len_t2 n)
+	const data_t2* x, len_t2 n, len_t3 stride=1)
 	-> unique_ptr<decltype(func(x))[]>
 {
 	auto l = n - m + 1;
 	unique_ptr<decltype(func(x))[]> ret(new decltype(func(x))[l]);
-	for (size_t i = 0; i < l; i++) {
+	for (size_t i = 0; i < l; i += stride) {
 		ret[i] = func(x+i);
 	}
 	return ret;
 }
 
 template<class F, class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
-	const data_t2* x, len_t2 n) -> unique_ptr<decltype(func(0, x))[]>
+	const data_t2* x, len_t2 n, len_t3 stride=1)
+	-> unique_ptr<decltype(func(0, x))[]>
 {
 	auto l = n - m + 1;
 	unique_ptr<decltype(func(0, x))[]> ret(new decltype(func(0, x))[l]);
-	for (size_t i = 0; i < l; i++) {
+	for (size_t i = 0; i < l; i += stride) {
 		ret[i] = func(i, x+i);
 	}
 	return ret;
@@ -105,27 +109,28 @@ static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
 // ------------------------ raw arrays with new array allocated
 
 template<class F, class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto mapSubseqs(const F&& func, const data_t1* q, len_t1 m,
-	const data_t2* x, len_t2 n)
+	const data_t2* x, len_t2 n, len_t3 stride=1)
 	-> unique_ptr<decltype(func(q, x))[]>
 {
 	auto l = n - m + 1;
 	unique_ptr<decltype(func(q, x))[]> ret(new decltype(func(q, x))[l]);
-	for (size_t i = 0; i < l; i++) {
+	for (size_t i = 0; i < l; i += stride) {
 		ret[i] = func(q, x+i);
 	}
 	return ret;
 }
 
 template<class F, class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
-	const data_t2* x, len_t2 n) -> unique_ptr<decltype(func(0, q, x))[]>
+	const data_t2* x, len_t2 n, len_t3 stride=1)
+	-> unique_ptr<decltype(func(0, q, x))[]>
 {
 	auto l = n - m + 1;
 	unique_ptr<decltype(func(0, q, x))[]> ret(new decltype(func(0, q, x))[l]);
-	for (size_t i = 0; i < l; i++) {
+	for (size_t i = 0; i < l; i += stride) {
 		ret[i] = func(i, q, x+i);
 	}
 	return ret;
@@ -134,9 +139,9 @@ static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
 // ------------------------ containers with new container allocated
 
 template<class F, template <class...> class Container1, class data_t1,
-	template <class...> class Container2, class data_t2>
+	template <class...> class Container2, class data_t2, class len_t3=size_t>
 static auto mapSubseqs(const F&& func, const Container1<data_t1>& q,
-					   const Container2<data_t2>& x)
+					   const Container2<data_t2>& x, len_t3 stride=1)
 	-> Container2<decltype(func(&q[0], &x[0]))>
 {
 	auto m = q.size();
@@ -144,23 +149,24 @@ static auto mapSubseqs(const F&& func, const Container1<data_t1>& q,
 	assert(n >= m);
 	auto l = n - m + 1;
 	Container2<decltype( func(&q[0], &x[0]) )> ret;
-	for (size_t i = 0; i < l; i++) {
+	for (size_t i = 0; i < l; i += stride) {
 		ret.emplace_back( func(&q[0], &x[i]) );
 	}
 	return ret;
 }
 
 template<class F, template <class...> class Container1, class... Args1,
-	template <class...> class Container2, class... Args2>
+	template <class...> class Container2, class... Args2, class len_t3=size_t>
 static auto mapiSubseqs(const F&& func, const Container1<Args1...>& q,
-	const Container2<Args2...>& x) -> Container2<decltype(func(0, begin(q), begin(x)))>
+	const Container2<Args2...>& x, len_t3 stride=1)
+	-> Container2<decltype(func(0, begin(q), begin(x)))>
 {
 	auto m = q.size();
 	auto n = x.size();
 	assert(n >= m);
 	auto l = n - m + 1;
 	Container2<decltype(func(0, begin(q), begin(x)))> ret;
-	for (size_t i = 0; i < l; i++) {
+	for (size_t i = 0; i < l; i += stride) {
 		ret.emplace_back( func(i, &q[0], &x[i]) );
 	}
 	return ret;
@@ -171,31 +177,32 @@ static auto mapiSubseqs(const F&& func, const Container1<Args1...>& q,
 // ------------------------ raw arrays
 
 template<class data_t1, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void crossCorrs(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n, data_t3* out)
+	len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dot(q, x, m);
-	}, m, x, n, out);
+	}, m, x, n, out, stride);
 }
 
 template<class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto crossCorrs(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n) -> unique_ptr<decltype(q[0] * x[0])[]>
+	len_t2 n, len_t3 stride=1)
+	-> unique_ptr<decltype(q[0] * x[0])[]>
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dot(q, x, m);
-	}, m, x, n);
+	}, m, x, n, stride);
 }
 
 // ------------------------ containers
 
 template<template <class...> class Container1, class data_t1,
-	template <class...> class Container2, class data_t2>
+	template <class...> class Container2, class data_t2, class len_t3=size_t>
 static auto crossCorrs(const Container1<data_t1>& q,
-	const Container2<data_t2>& x)
+	const Container2<data_t2>& x, len_t3 stride=1)
 	-> Container2<decltype(q[0] * x[0])>
 {
 	// NOTE: this will cryptically fail to compile and complain about
@@ -203,7 +210,7 @@ static auto crossCorrs(const Container1<data_t1>& q,
 	auto m = q.size();
 	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
 		return dot(_q, _x, m);
-	}, q, x);
+	}, q, x, stride);
 }
 
 // ================================ L1 distance
@@ -211,37 +218,38 @@ static auto crossCorrs(const Container1<data_t1>& q,
 // ------------------------ raw arrays
 
 template<class data_t1, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void dists_L1(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n, data_t3* out)
+	len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dist_L1(q, x, m);
-	}, m, x, n, out);
+	}, m, x, n, out, stride);
 }
 
 template<class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto dists_L1(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n) -> unique_ptr<decltype(q[0] - x[0])[]>
+	len_t2 n, len_t3 stride=1)
+	-> unique_ptr<decltype(q[0] - x[0])[]>
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dist_L1(q, x, m);
-	}, m, x, n);
+	}, m, x, n, stride);
 }
 
 // ------------------------ containers
 
 template<template <class...> class Container1, class data_t1,
-	template <class...> class Container2, class data_t2>
+	template <class...> class Container2, class data_t2, class len_t3=size_t>
 static auto dists_L1(const Container1<data_t1>& q,
-	const Container2<data_t2>& x)
+	const Container2<data_t2>& x, len_t3 stride=1)
 	-> Container2<decltype(q[0] - x[0])>
 {
 	auto m = q.size();
 	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
 		return dist_L1(_q, _x, m);
-	}, q, x);
+	}, q, x, stride);
 }
 
 // ================================ L2 distance
@@ -249,37 +257,38 @@ static auto dists_L1(const Container1<data_t1>& q,
 // ------------------------ raw arrays
 
 template<class data_t1, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void dists_L2(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n, data_t3* out)
+	len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dist_L2(q, x, m);
-	}, m, x, n, out);
+	}, m, x, n, out, stride);
 }
 
 template<class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto dists_L2(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n) -> unique_ptr<decltype(q[0] - x[0])[]>
+	len_t2 n, len_t3 stride=1)
+	-> unique_ptr<decltype(q[0] - x[0])[]>
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dist_L2(q, x, m);
-	}, m, x, n);
+	}, m, x, n, stride);
 }
 
 // ------------------------ containers
 
 template<template <class...> class Container1, class data_t1,
-	template <class...> class Container2, class data_t2>
+	template <class...> class Container2, class data_t2, class len_t3=size_t>
 static auto dists_L2(const Container1<data_t1>& q,
-	const Container2<data_t2>& x)
+	const Container2<data_t2>& x, len_t3 stride=1)
 	-> Container2<decltype(q[0] - x[0])>
 {
 	auto m = q.size();
 	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
 		return dist_L2(_q, _x, m);
-	}, q, x);
+	}, q, x, stride);
 }
 
 // ================================ L2^2 distance
@@ -287,37 +296,38 @@ static auto dists_L2(const Container1<data_t1>& q,
 // ------------------------ raw arrays
 
 template<class data_t1, class data_t2, class data_t3,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline void dists_sq(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n, data_t3* out)
+	len_t2 n, data_t3* out, len_t3 stride=1)
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dist_sq(q, x, m);
-	}, m, x, n, out);
+	}, m, x, n, out, stride);
 }
 
 template<class data_t1, class data_t2,
-	class len_t1=size_t, class len_t2=size_t>
+	class len_t1=size_t, class len_t2=size_t, class len_t3=size_t>
 static inline auto dists_sq(const data_t1* q, len_t1 m, const data_t2* x,
-	len_t2 n) -> unique_ptr<decltype(q[0] * x[0])[]>
+	len_t2 n, len_t3 stride=1)
+	-> unique_ptr<decltype(q[0] * x[0])[]>
 {
 	return mapSubseqs([m, q](data_t2* x) {
 		return dist_sq(q, x, m);
-	}, m, x, n);
+	}, m, x, n, stride);
 }
 
 // ------------------------ containers
 
 template<template <class...> class Container1, class data_t1,
-	template <class...> class Container2, class data_t2>
+	template <class...> class Container2, class data_t2, class len_t3=size_t>
 static auto dists_sq(const Container1<data_t1>& q,
-	const Container2<data_t2>& x)
+	const Container2<data_t2>& x, len_t3 stride=1)
 	-> Container2<decltype(q[0] - x[0])>
 {
 	auto m = q.size();
 	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
 		return dist_sq(_q, _x, m);
-	}, q, x);
+	}, q, x, stride);
 }
 
 

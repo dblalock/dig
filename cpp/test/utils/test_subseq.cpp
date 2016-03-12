@@ -31,7 +31,7 @@ using ar::all_eq;
 
 TEST_CASE("crossCorrs", "subseq") {
 
-	SECTION("1,1") {
+	SECTION("lengths 1,1") {
 		vecd q {3};
 		vecd x {2};
 
@@ -40,7 +40,7 @@ TEST_CASE("crossCorrs", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(out[0] == 6.);
 	}
-	SECTION("1,2") {
+	SECTION("lengths 1,2") {
 		vecd q {3};
 		vecd x {2, -1};
 
@@ -50,7 +50,7 @@ TEST_CASE("crossCorrs", "subseq") {
 		REQUIRE(out[0] == 6.);
 		REQUIRE(out[1] == -3.);
 	}
-	SECTION("2,2") {
+	SECTION("lengths 2,2") {
 		vecd q {3, 5};
 		vecd x {2, -1};
 
@@ -59,7 +59,7 @@ TEST_CASE("crossCorrs", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(out[0] == 1.);
 	}
-	SECTION("2,4") {
+	SECTION("lengths 2,4") {
 		vecd q {3, 5};
 		vecd x {2, -1, 0, 4};
 		vecd ans {1, -3, 20};
@@ -69,11 +69,20 @@ TEST_CASE("crossCorrs", "subseq") {
 		REQUIRE(out.size() == 3);
 		REQUIRE(all_eq(out, ans));
 	}
+	SECTION("lengths 2,4, stride 2") {
+		vecd q {3, 5};
+		vecd x {2, -1, 0, 4};
+		vecd ans {1, 20};
+		
+		auto out = crossCorrs(q, x, 2);
+		
+		REQUIRE(out.size() == 2);
+		REQUIRE(all_eq(out, ans));
+	}
 }
 
 TEST_CASE("dist_L1", "subseq") {
-
-	SECTION("1,1") {
+	SECTION("lengths 1,1") {
 		vecd q {3};
 		vecd x {2};
 		vecd ans {1};
@@ -83,7 +92,7 @@ TEST_CASE("dist_L1", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("1,2") {
+	SECTION("lengths 1,2") {
 		vecd q {3};
 		vecd x {2, -1};
 		vecd ans {1, 4};
@@ -93,7 +102,7 @@ TEST_CASE("dist_L1", "subseq") {
 		REQUIRE(out.size() == 2);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("2,2") {
+	SECTION("lengths 2,2") {
 		vecd q {3, 5};
 		vecd x {2, -1};
 		vecd ans {7};
@@ -103,7 +112,7 @@ TEST_CASE("dist_L1", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("2,4") {
+	SECTION("lengths 2,4") {
 		vecd q {3, 5};
 		vecd x {2, -1, 0, 4};
 		vecd ans {7, 9, 4};
@@ -113,11 +122,20 @@ TEST_CASE("dist_L1", "subseq") {
 		REQUIRE(out.size() == 3);
 		REQUIRE(all_eq(out, ans));
 	}
+	SECTION("lengths 2,4, stride 2") {
+		vecd q {3, 5};
+		vecd x {2, -1, 0, 4};
+		vecd ans {7, 4};
+		
+		auto out = dists_L1(q, x, 2);
+		
+		REQUIRE(out.size() == 2);
+		REQUIRE(all_eq(out, ans));
+	}
 }
 
 TEST_CASE("dist_sq", "subseq") {
-
-	SECTION("1,1") {
+	SECTION("lengths 1,1") {
 		vecd q {3};
 		vecd x {2};
 		vecd ans {1};
@@ -127,7 +145,7 @@ TEST_CASE("dist_sq", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("1,2") {
+	SECTION("lengths 1,2") {
 		vecd q {3};
 		vecd x {2, -1};
 		vecd ans {1, 16};
@@ -137,7 +155,7 @@ TEST_CASE("dist_sq", "subseq") {
 		REQUIRE(out.size() == 2);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("2,2") {
+	SECTION("lengths 2,2") {
 		vecd q {3, 5};
 		vecd x {2, -1};
 		vecd ans {37};
@@ -147,7 +165,7 @@ TEST_CASE("dist_sq", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("2,4") {
+	SECTION("lengths 2,4") {
 		vecd q {3, 5};
 		vecd x {2, -1, 0, 4};
 		vecd ans {37, 41, 10};
@@ -157,11 +175,20 @@ TEST_CASE("dist_sq", "subseq") {
 		REQUIRE(out.size() == 3);
 		REQUIRE(all_eq(out, ans));
 	}
+	SECTION("lengths 2,4, stride 2") {
+		vecd q {3, 5};
+		vecd x {2, -1, 0, 4};
+		vecd ans {37, 10};
+		
+		auto out = dists_sq(q, x, 2);
+		
+		REQUIRE(out.size() == 2);
+		REQUIRE(all_eq(out, ans));
+	}
 }
 
 TEST_CASE("dist_L2", "subseq") {
-
-	SECTION("1,1") {
+	SECTION("lengths 1,1") {
 		vecd q {3};
 		vecd x {2};
 		vecd ans {1};
@@ -171,7 +198,7 @@ TEST_CASE("dist_L2", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("1,2") {
+	SECTION("lengths 1,2") {
 		vecd q {3};
 		vecd x {2, -1};
 		vecd ans {1, sqrt(16)};
@@ -181,7 +208,7 @@ TEST_CASE("dist_L2", "subseq") {
 		REQUIRE(out.size() == 2);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("2,2") {
+	SECTION("lengths 2,2") {
 		vecd q {3, 5};
 		vecd x {2, -1};
 		vecd ans {sqrt(37)};
@@ -191,7 +218,7 @@ TEST_CASE("dist_L2", "subseq") {
 		REQUIRE(out.size() == 1);
 		REQUIRE(all_eq(out, ans));
 	}
-	SECTION("2,4") {
+	SECTION("lengths 2,4") {
 		vecd q {3, 5};
 		vecd x {2, -1, 0, 4};
 		vecd ans {sqrt(37), sqrt(41), sqrt(10)};
@@ -199,6 +226,16 @@ TEST_CASE("dist_L2", "subseq") {
 		auto out = dists_L2(q, x);
 
 		REQUIRE(out.size() == 3);
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("lengths 2,4, stride 2") {
+		vecd q {3, 5};
+		vecd x {2, -1, 0, 4};
+		vecd ans {sqrt(37), sqrt(10)};
+		
+		auto out = dists_L2(q, x, 2);
+		
+		REQUIRE(out.size() == 2);
 		REQUIRE(all_eq(out, ans));
 	}
 }
