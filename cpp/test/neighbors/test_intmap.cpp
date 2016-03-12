@@ -83,7 +83,7 @@ TEST_CASE("msbIdx", "intmap") {
 		CAPTURE(count);
 		x = 0;
 		auto idxs = ar::rand_ints(0, 63, count);
-		ar::sort(idxs);
+		ar::sort_inplace(idxs);
 		for (auto idx : idxs) {
 			x = setBit(x, idx);
 		}
@@ -106,7 +106,7 @@ TEST_CASE("lastKeyBefore", "intmap") {
 		REQUIRE(m.size() == 0);
 
 		auto idxs = ar::rand_ints(0, 63, count);
-		ar::sort(idxs);
+		ar::sort_inplace(idxs);
 		for (auto idx : idxs) {
 //			std::cout << idx << ", ";
 			m.put(idx, 7);
@@ -154,7 +154,7 @@ TEST_CASE("firstKey[AtOr]After", "intmap") {
 		REQUIRE(m.size() == 0);
 		
 		auto idxs = ar::rand_ints(0, 63, count);
-		ar::sort(idxs);
+		ar::sort_inplace(idxs);
 		for (auto idx : idxs) {
 			m.put(idx, 7);
 		}

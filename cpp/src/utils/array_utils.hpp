@@ -1268,8 +1268,15 @@ static inline vector<data_t> rand_choice(const Container<data_t>& data, size_t h
 // ================================ Sorting
 
 template<template <class...> class Container, class data_t>
-static inline void sort(Container<data_t>& data) {
+static inline void sort_inplace(Container<data_t>& data) {
 	std::sort(std::begin(data), std::end(data));
+}
+
+template<template <class...> class Container, class data_t>
+static inline void sort(Container<data_t>& data) {
+	Container<data_t> ret(data);
+	sort(ret);
+	return ret;
 }
 
 
