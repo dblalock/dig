@@ -113,7 +113,7 @@ public:
 	Impl(double* X, int m, int n, int numProjections):
 		_X(eigenWrap2D_aligned(X, m, n))
 	{
-			initAfterX(numProjections);
+		initAfterX(numProjections);
 	}
 };
 

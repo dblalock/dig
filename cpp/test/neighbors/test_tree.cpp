@@ -6,6 +6,8 @@
 //  Copyright (c) 2014 DB. All rights reserved.
 //
 
+//#define SKIP_TESTS
+
 #include <algorithm>
 #include <chrono>
 #include <math.h>
@@ -283,6 +285,8 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 	REQUIRE(ar::all_eq(neighborIdxs, trueNeighborIdxs));
 }
 
+#ifndef SKIP_TESTS
+
 TEST_CASE("notCrashing", "Tree") {
 	int nRows = 40;
 	int nCols = 10;
@@ -405,3 +409,5 @@ TEST_CASE("rangeQueriesClass", "Tree") {
 	
 	volatile BinTree tree(X, P);
 }
+
+#endif // SKIP_TESTS

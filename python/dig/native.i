@@ -86,8 +86,12 @@ import_array();
 // ------------------------------- 2D arrays
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* A, int m, int n)};
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* X, int m, int n)};
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* X, int d, int n)};
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* X, int n, int d)};
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(double* A, int m, int n)};
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(double* X, int m, int n)};
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(double* X, int d, int n)};
+%apply (double* IN_ARRAY2, int DIM1, int DIM2) {(double* X, int n, int d)};
 
 // ================================
 // returned arrays
