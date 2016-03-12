@@ -8,6 +8,8 @@
 #ifndef __EIGEN_UTILS_HPP
 #define __EIGEN_UTILS_HPP
 
+#include <vector>
+
 #include "Dense"
 
 using Eigen::Map;
@@ -19,20 +21,42 @@ using Eigen::Matrix;
 // note that all of these functions assume that the raw arrays being passed
 // in are contiguous and stored in row-major order
 
+// ================================================================
+// converting to eigen mats
+// ================================================================
+
+// ------------------------------------------------ 1D output
+
+// ------------------------ raw array input
+
 template<typename T>
-Map<Matrix<T, Dynamic, 1> > eigenWrap1D_nocopy(T* x, int len) {
+Map<Matrix<T, Dynamic, 1> > eigenWrap1D_nocopy(T* x, size_t len) {
 	Map<Matrix<T, Dynamic, 1> > v(x, len);
 	return v;
 }
 
 template<typename T>
-Matrix<T, Dynamic, 1> eigenWrap1D_aligned(const T* x, int len) {
+Matrix<T, Dynamic, 1> eigenWrap1D_aligned(const T* x, size_t len) {
 	Matrix<T, Dynamic, 1> v(len);
 	for (int i = 0; i < len; i++) {
 		v(i) = x[i];
 	}
 	return v;
 }
+
+// ------------------------ container input
+
+template<template <class...> class Container, class T>
+static inline Matrix<T, Dynamic, 1> eigenWrap1D_nocopy(const Container<T>& data) {
+	return eigenWrap1D_nocopy(data.data(), data.size());
+}
+
+template<template <class...> class Container, class T>
+static inline Matrix<T, Dynamic, 1> eigenWrap1D_aligned(const Container<T>& data) {
+	return eigenWrap1D_aligned(data.data(), data.size());
+}
+
+// ------------------------------------------------ 2D output
 
 template<typename T>
 Map<Matrix<T, Dynamic, Dynamic, RowMajor> > eigenWrap2D_nocopy(T* X, int m, int n) {

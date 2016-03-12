@@ -18,14 +18,12 @@
 #include <unordered_map>
 #include "debug_utils.hpp"
 
+using std::begin;
+using std::end;
 using std::unique_ptr;
-using std::vector;
 using std::unordered_map;
+using std::vector;
 
-//TODO massively refactor this to just use map() for basically everything
-
-//TODO put everything in this namespace and then add using
-//statement in files to unbreak them
 namespace ar {
 
 // ================================================================
@@ -572,9 +570,13 @@ static inline double stdev(const Container<data_t>& data) {
 
 // ================================ Dot Product
 /** Returns the the dot product of x and y */
-template <class data_t, class len_t=size_t>
-static inline data_t dot(const data_t* x, const data_t* y, len_t len) {
-	data_t sum = 0;
+template<class data_t1, class data_t2, class len_t=size_t>
+static inline auto dot(const data_t1* x, const data_t2* y, len_t len)
+	-> decltype(x[0] * y[0])
+{
+	// auto sum = x[0] * y[0]; // get type of sum correct
+	// sum = 0;
+	decltype(x[0] * y[0]) sum = 0; // get type of sum correct
 	for (len_t i = 0; i < len; i++) {
 		sum += x[i] * y[i];
 	}
@@ -587,6 +589,74 @@ static inline double dot(const Container1<data_t1>& x, const Container2<data_t2>
 	return dot(&x[0],&y[0],x.size());
 }
 
+// ================================ L1 Distance
+
+// std::abs is finicky; just inline our own
+template<class data_t1, class data_t2>
+static inline auto absDiff(data_t1 x, data_t2 y) -> decltype(x - y) {
+	return x >= y ? x - y : y - x;
+}
+
+template<class data_t1, class data_t2, class len_t=size_t>
+static inline auto dist_L1(const data_t1* x, const data_t2* y, len_t len)
+	-> decltype(x[0] - y[0])
+{
+	// auto sum = x[0] * y[0]; // get type of sum correct
+	// sum = 0;
+	decltype(x[0] - y[0]) sum = 0; // get type of sum correct
+	for (len_t i = 0; i < len; i++) {
+		sum += absDiff(x[i], y[i]);
+	}
+	return sum;
+}
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static inline double dist_L1(const Container1<data_t1>& x,
+	const Container2<data_t2>& y)
+{
+	assert(x.size() == y.size());
+	return dist_L1(&x[0],&y[0],x.size());
+}
+
+// ================================ L2^2 Distance
+
+template<class data_t1, class data_t2, class len_t=size_t>
+static inline auto dist_sq(const data_t1* x, const data_t2* y, len_t len)
+	-> decltype(x[0] - y[0])
+{
+	decltype(x[0] - y[0]) sum = 0; // get type of sum correct
+	for (len_t i = 0; i < len; i++) {
+		auto diff = x[i] - y[i];
+		sum += diff * diff;
+	}
+	return sum;
+}
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static inline double dist_sq(const Container1<data_t1>& x,
+	const Container2<data_t2>& y)
+{
+	assert(x.size() == y.size());
+	return dist_sq(&x[0],&y[0],x.size());
+}
+
+// ================================ L2 Distance
+
+template<class data_t1, class data_t2, class len_t=size_t>
+static inline auto dist_L2(const data_t1* x, const data_t2* y, len_t len)
+	-> decltype(x[0] - y[0])
+{
+	return sqrt(dist_sq(x, y, len));
+}
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static inline double dist_L2(const Container1<data_t1>& x,
+	const Container2<data_t2>& y)
+{
+	assert(x.size() == y.size());
+	return sqrt(dist_sq(&x[0],&y[0],x.size()));
+}
+
 // ================================================================
 // Cumulative Statistics (V[1:i] -> R[i])
 // ================================================================
@@ -595,7 +665,7 @@ static inline double dot(const Container1<data_t1>& x, const Container2<data_t2>
 
 /** Cumulative sum of elements in src, storing the result in dest */
 template <class data_t, class len_t=size_t>
-static inline void cum_sum(const data_t* src, data_t* dest, len_t len) {
+static inline void cumsum(const data_t* src, data_t* dest, len_t len) {
 	dest[0] = src[0];
 	for (len_t i=1; i < len; i++) {
 		dest[i] = src[i] + dest[i-1];
@@ -605,14 +675,14 @@ static inline void cum_sum(const data_t* src, data_t* dest, len_t len) {
 template <class data_t, class len_t=size_t>
 static inline unique_ptr<data_t[]> cumsum(data_t *data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
-	array_cumsum(data, ret, len);
+	cumsum(data, ret, len);
 	return ret;
 }
 /** Returns a new array composed of the cumulative sum of the data */
 template<template <class...> class Container, class data_t>
 static inline Container<data_t> cumsum(const Container<data_t>& data) {
 	Container<data_t> ret{data.size()};
-	array_cumsum(&data[0],&ret[0],data.size());
+	cumsum(&data[0],&ret[0],data.size());
 	return ret;
 }
 

@@ -1,0 +1,521 @@
+//
+//  subseq.hpp
+//
+//  Created By Davis Blalock on 3/10/16.
+//  Copyright (c) 2016 Davis Blalock. All rights reserved.
+//
+
+#ifndef __DIG_SUBSEQ_HPP
+#define __DIG_SUBSEQ_HPP
+
+// #include <stdlib.h> // for size_t
+#include <memory>
+
+#include "array_utils.hpp"
+
+using std::begin;
+using std::end;
+using std::unique_ptr;
+
+using ar::dot;
+using ar::dist_L1;
+using ar::dist_L2;
+using ar::dist_sq;
+
+namespace subs {
+
+// ================================ Map
+
+// ------------------------ raw arrays, no query, with output array
+
+template<class F, class data_t2, class data_t3, class len_t1=size_t, class len_t2=size_t>
+static inline void mapSubseqs(const F&& func, len_t1 m, const data_t2* x, len_t2 n,
+	data_t3* out)
+{
+	assert(n >= m);
+	for (size_t i = 0; i < n - m; i++) {
+		out[i] = func(x+i);
+	}
+}
+
+template<class F, class data_t2, class data_t3, class len_t1=size_t, class len_t2=size_t>
+static inline void mapiSubseqs(const F&& func, len_t1 m, const data_t2* x, len_t2 n,
+	data_t3* out)
+{
+	assert(n >= m);
+	for (size_t i = 0; i < n - m; i++) {
+		out[i] = func(i, x+i);
+	}
+}
+
+// ------------------------ raw arrays, with output array
+
+template<class F, class data_t1, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void mapSubseqs(const F&& func, const data_t1* q, len_t1 m,
+	const data_t2* x, len_t2 n, data_t3* out)
+{
+	assert(n >= m);
+	for (size_t i = 0; i < n - m; i++) {
+		out[i] = func(q, x+i);
+	}
+}
+
+template<class F, class data_t1, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
+	const data_t2* x, len_t2 n, data_t3* out)
+{
+	assert(n >= m);
+	for (size_t i = 0; i < n - m; i++) {
+		out[i] = func(i, q, x+i);
+	}
+}
+
+// ------------------------ raw arrays with new array allocated, no query
+
+template<class F, class data_t2, class len_t1=size_t, class len_t2=size_t>
+static inline auto mapSubseqs(const F&& func, len_t1 m,
+	const data_t2* x, len_t2 n)
+	-> unique_ptr<decltype(func(x))[]>
+{
+	auto l = n - m + 1;
+	unique_ptr<decltype(func(x))[]> ret(new decltype(func(x))[l]);
+	for (size_t i = 0; i < l; i++) {
+		ret[i] = func(x+i);
+	}
+	return ret;
+}
+
+template<class F, class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
+	const data_t2* x, len_t2 n) -> unique_ptr<decltype(func(0, x))[]>
+{
+	auto l = n - m + 1;
+	unique_ptr<decltype(func(0, x))[]> ret(new decltype(func(0, x))[l]);
+	for (size_t i = 0; i < l; i++) {
+		ret[i] = func(i, x+i);
+	}
+	return ret;
+}
+
+// ------------------------ raw arrays with new array allocated
+
+template<class F, class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto mapSubseqs(const F&& func, const data_t1* q, len_t1 m,
+	const data_t2* x, len_t2 n)
+	-> unique_ptr<decltype(func(q, x))[]>
+{
+	auto l = n - m + 1;
+	unique_ptr<decltype(func(q, x))[]> ret(new decltype(func(q, x))[l]);
+	for (size_t i = 0; i < l; i++) {
+		ret[i] = func(q, x+i);
+	}
+	return ret;
+}
+
+template<class F, class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto mapiSubseqs(const F&& func, const data_t1* q, len_t1 m,
+	const data_t2* x, len_t2 n) -> unique_ptr<decltype(func(0, q, x))[]>
+{
+	auto l = n - m + 1;
+	unique_ptr<decltype(func(0, q, x))[]> ret(new decltype(func(0, q, x))[l]);
+	for (size_t i = 0; i < l; i++) {
+		ret[i] = func(i, q, x+i);
+	}
+	return ret;
+}
+
+// ------------------------ containers with new container allocated
+
+	// const Container2<Args2...>& x) -> Container2<decltype(func(begin(q), begin(x)))>
+//template<class F, template <class...> class Container1, class... Args1,
+//	template <class...> class Container2, class... Args2>
+//static auto mapSubseqs(const F&& func, const Container1<Args1...>& q,
+//	const Container2<Args2...>& x) -> Container2<double>
+					   //	const Container2<Args2...>& x) -> Container2<decltype(func(&q[0], &x[0]))>
+template<class F, template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static auto mapSubseqs(const F&& func, const Container1<data_t1>& q,
+					   const Container2<data_t2>& x)
+//	-> Container2<double>
+	-> Container2<decltype(func(&q[0], &x[0]))>
+{
+	auto m = q.size();
+	auto n = x.size();
+	assert(n >= m);
+	auto l = n - m + 1;
+	// Container2<decltype(func(begin(q), begin(x)))> ret;
+//	Container2<double> ret;
+	Container2<decltype( func(&q[0], &x[0]) )> ret;
+	// for (auto itx = begin(x); itx < end(x); itx++) {
+	// 	ret.emplace_back( func(begin(q), &(*itx)) );
+	// }
+//	double foo = 7;
+//	double bar = 3;
+	for (size_t i = 0; i < l; i++) {
+//		 ret.emplace_back( func(begin(q), begin(x)+i) );
+		ret.emplace_back( func(&q[0], &x[i]) );
+//		 ret.emplace_back( func(&foo, &bar) );
+//		ret.emplace_back( 5.0 );
+	}
+	return ret;
+}
+
+template<class F, template <class...> class Container1, class... Args1,
+	template <class...> class Container2, class... Args2>
+static auto mapiSubseqs(const F&& func, const Container1<Args1...>& q,
+	const Container2<Args2...>& x) -> Container2<decltype(func(0, begin(q), begin(x)))>
+{
+	auto m = q.size();
+	auto n = x.size();
+	assert(n >= m);
+	auto l = n - m + 1;
+	Container2<decltype(func(0, begin(q), begin(x)))> ret;
+	// for (auto itx = begin(x); itx < end(x); itx++) {
+	for (size_t i = 0; i < l; i++) {
+		// ret.emplace_back( func(i, begin(q), begin(x)+i) );
+		ret.emplace_back( func(i, &q[0], &x[i]) );
+	}
+	return ret;
+}
+
+// ================================ Cross Correlation
+
+// ------------------------ raw arrays
+
+template<class data_t1, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void crossCorrs(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n, data_t3* out)
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dot(q, x, m);
+	}, m, x, n, out);
+}
+
+template<class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto crossCorrs(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n) -> unique_ptr<decltype(q[0] * x[0])[]>
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dot(q, x, m);
+	}, m, x, n);
+}
+
+// ------------------------ containers
+
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static auto crossCorrs(const Container1<data_t1>& q,
+	const Container2<data_t2>& x)
+	-> Container2<decltype(q[0] * x[0])>
+{
+	// NOTE: this will cryptically fail to compile and complain about
+	// being unable to match the lambda if the pointers aren't const
+	auto m = q.size();
+	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
+		return dot(_q, _x, m);
+	}, q, x);
+}
+
+// ================================ L1 distance
+
+// ------------------------ raw arrays
+
+template<class data_t1, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void dists_L1(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n, data_t3* out)
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dist_L1(q, x, m);
+	}, m, x, n, out);
+}
+
+template<class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto dists_L1(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n) -> unique_ptr<decltype(q[0] - x[0])[]>
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dist_L1(q, x, m);
+	}, m, x, n);
+}
+
+// ------------------------ containers
+
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static auto dists_L1(const Container1<data_t1>& q,
+	const Container2<data_t2>& x)
+	-> Container2<decltype(q[0] - x[0])>
+{
+	auto m = q.size();
+	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
+		return dist_L1(_q, _x, m);
+	}, q, x);
+}
+
+// ================================ L2 distance
+
+// ------------------------ raw arrays
+
+template<class data_t1, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void dists_L2(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n, data_t3* out)
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dist_L2(q, x, m);
+	}, m, x, n, out);
+}
+
+template<class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto dists_L2(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n) -> unique_ptr<decltype(q[0] - x[0])[]>
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dist_L2(q, x, m);
+	}, m, x, n);
+}
+
+// ------------------------ containers
+
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static auto dists_L2(const Container1<data_t1>& q,
+	const Container2<data_t2>& x)
+	-> Container2<decltype(q[0] - x[0])>
+{
+	auto m = q.size();
+	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
+		return dist_L2(_q, _x, m);
+	}, q, x);
+}
+
+// ================================ L2^2 distance
+
+// ------------------------ raw arrays
+
+template<class data_t1, class data_t2, class data_t3,
+	class len_t1=size_t, class len_t2=size_t>
+static inline void dists_sq(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n, data_t3* out)
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dist_sq(q, x, m);
+	}, m, x, n, out);
+}
+
+template<class data_t1, class data_t2,
+	class len_t1=size_t, class len_t2=size_t>
+static inline auto dists_sq(const data_t1* q, len_t1 m, const data_t2* x,
+	len_t2 n) -> unique_ptr<decltype(q[0] * x[0])[]>
+{
+	return mapSubseqs([m, q](data_t2* x) {
+		return dist_sq(q, x, m);
+	}, m, x, n);
+}
+
+// ------------------------ containers
+
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static auto dists_sq(const Container1<data_t1>& q,
+	const Container2<data_t2>& x)
+	-> Container2<decltype(q[0] - x[0])>
+{
+	auto m = q.size();
+	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
+		return dist_sq(_q, _x, m);
+	}, q, x);
+}
+
+
+
+// ================================================================
+// can't get eigen stuff to work because lambdas and eigen::blocks don't
+// really play together at all; there's also basically no point because
+// most of the subseqs won't be aligned properly so eigen won't even
+// be faster necessarily
+
+//#include <Dense>
+//
+//using Eigen::VectorBlock;
+//
+//using Eigen::Dynamic;
+//using Eigen::EigenBase;
+//using Eigen::MatrixBase; // can't use eigenbase so can index objs in decltype
+//using Eigen::Matrix;
+
+//template<class F, class Derived1, class Derived2, class Derived3>
+//static void mapSubseqs(const F&& func, const MatrixBase<Derived1>& shorter,
+//	const MatrixBase<Derived2>& longer, MatrixBase<Derived3>& out) {
+//	auto n = longer.size();
+//	auto m = shorter.size();
+//	auto l = n - m + 1;
+//	assert(n >= m);
+//	for (size_t i = 0; i < l; i++) {
+//		auto subseq = longer.segment(i, m);
+////		out.noalias()(i) = func(subseq, shorter);
+//		out(i) = func(subseq, shorter);
+//	}
+//}
+
+//template<class F, class Derived1, class Derived2, class Derived3>
+//static void mapSubseqs(const F& func, const MatrixBase<Derived1>& shorter,
+//					   const MatrixBase<Derived2>& longer, MatrixBase<Derived3>& out) {
+//	auto n = longer.size();
+//	auto m = shorter.size();
+//	auto l = n - m + 1;
+//	assert(n >= m);
+//	for (size_t i = 0; i < l; i++) {
+//		auto subseq = longer.segment(i, m);
+//		//		out.noalias()(i) = func(subseq, shorter);
+//		out(i) = func(subseq, shorter);
+//	}
+//}
+
+//template<class F, class Derived1, class Derived2>
+//static auto mapSubseqs(const F&& func, const MatrixBase<Derived1>& shorter,
+//	const MatrixBase<Derived2>& longer) ->
+////Matrix<decltype( func(longer.segment(0, shorter.size()), shorter) ), Dynamic, 1>
+//Matrix<decltype( longer(0) * shorter(0) ), Dynamic, 1>
+//{
+//	auto n = longer.size();
+//	auto m = shorter.size();
+//	auto l = n - m + 1;
+//	assert(n >= m);
+////	Matrix<decltype( func(shorter, longer.segment(0, shorter.size())) ), Dynamic, 1> out(l);
+//	Matrix<decltype( longer(0) * shorter(0) ), Dynamic, 1> out(l);
+//	for (size_t i = 0; i < l; i++) {
+//		auto subseq = longer.segment(i, m);
+//		out(i) = func(subseq, shorter);
+//	}
+//	return out;
+//
+////	auto l = longer.size() - shorter.size() + 1;
+//	//	VectorXd out(l);
+////	Matrix<decltype( func(shorter, longer.segment(0, shorter.size())) ), Dynamic, 1> out(l);
+////	Matrix<decltype( shorter.dot(longer.segment(0, shorter.size())) ), Dynamic, 1> out(l);
+////	mapSubseqs(std::forward<F>(func), shorter, longer, out);
+////	mapSubseqs(func, shorter, longer, out);
+////	return out;
+//}
+
+// ================================ Cross-correlate
+
+//template<class Derived1, class Derived2, class Derived3>
+//static void crossCorrs(const MatrixBase<Derived1>& shorter,
+//	const MatrixBase<Derived2>& longer, MatrixBase<Derived3>& out) {
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return x.dot(y);
+//	}, shorter, longer, out);
+//}
+
+//template<class Derived1, class Derived2>
+//static auto crossCorrs(const MatrixBase<Derived1>& shorter,
+//					const MatrixBase<Derived2>& longer) ->
+//	Matrix<decltype(shorter(0) * longer(0)), Dynamic, 1>
+//{
+////	return mapSubseqs([](const VectorBlock<MatrixBase<Derived1> >& x,
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+////		return x * y;
+//		return x.dot(y);
+////		return (x.array() * y.array()).sum();
+//	}, shorter, longer);
+//
+////	// TODO remove
+////	auto n = longer.size();
+////	auto m = shorter.size();
+////	auto l = n - m + 1;
+////	assert(n >= m);
+////	Matrix<decltype( shorter.dot(longer.segment(0, shorter.size())) ), Dynamic, 1> out(l);
+////	for (size_t i = 0; i < l; i++) {
+////		auto subseq = longer.segment(i, m);
+////		//		out.noalias()(i) = func(subseq, shorter);
+//////		out(i) = func(subseq, shorter);
+////		out(i) = subseq.dot(shorter);
+////	}
+////	return out;
+//}
+
+// ================================ Distances
+
+// ------------------------ L1
+
+//template<class Derived1, class Derived2, class Derived3>
+//static inline void L1Dist(const MatrixBase<Derived1>& shorter,
+//	const MatrixBase<Derived2>& longer, MatrixBase<Derived3>& out) {
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return (x - y).array().abs().sum();
+//	}, shorter, longer, out);
+//}
+//
+//template<class Derived1, class Derived2>
+//static inline auto L1Dist(const MatrixBase<Derived1>& shorter,
+//				 const MatrixBase<Derived2>& longer) ->
+//Matrix<decltype(shorter(0) * longer(0)), Dynamic, 1>
+//{
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return (x - y).array().abs().sum();
+//	}, shorter, longer);
+//}
+
+// ------------------------ L2
+
+//template<class Derived1, class Derived2, class Derived3>
+//static inline void L2Dist(const MatrixBase<Derived1>& shorter,
+//	const MatrixBase<Derived2>& longer, MatrixBase<Derived3>& out) {
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return (x - y).norm();
+//	}, shorter, longer, out);
+//}
+//
+//template<class Derived1, class Derived2>
+//static inline auto L2Dist(const MatrixBase<Derived1>& shorter,
+//				 const MatrixBase<Derived2>& longer) ->
+//Matrix<decltype(shorter(0) * longer(0)), Dynamic, 1>
+//{
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return (x - y).norm();
+//	}, shorter, longer);
+//}
+
+// ------------------------ L2^2
+
+//template<class Derived1, class Derived2, class Derived3>
+//static inline void squaredDist(const MatrixBase<Derived1>& shorter,
+//	const MatrixBase<Derived2>& longer, MatrixBase<Derived3>& out) {
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return (x - y).squaredNorm();
+//	}, shorter, longer, out);
+//}
+//
+//template<class Derived1, class Derived2>
+//static inline auto squaredDist(const MatrixBase<Derived1>& shorter,
+//				 const MatrixBase<Derived2>& longer) ->
+//Matrix<decltype(shorter(0) * longer(0)), Dynamic, 1>
+//{
+//	return mapSubseqs([](const MatrixBase<Derived1>& x,
+//						 const MatrixBase<Derived2>& y) {
+//		return (x - y).squaredNorm();
+//	}, shorter, longer);
+//}
+
+} // namespace subs
+
+#endif
