@@ -9,6 +9,7 @@
 #define __DIG_SUBSEQ_HPP
 
 // #include <stdlib.h> // for size_t
+#include <deque>
 #include <memory>
 
 #include "array_utils.hpp"
@@ -328,6 +329,37 @@ static auto dists_sq(const Container1<data_t1>& q,
 	return mapSubseqs([m](const data_t1* _q, const data_t2* _x) {
 		return dist_sq(_q, _x, m);
 	}, q, x, stride);
+}
+
+// ================================ 1st discrete derivative
+
+// ------------------------ raw arrays
+
+template<class data_t2, class data_t3, class len_t2=size_t, class len_t3=size_t>
+static inline void first_derivs(const data_t2* x, len_t2 n, data_t3* out,
+	len_t3 stride=1)
+{
+	data_t2 q[2] = {-1, 1};
+	return crossCorrs(q, 2, x, n, out, stride);
+}
+
+template<class data_t2, class len_t2=size_t, class len_t3=size_t>
+static inline unique_ptr<data_t2[]> first_derivs(const data_t2* x, len_t2 n,
+	len_t3 stride=1)
+{
+	data_t2 q[2] = {-1, 1};
+	return crossCorrs(q, 2, x, n, stride);
+}
+
+// ------------------------ containers
+
+template<template <class...> class Container2, class data_t2,
+	class len_t3=size_t>
+static Container2<data_t2> first_derivs(const Container2<data_t2>& x,
+	len_t3 stride=1)
+{
+	vector<data_t2> q {-1, 1};
+	return crossCorrs(q, x, stride);
 }
 
 

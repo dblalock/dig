@@ -606,7 +606,7 @@ TEST_CASE("at_idxs", "utils") {
 	SECTION("BoundsCheckCatchesNegative") {
 		vector<int> idxs = {-1,0,1,2,3};
 		vector<int> ans(x);
-		auto v = at_idxs(x, idxs);
+		auto v = at_idxs(x, idxs, true);
 		short int equal = all_eq(ans, v);
 		INFO("output = " + to_string(v))
 		REQUIRE(equal);
@@ -614,7 +614,7 @@ TEST_CASE("at_idxs", "utils") {
 	SECTION("BoundsCheckCatchesTooLarge") {
 		vector<int> idxs = {0,1,2,3, 4,971};
 		vector<int> ans(x);
-		auto v = at_idxs(x, idxs);
+		auto v = at_idxs(x, idxs, true);
 		short int equal = all_eq(ans, v);
 		INFO("output = " + to_string(v))
 		REQUIRE(equal);
@@ -685,4 +685,115 @@ TEST_CASE("random", "utils") {
 		REQUIRE(ints.size() == howMany);
 	}
 
+}
+
+TEST_CASE("range", "array_utils") {
+	SECTION("ints") {
+		SECTION("length=1") {
+			vector<int> ans {-7};
+			auto out = range_vect(-7, -6);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+		}
+		SECTION("step=1") {
+			vector<int> ans {0, 1, 2, 3};
+
+			auto out = range_vect(0.0, 4);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+
+			auto out2 = range_vect(0, 4, 1);
+			INFO(to_string(out2));
+			REQUIRE(all_eq(ans, out2));
+		}
+		SECTION("step=3") {
+			vector<int> ans {-2, 1, 4, 7};
+
+			auto out = range_vect(-2, 10, 3);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+		}
+		SECTION("step=-2") {
+			vector<int> ans {4, 2, 0, -2};
+
+			auto out = range_vect(4, -2.5, -2);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+		}
+	}
+	SECTION("floats") {
+		SECTION("length=1") {
+			vector<float> ans {-7};
+			auto out = range_vect(-7, -6);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+		}
+		SECTION("step=1") {
+			vector<float> ans {0, 1, 2, 3};
+
+			auto out = range_vect(0, 4);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+
+			auto out2 = range_vect(0, 4, 1);
+			INFO(to_string(out2));
+			REQUIRE(all_eq(ans, out2));
+		}
+		SECTION("step=3") {
+			vector<float> ans {-2, 1, 4, 7};
+
+			auto out = range_vect(-2, 10, 3);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+		}
+		SECTION("step=-2") {
+			vector<float> ans {4, 2, 0, -2};
+
+			auto out = range_vect(4, -2.5, -2);
+			INFO(to_string(out));
+			REQUIRE(all_eq(ans, out));
+		}
+	}
+}
+
+TEST_CASE("exprange", "array_utils") {
+	SECTION("length=1") {
+		vector<int> ans {-7};
+		auto out = exprange_vect(-7, -8);
+		INFO(to_string(out));
+		REQUIRE(all_eq(ans, out));
+	}
+	SECTION("step=2") {
+		vector<int> ans {3, 6, 12, 24};
+
+		auto out = exprange_vect(3, 25, 2);
+		INFO(to_string(out));
+		REQUIRE(all_eq(ans, out));
+
+		auto out2 = exprange_vect(3.0, 25, 2);
+		INFO(to_string(out2));
+		REQUIRE(all_eq(ans, out2));
+	}
+	SECTION("step=-.5") {
+		vector<int> ans {24, -12, 6, -3};
+
+		auto out = exprange_vect(24, 2, -.5);
+		INFO(to_string(out));
+		REQUIRE(all_eq(ans, out));
+
+		auto out2 = exprange_vect(24, 2.0, -.5);
+		INFO(to_string(out2));
+		REQUIRE(all_eq(ans, out2));
+	}
+	SECTION("step=-.5, fraction in ans") {
+		vector<float> ans {24, -12, 6, -3, 1.5, -.75};
+
+		auto out = exprange_vect(24, .5, -.5);
+		INFO(to_string(out));
+		REQUIRE(all_eq(ans, out));
+
+		auto out2 = exprange_vect(24, .5, -.5);
+		INFO(to_string(out2));
+		REQUIRE(all_eq(ans, out2));
+	}
 }

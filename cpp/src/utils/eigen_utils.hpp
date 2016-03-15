@@ -18,12 +18,11 @@ using Eigen::RowMajor;
 using Eigen::Matrix;
 
 
-// note that all of these functions assume that the raw arrays being passed
-// in are contiguous and stored in row-major order
-
 // ================================================================
 // converting to eigen mats
 // ================================================================
+// note that all of these functions assume that the raw arrays being passed
+// in are contiguous and stored in row-major order
 
 // ------------------------------------------------ 1D output
 
@@ -76,3 +75,7 @@ Matrix<T, Dynamic, Dynamic, RowMajor> eigenWrap2D_aligned(const T* X, int m, int
 }
 
 #endif
+
+
+
+

@@ -25,7 +25,7 @@ typedef std::vector<double> vecd;
 // using Eigen::MatrixXd;
 // using Eigen::VectorXd;
 
- using namespace subs;
+using namespace subs;
 
 using ar::all_eq;
 
@@ -234,6 +234,37 @@ TEST_CASE("dist_L2", "subseq") {
 		vecd ans {sqrt(37), sqrt(10)};
 		
 		auto out = dists_L2(q, x, 2);
+		
+		REQUIRE(out.size() == 2);
+		REQUIRE(all_eq(out, ans));
+	}
+}
+
+TEST_CASE("first_discrete_deriv", "subseq") {
+	SECTION("length 2") {
+		vecd x {2, -1};
+		vecd ans {-3};
+		
+		auto out = first_derivs(x);
+		
+		REQUIRE(out.size() == 1);
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("lengths 4") {
+		vecd x {2, -1, 0, 4};
+		vecd ans {-3, 1, 4};
+		
+		auto out = first_derivs(x);
+		
+		REQUIRE(out.size() == 3);
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("length 4, stride 2") {
+		vecd q {3, 5};
+		vecd x {2, -1, 0, 4};
+		vecd ans {-3, 4};
+		
+		auto out = first_derivs(x, 2);
 		
 		REQUIRE(out.size() == 2);
 		REQUIRE(all_eq(out, ans));

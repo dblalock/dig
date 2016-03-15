@@ -20,11 +20,38 @@
 
 using std::begin;
 using std::end;
+using std::log2;
 using std::unique_ptr;
 using std::unordered_map;
 using std::vector;
 
 namespace ar {
+
+// ================================================================
+// Scalar funcs
+// ================================================================
+
+// ------------------------ less picky min/max/abs funcs than stl
+
+template<class data_t>
+static inline data_t abs(data_t x) {
+	return x >= 0 ? x : -x;
+}
+
+template<class data_t1, class data_t2>
+static inline auto max(data_t1 x, data_t2 y) -> decltype(x + y) {
+	return x >= y ? x : y;
+}
+
+template<class data_t1, class data_t2>
+static inline auto min(data_t1 x, data_t2 y) -> decltype(x + y) {
+	return x <= y ? x : y;
+}
+
+template<class data_t1, class data_t2>
+static inline auto absDiff(data_t1 x, data_t2 y) -> decltype(x - y) {
+	return x >= y ? x - y : y - x;
+}
 
 // ================================================================
 // Functional Programming
@@ -333,7 +360,7 @@ template<template <class...> class Container1, class... Args1,
 	template <class...> class Container2, class... Args2>
 static inline Container1<Args1...> at_idxs(const Container1<Args1...>& container,
 		const Container2<Args2...>& indices,
-		bool boundsCheck=true) {
+		bool boundsCheck=false) {
 	Container1<Args1...> ret;
 
 	if (boundsCheck) {
@@ -358,42 +385,125 @@ static inline Container1<Args1...> at_idxs(const Container1<Args1...>& container
 // Sequence creation
 // ================================================================
 
-/** Create an array containing a sequence of values; equivalent to Python
- * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
-template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> range(data_t startVal, data_t stopVal, data_t step=1) {
+// ================================ range
+
+template <class data_t1, class data_t2, class step_t=int8_t>
+static inline int32_t num_elements_in_range(data_t1 startVal,
+											data_t2 stopVal, step_t step)
+{
 	assertf( (stopVal - startVal) / step > 0,
 			"ERROR: range: invalid args min=%.3f, max=%.3f, step=%.3f\n",
-			startVal, stopVal, step);
+			(double)startVal, (double)stopVal, (double)step);
+	return ceil((stopVal - startVal) / step);
+}
 
-	//allocate a new array
-	len_t len = (len_t) floor( (stopVal - startVal) / step );
-	unique_ptr<data_t[]> data(new data_t[len]);
-
+template <class data_t0, class data_t1, class data_t2, class step_t=int8_t>
+static inline void range_inplace(data_t0* data, data_t1 startVal,
+								 data_t2 stopVal, step_t step=1)
+{
+	int32_t len = num_elements_in_range(startVal, stopVal, step);
 	data[0] = startVal;
-	for (len_t i = 1; i < len; i++ ) {
+	for (int32_t i = 1; i < len; i++) {
 		data[i] = data[i-1] + step;
 	}
+}
+
+/** Create an array containing a sequence of values; equivalent to Python
+ * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
+template <class data_t1, class data_t2, class step_t=int8_t>
+static inline auto range(data_t1 startVal, data_t2 stopVal, step_t step=1)
+	-> unique_ptr<decltype(stopVal - startVal + step)[]>
+{
+	int32_t len = num_elements_in_range(startVal, stopVal, step);
+	unique_ptr<decltype(stopVal - startVal + step)[]> data(new decltype(stopVal - startVal + step)[len]);
+	range_inplace(data, startVal, stopVal, step);
 	return data;
 }
 /** Create an array containing a sequence of values; equivalent to Python
  * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
-template <class data_t, class len_t=size_t>
-static inline vector<data_t> range_vect(data_t startVal, data_t stopVal, data_t step=1) {
-	assertf( (stopVal - startVal) / step > 0,
-			"ERROR: range_vect: invalid args min=%.3f, max=%.3f, step=%.3f\n",
-			startVal, stopVal, step);
-
-	//allocate a new array
-	len_t len = (len_t) floor( (stopVal - startVal) / step );
-	vector<data_t> data(len);
-
-	data[0] = startVal;
-	for (len_t i = 1; i < len; i++ ) {
-		data[i] = data[i-1] + step;
-	}
+template <class data_t1, class data_t2, class step_t=int8_t>
+static inline auto range_vect(data_t1 startVal, data_t2 stopVal, step_t step=1)
+	-> vector<decltype(stopVal - startVal + step)>
+{
+	int32_t len = num_elements_in_range(startVal, stopVal, step);
+	vector<decltype(stopVal - startVal + step)> data(len);
+	range_inplace(data.data(), startVal, stopVal, step);
 	return data;
 }
+
+// ================================ exprange
+
+template <class data_t1, class data_t2, class step_t=int8_t>
+static inline int32_t num_elements_in_exprange(data_t1 startVal,
+											   data_t2 stopVal, step_t step)
+{
+	assertf(startVal != 0, "exprange(): start value == 0!");
+	assertf(stopVal != 0, "exprange(): end value == 0!");
+//	assertf(step > 0, "exprange(): step must be > 0!");
+
+	auto absStartVal = abs(startVal);
+	auto absStopVal = abs(stopVal);
+	auto absStep = abs(step);
+	
+	if (absStartVal > absStopVal) {
+		assertf(absStep < 1,
+				"exprange(): |startVal| %.3g > |stopVal| %.3g, but |step| %.3g >= 1",
+				(double)absStartVal, (double)absStopVal, (double)absStep);
+	} else if (absStartVal < absStopVal) {
+		assertf(absStep > 1,
+				"exprange(): |startVal| %.3g > |stopVal| %.3g, but |step| %.3g <= 1",
+				(double)absStartVal, (double)absStopVal, (double)absStep);
+	} else {
+		return 1; // startVal == stopVal
+	}
+
+	// compute how many values we'll have
+	double ratio = static_cast<double>(absStopVal) / absStartVal;
+	double logBaseStep = log2(ratio) / log2(absStep);
+//	std::cout << "----" << "\n";
+//	std::cout << "    startVal, stopVal, step: " << startVal << ", " << stopVal << ", " << step << "\n";
+//	std::cout << "abs startVal, stopVal, step: " << absStartVal << ", " << absStopVal << ", " << absStep << "\n";
+//	std::cout << "ratio, logBaseStep: " << ratio << ", " << logBaseStep << "\n";
+	return 1 + floor(logBaseStep);
+}
+template <class data_t0, class data_t1, class data_t2, class step_t=int8_t>
+static inline void exprange_inplace(data_t0* data, data_t1 startVal,
+								 data_t2 stopVal, step_t step=2)
+{
+	int32_t len = num_elements_in_exprange(startVal, stopVal, step);
+	data[0] = startVal;
+	for (int32_t i = 1; i < len; i++) {
+		data[i] = data[i-1] * step;
+	}
+}
+
+// step is int so it can be powers of 2 by default
+template <class data_t, class step_t=int8_t>
+static inline auto exprange(data_t startVal, data_t stopVal, step_t step=2)
+	-> unique_ptr<decltype(stopVal * startVal * step)[]>
+{
+//	if (startVal == stopVal) {
+//		unique_ptr<decltype(stopVal * startVal * step)[]> data(new decltype(stopVal * startVal * step)[1]);
+//		data[0] = startVal;
+//		return data;
+//	}
+
+	int32_t len = num_elements_in_exprange(startVal, stopVal, step);
+	unique_ptr<decltype(stopVal * startVal * step)[]> data(new decltype(stopVal * startVal * step)[len]);
+	exprange_inplace(data, startVal, stopVal, step);
+	return data;
+}
+
+template <class data_t1, class data_t2, class step_t=int8_t>
+static inline auto exprange_vect(data_t1 startVal, data_t2 stopVal, step_t step=2)
+-> vector<decltype(stopVal * startVal * step)>
+{
+	int32_t len = num_elements_in_exprange(startVal, stopVal, step);
+	vector<decltype(stopVal * startVal * step)> data(len);
+	exprange_inplace(data.data(), startVal, stopVal, step);
+	return data;
+}
+
 
 // ================================================================
 // Reshaping
@@ -590,12 +700,6 @@ static inline double dot(const Container1<data_t1>& x, const Container2<data_t2>
 }
 
 // ================================ L1 Distance
-
-// std::abs is finicky; just inline our own
-template<class data_t1, class data_t2>
-static inline auto absDiff(data_t1 x, data_t2 y) -> decltype(x - y) {
-	return x >= y ? x - y : y - x;
-}
 
 template<class data_t1, class data_t2, class len_t=size_t>
 static inline auto dist_L1(const data_t1* x, const data_t2* y, len_t len)
@@ -1029,27 +1133,27 @@ static inline Container<data_t> add(const Container<data_t>& data) {
 
 /** Sets each element of the array to the value specified */
 template <class data_t1, class data_t2, class len_t=size_t>
-static inline void set_to_constant(data_t1 *x, data_t2 value, len_t len) {
+static inline void constant_inplace(data_t1 *x, len_t len, data_t2 value) {
 	for (len_t i = 0; i < len; i++) {
-		x[i] = value;
+		x[i] = static_cast<data_t1>(value);
 	}
 }
 template<template <class...> class Container,
 	class data_t1, class data_t2>
-static inline void set_to_constant(const Container<data_t1>& data, data_t2 value) {
-	array_set_to_constant(&data[0], value, data.size());
+static inline void constant_inplace(Container<data_t1>& data, data_t2 value) {
+	constant_inplace(data.data(), value, data.size());
 }
 
 /** Returns an array of length len with all elements equal to value */
 template <class data_t, class len_t=size_t>
 static inline unique_ptr<data_t[]> constant(data_t value, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
-	array_set_to_constant(ret, value, len);
+	constant_inplace(ret, value, len);
 	return ret;
 }
 /** Returns an array of length len with all elements equal to value */
 template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> constant_vect(data_t value, len_t len) {
+static inline vector<data_t> constant_vect(data_t value, len_t len) {
 	vector<data_t> ret(len, value);
 	return ret;
 }
@@ -1094,24 +1198,43 @@ template <class data_t1, class data_t2, class len_t=size_t>
 static inline bool all_eq(const data_t1 *x, const data_t2 *y, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		//TODO define as a const somewhere
-		if (std::fabs(x[i] - y[i]) > .00001) return false;
+		if (abs(x[i] - y[i]) > .00001) return false;
 	}
 	return true;
 }
-//template <class Ptr1, class Ptr2, class data_t1, class data_t2,
-//	class len_t=size_t>
-//bool equal(const Ptr1<data_t1> x, const Ptr2<data_t2> y, len_t len) {
-//	for (len_t i = 0; i < len; i++) {
-//		//TODO define as a const somewhere
-//		if ( fabs(x[i] - y[i]) > .00001 ) return false;
-//	}
-//	return true;
-//}
 template<template <class...> class Container1, class data_t1,
 	template <class...> class Container2, class data_t2>
 static inline bool all_eq(const Container1<data_t1>& x, const Container2<data_t2>& y) {
 	if (x.size() != y.size()) return 0;
 	return all_eq(&x[0], &y[0], x.size());
+}
+
+// ================================ Nonnegativity
+/** Returns true if elements 0..(len-1) of x are >= 0, else false */
+template <class data_t1, class len_t=size_t>
+static inline bool all_nonnegative(const data_t1 *x, len_t len) {
+	for (len_t i = 0; i < len; i++) {
+		if (x[i] < 0) return false;
+	}
+	return true;
+}
+template<template <class...> class Container1, class data_t1>
+static inline bool all_nonnegative(const Container1<data_t1>& x) {
+	return all_nonnegative(&x[0], x.size());
+}
+
+// ================================ Positivity
+/** Returns true if elements 0..(len-1) of x are > 0, else false */
+template <class data_t, class len_t=size_t>
+static inline bool all_positive(const data_t *x, len_t len) {
+	for (len_t i = 0; i < len; i++) {
+		if (x[i] <= 0) return false;
+	}
+	return true;
+}
+template<template <class...> class Container1, class data_t>
+static inline bool all_positive(const Container1<data_t>& x) {
+	return all_positive(&x[0], x.size());
 }
 
 // ================================ Unique
@@ -1133,10 +1256,17 @@ static inline Container<data_t> unique(const Container<data_t>& data) {
 // ================================================================
 
 // ================================ Stringification
+
+// ------------------------ with name
+
 template <class data_t, class len_t=size_t>
-static std::string to_string(const data_t *x, len_t len) {
+static std::string to_string(const data_t *x, len_t len, const char* name="")
+{
 	std::ostringstream os;
 	os.precision(3);
+	if (name && name[0] != '\0') {
+		os << name << ": ";
+	}
 	os << "[";
 	for (len_t i = 0; i < len; i++) {
 		os << x[i] << " ";
@@ -1144,6 +1274,38 @@ static std::string to_string(const data_t *x, len_t len) {
 	os << "]";
 	return os.str();
 }
+template <class data_t, class len_t=size_t>
+static std::string to_string(const data_t *x, len_t len, std::string name)
+{
+	return to_string(x, len, name.c_str());
+}
+template<template <class...> class Container, class data_t>
+static inline std::string to_string(const Container<data_t>& data,
+	const char* name="")
+{
+	return to_string(data.data(), data.size(), name);
+}
+template<template <class...> class Container, class data_t>
+static inline std::string to_string(const Container<data_t>& data,
+	std::string name)
+{
+	return to_string(data.data(), data.size(), name);
+}
+
+// ------------------------ without name
+
+// template <class data_t, class len_t=size_t>
+// static std::string to_string(const data_t *x, len_t len) {
+// 	return to_string_with_name(x, len, "");
+// 	// std::ostringstream os;
+// 	// os.precision(3);
+// 	// os << "[";
+// 	// for (len_t i = 0; i < len; i++) {
+// 	// 	os << x[i] << " ";
+// 	// }
+// 	// os << "]";
+// 	// return os.str();
+// }
 // Template specializations--not really needed since no harming
 // in setting stream precision unnecessarily
 //
@@ -1174,29 +1336,39 @@ static std::string to_string(const data_t *x, len_t len) {
 //	return std::string(x);
 //}
 
-template<template <class...> class Container, class data_t>
-static inline std::string to_string(const Container<data_t>& data) {
-	return to_string(&data[0], data.size());
-}
+// template<template <class...> class Container, class data_t>
+// static inline std::string to_string(const Container<data_t>& data) {
+// 	return to_string(&data[0], data.size());
+// }
+
 
 // ================================ Printing
 template <class data_t, class len_t=size_t>
-static inline void print(const data_t *x, len_t len) {
-	printf("%s\n", to_string(x, len).c_str());
+static inline void print(const data_t *x, len_t len, const char* name="") {
+	printf("%s\n", to_string(x, len, name).c_str());
 }
-template<template <class...> class Container, class data_t>
-static inline void print(const Container<data_t>& data) {
-	print(&data[0], data.size());
+template <class data_t, class len_t=size_t>
+static inline void print(const data_t *x, len_t len, std::string name) {
+	printf("%s\n", to_string(x, len, name).c_str());
 }
 
-template <class data_t, class len_t=size_t>
-static inline void print_with_name(const data_t *data, len_t len, const char* name) {
-	printf("%s:\t%s\n", name, to_string(data, len).c_str());
+template<template <class...> class Container, class data_t>
+static inline void print(const Container<data_t>& data, const char* name="") {
+	print(data.data(), data.size(), name);
 }
 template<template <class...> class Container, class data_t>
-static inline void print_with_name(const Container<data_t>& data, const char* name) {
-	print_with_name(&data[0], data.size(), name);
+static inline void print(const Container<data_t>& data, std::string name) {
+	print(data.data(), data.size(), name);
 }
+
+// template <class data_t, class len_t=size_t>
+// static inline void print_with_name(const data_t *data, len_t len, const char* name) {
+// 	printf("%s:\t%s\n", name, to_string(data, len).c_str());
+// }
+// template<template <class...> class Container, class data_t>
+// static inline void print_with_name(const Container<data_t>& data, const char* name) {
+// 	print_with_name(&data[0], data.size(), name);
+// }
 
 // ================================================================
 // Randomness
@@ -1216,10 +1388,14 @@ inline V map_get(Container<K, V> map, K key, V defaultVal) {
 static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
 						 bool replace=false) {
 	vector<int64_t> ret;
-
 	int64_t numPossibleVals = maxVal - minVal + 1;
+
 	assertf(numPossibleVals >= 1, "No values between min %lld and max %lld",
 			minVal, maxVal);
+
+	assertf(replace || (numPossibleVals >= howMany),
+		"Can't sample %llu values without replacement between min %lld and max %lld",
+		howMany, minVal, maxVal);
 
 	if (replace) {
 		for (size_t i = 0; i < howMany; i++) {
@@ -1229,14 +1405,11 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 		return ret;
 	}
 
-	assertf(numPossibleVals >= howMany,
-			"Can't sample %llu values without replacement between min %lld and max %lld",
-			howMany, minVal, maxVal);
-
 	// sample without replacement; each returned int is unique
 	unordered_map<int64_t, int64_t> possibleIdxs;
+	int64_t idx;
 	for (size_t i = 0; i < howMany; i++) {
-		int64_t idx = (rand() % (numPossibleVals - i)) + minVal;
+		idx = (rand() % (numPossibleVals - i)) + minVal;
 
 		// next value to add to array; just the idx, unless we've picked this
 		// idx before, in which case it's whatever the highest unused value
@@ -1254,6 +1427,68 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 	return ret;
 }
 
+template<class float_t>
+static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
+						 bool replace, const float_t* probs) {
+	vector<int64_t> ret;
+	int64_t numPossibleVals = maxVal - minVal + 1;
+
+	assertf(numPossibleVals >= 1, "No values between min %lld and max %lld",
+			minVal, maxVal);
+
+	assertf(replace || (numPossibleVals >= howMany),
+			"Can't sample %llu values without replacement between min %lld and max %lld",
+			howMany, minVal, maxVal);
+
+	assertf(all_nonnegative(probs), "Probabilities must be nonnegative!");
+	auto totalProb = sum(probs, numPossibleVals);
+	assertf(totalProb > 0, "Probabilities sum to a value <= 0");
+
+    // init random distro object
+	std::random_device rd;
+    std::mt19937 gen(rd());
+	auto possibleIdxsAr = range_vect(minVal, maxVal+2); // end range at max+1
+	std::piecewise_constant_distribution<float_t> distro(
+		std::begin(possibleIdxsAr), std::end(possibleIdxsAr), probs);
+
+	if (replace) {
+		for (size_t i = 0; i < howMany; i++) {
+			ret.push_back(static_cast<int64_t>(distro(gen)));
+		}
+		return ret;
+	}
+
+	// sample without replacement; each returned int is unique
+	unordered_map<int64_t, int64_t> possibleIdxs;
+	for (size_t i = 0; i < howMany; i++) {
+		int64_t idx = static_cast<int64_t>(distro(gen));
+
+		// next value to add to array; just the idx, unless we've picked this
+		// idx before, in which case it's whatever the highest unused value
+		// was the last time we picked it
+		auto val = map_get(possibleIdxs, idx, idx);
+
+		// move highest unused idx into this idx; the result is that the
+		// first numPossibleVals-i idxs are all available idxs
+		int64_t highestUnusedIdx = maxVal - i;
+		possibleIdxs[idx] = map_get(possibleIdxs, highestUnusedIdx,
+									highestUnusedIdx);
+
+		ret.push_back(val);
+	}
+	return ret;
+}
+
+template<template <class...> class Container, class float_t>
+static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
+						 bool replace, const Container<float_t>& probs) {
+	int64_t numPossibleVals = maxVal - minVal + 1;
+	assertf(probs.size() == numPossibleVals,
+		"Number of probabilities %llu doesn't match number of possible values %lld",
+		probs.size(), numPossibleVals);
+	return rand_ints(minVal, maxVal, howMany, replace, probs.data());
+}
+
 // ================================ Random Sampling
 
 template<template <class...> class Container, class data_t>
@@ -1261,9 +1496,77 @@ static inline vector<data_t> rand_choice(const Container<data_t>& data, size_t h
 							   bool replace=false) {
 	auto maxIdx = data.size() - 1;
 	auto idxs = rand_ints(0, maxIdx, howMany, replace);
-	return at_idxs(data, idxs, false); // false = no bounds check
+	return at_idxs(data, idxs);
 }
 
+template<template <class...> class Container1, class data_t,
+	template <class...> class Container2, class float_t>
+static inline vector<data_t> rand_choice(const Container1<data_t>& data, size_t howMany,
+							   bool replace, const Container2<float_t>& probs) {
+	auto maxIdx = data.size() - 1;
+	auto idxs = rand_ints(0, maxIdx, howMany, replace, probs);
+	return at_idxs(data, idxs);
+}
+
+// ================================ Random Data Generation
+
+// ------------------------ iid gaussians
+
+template <class data_t, class len_t=size_t, class float_t=double>
+static inline void randn_inplace(const data_t* data, len_t len,
+	float_t mean=0., float_t std=1) {
+	assert(len > 0);
+
+	// create normal distro object
+	std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<> d(mean, std);
+
+	for (len_t i = 0; i < len; i++) {
+		data[i] = static_cast<data_t>(d(gen));
+	}
+}
+// note that this must be called as, e.g., randn<double>(...)
+template <class data_t, class len_t=size_t, class float_t=double>
+static inline unique_ptr<data_t[]> randn(len_t len,
+	float_t mean=0., float_t std=1)
+{
+	assert(len > 0);
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	randn_inplace(ret.get(), len, mean, std);
+	return ret;
+}
+
+// ------------------------ gaussian random walk
+
+template <class data_t, class len_t=size_t, class float_t=double>
+static inline void randwalk_inplace(const data_t* data, len_t len, float_t std=1) {
+	assert(len > 0);
+
+	// create normal distro object
+	std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<> d(0., std);
+
+    data[0] = static_cast<data_t>(d(gen));
+	for (len_t i = 1; i < len; i++) {
+		data[i] = data[i-1] + static_cast<data_t>(d(gen));
+	}
+}
+// note that this must be called as, e.g., randwalk<double>(...)
+template <class data_t, class len_t=size_t, class float_t=double>
+static inline unique_ptr<data_t[]> randwalk(len_t len, float_t std=1)
+{
+	assert(len > 0);
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	randwalk_inplace(ret.get(), len, std);
+	return ret;
+}
+
+
+// ================================================================
+// Miscellaneous
+// ================================================================
 
 // ================================ Sorting
 

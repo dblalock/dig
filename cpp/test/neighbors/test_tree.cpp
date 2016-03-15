@@ -6,7 +6,7 @@
 //  Copyright (c) 2014 DB. All rights reserved.
 //
 
-//#define SKIP_TESTS
+#define SKIP_TESTS
 
 #include <algorithm>
 #include <chrono>
@@ -42,14 +42,14 @@ double durationMs(cputime_t t1, cputime_t t0) {
 void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 				  bool printNeighbors=false, bool printCount=true) {
 	r *= sqrt(D);
-	
+
 //	double binWidthDivisor = sqrt(D);
 //	if (binWidth < 0) {
 //		binWidth = r / binWidthDivisor;
 //	}
 	MatrixXd X(N, D);
 	X.setRandom();
-	
+
 	// hmm...if we mean-normalize X, redSVD seems to return 0s as projection
 	// vects...hopefully this is goes away if X is non-random?
 	// -ya, projection vect norms are 1 for first 1 and 0 for all others
@@ -61,7 +61,7 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 //	RowVectorXd meansAsRow = means.transpose();
 //	meansAsRow = (meansAsRow.array() + .001).matrix();
 //	X.rowwise() -= meansAsRow;
-	
+
 	VectorXd q(D);
 	q.setRandom();
 //	q = (q.array() + 100).matrix(); // TODO remove
@@ -74,7 +74,7 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 	CAPTURE(P);
 	CAPTURE(binWidth);
 
-//	ar::print_with_name(&q[0], q.size(), "q");
+//	ar::print(&q[0], q.size(), "q");
 
 	cputime_t t0 = timeNow();
 	MatrixXd projectionVects = computeProjectionVects(X, P);
@@ -109,17 +109,17 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 	auto bruteDuration = durationMs(t3, t2);
 
 	// sort true and returned neighbors
-	ar::sort(neighbors);
+	ar::sort_inplace(neighbors);
 	// ar::sort(neighbors);
 	// ar::sort(trueNeighbors);
-	
+
 	if (trueNeighbors.size() < 50) {
-		ar::print_with_name(neighbors, "neighbors");
-		ar::print_with_name(trueNeighbors, "trueNeighbors");
+		ar::print(neighbors, "neighbors");
+		ar::print(trueNeighbors, "trueNeighbors");
 		//	auto true_neighbor_dists = ar::at_idxs(&trueDists[0], trueNeighbors);
-		//	ar::print_with_name(true_neighbor_dists, "trueDists");
+		//	ar::print(true_neighbor_dists, "trueDists");
 	}
-	
+
 	// sanity check neighbors
 	REQUIRE(ar::unique(neighbors).size() == neighbors.size());
 	REQUIRE(ar::unique(trueNeighbors).size() == trueNeighbors.size());
@@ -133,28 +133,28 @@ void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 }
 
 void run1nnTest(int N, int D, depth_t P=16, double binWidth=-1) {
-	
+
 	MatrixXd X(N, D);
 	X.setRandom();
 	VectorXd q(D);
 	q.setRandom();
-	
+
 	CAPTURE(N);
 	CAPTURE(D);
 	CAPTURE(P);
 	CAPTURE(binWidth);
-	
+
 	cputime_t t0 = timeNow();
 	MatrixXd projectionVects = computeProjectionVects(X, P);
 	auto rootPtr = constructIndex(X, projectionVects, binWidth);
-	
+
 	CAPTURE(binWidth); // set by constructIndex
-	
+
 	cputime_t t1 = timeNow();
 	auto nn = find1nn(q, X, *rootPtr, projectionVects, binWidth);
-	
+
 	cputime_t t2 = timeNow();
-	
+
 	VectorXd trueDists = squaredDistsToVector(X, q);
 	Neighbor trueNN;
 	double d_bsf = INFINITY;
@@ -164,42 +164,42 @@ void run1nnTest(int N, int D, depth_t P=16, double binWidth=-1) {
 			trueNN = Neighbor{.idx = i, .dist = trueDists(i)};
 		}
 	}
-	
+
 	CAPTURE(ar::to_string(&trueDists[0], trueDists.size()));
-	
+
 	cputime_t t3 = timeNow();
-	
+
 	auto indexDuration = durationMs(t1, t0);
 	auto queryDuration = durationMs(t2, t1);
 	auto bruteDuration = durationMs(t3, t2);
-	
+
 	printf("%dx%d, %d: %d vs %d (%g vs %g)\t\t%g vs %g ms (index %gms)\n",
 		   N, D, P, nn.idx, trueNN.idx, nn.dist, trueNN.dist,
 		   queryDuration, bruteDuration, indexDuration);
-	
+
 	REQUIRE(nn.idx == trueNN.idx);
 	REQUIRE(std::abs(nn.idx - trueNN.idx) < .001);
 //	REQUIRE(nn.dist == trueNN.dist);
 }
 
 void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
-	
+
 	MatrixXd X(N, D);
 	X.setRandom();
 	VectorXd q(D);
 	q.setRandom();
-	
+
 	CAPTURE(N);
 	CAPTURE(D);
 	CAPTURE(P);
 	CAPTURE(binWidth);
-	
+
 	cputime_t t0 = timeNow();
 	MatrixXd projectionVects = computeProjectionVects(X, P);
 	auto rootPtr = constructIndex(X, projectionVects, binWidth);
-	
+
 	CAPTURE(binWidth); // set by constructIndex
-	
+
 	cputime_t t1 = timeNow();
 	vector<Neighbor> neighbors = findKnn(q, X, k, *rootPtr, projectionVects, binWidth);
 //	printf("knn returned %ld neighbors\n", neighbors.size());
@@ -207,9 +207,9 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 //		printf("%d: %g, ", neighbors[i].idx, neighbors[i].dist);
 //	}
 //	printf("\n");
-	
+
 	cputime_t t2 = timeNow();
-	
+
 	// compute true knn by brute force
 	VectorXd trueDists = squaredDistsToVector(X, q);
 //	std::cout << "trueDists: " << trueDists << "\n"; // TODO remove
@@ -221,13 +221,13 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 			  [](const Neighbor& n1, const Neighbor& n2) {
 				  return n1.dist < n2.dist;
 			  });
-	
+
 //	printf("sorted true neighbors:\n\t");
 //	for (int i = 0; i < trueNeighbors.size(); i++) {
 //		printf("%d: %g, ", trueNeighbors[i].idx, trueNeighbors[i].dist);
 //	}
 //	printf("\n");
-	
+
 	double d_bsf = trueNeighbors[k-1].dist;
 //	printf("initial d_bsf: %g\n", d_bsf);
 	for (length_t i = k; i < X.rows(); i++) { // find true knn
@@ -246,13 +246,13 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 			d_bsf = trueNeighbors[k-1].dist;
 		}
 	}
-	
+
 	cputime_t t3 = timeNow();
-	
+
 	auto indexDuration = durationMs(t1, t0);
 	auto queryDuration = durationMs(t2, t1);
 	auto bruteDuration = durationMs(t3, t2);
-	
+
 	vector<length_t> neighborIdxs = ar::map([](const Neighbor& n) {
 		return n.idx;
 	}, neighbors);
@@ -265,12 +265,12 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 	vector<double> trueNeighborDists = ar::map([](const Neighbor& n) {
 		return n.dist;
 	}, trueNeighbors);
-	
+
 	if (trueNeighbors.size() < 50) {
-		ar::print_with_name(neighborIdxs , "neighbors");
-		ar::print_with_name(trueNeighborIdxs, "trueNeighbors");
-		ar::print_with_name(neighborDists , "neighborDists");
-		ar::print_with_name(trueNeighborDists, "trueNeighborDists");
+		ar::print(neighborIdxs , "neighbors");
+		ar::print(trueNeighborIdxs, "trueNeighbors");
+		ar::print(neighborDists , "neighborDists");
+		ar::print(trueNeighborDists, "trueNeighborDists");
 	}
 
 	// sanity check neighbors
@@ -280,7 +280,7 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 	printf("> found %ld vs %ld neighbors in %g vs %g ms (index %gms)\n",
 		   neighbors.size(), trueNeighbors.size(),
 		   queryDuration, bruteDuration, indexDuration);
-	
+
 	// compare true and returned neighbors
 	REQUIRE(ar::all_eq(neighborIdxs, trueNeighborIdxs));
 }
@@ -296,36 +296,36 @@ TEST_CASE("notCrashing", "Tree") {
 
 TEST_CASE("knnQueries", "Tree") {
 //	srand(123);
-	
+
 	int N = 30;
 	int D = 10;
 	int K = 1;
 	depth_t P = 4;
-	
+
 //	runKnnTest(N, D, P, K);
 	for (int i = 0; i < 10; i++) {
 		runKnnTest(N, D, P, K);
 	}
-	
+
 	K = 2;
 //	runKnnTest(N, D, P, K);
 	for (int i = 0; i < 10; i++) {
 		runKnnTest(N, D, P, K);
 	}
-	
+
 	K = 3;
 	//	runKnnTest(N, D, P, K);
 	for (int i = 0; i < 10; i++) {
 		runKnnTest(N, D, P, K);
 	}
-	
+
 	N = 1000;
 	K = 10;
 	//	runKnnTest(N, D, P, K);
 	for (int i = 0; i < 10; i++) {
 		runKnnTest(N, D, P, K);
 	}
-	
+
 //	N = 10000;
 //	K = 5;
 //	//	runKnnTest(N, D, P, K);
@@ -336,13 +336,13 @@ TEST_CASE("knnQueries", "Tree") {
 
 TEST_CASE("1nnQueries", "Tree") {
 //	srand(123);
-	
+
 	int N = 30;
 	int D = 10;
 	depth_t P = 4;
-	
+
 	run1nnTest(N, D, P);
-	
+
 	P = 64;
 	for (int N = 100.; N <= 1*1000; N *= 10) {
 		for (int D = 10; D <= 100; D *= 10) {
@@ -381,17 +381,17 @@ TEST_CASE("rangeQueries", "Tree") {
 	for (double r = .1; r <= 1.; r += .2) {
 		runRangeTest(N, D, r, P, binWidth);
 	}
-	
+
 //	N = 100*1000;
 //	for (double r = .1; r <= 1.; r += .2) {
 //		runRangeTest(N, D, r, P, binWidth);
 //	}
-	
+
 //	N = 1000*1000;
 //	for (double r = .1; r <= 1.; r += .2) {
 //		runRangeTest(N, D, r, P, binWidth);
 //	}
-	
+
 //	P = 8;
 //	for (double r = 1.; r <= 30.; r += 5) {
 //		runRangeTest(N, D, r, P, binWidth);
@@ -403,10 +403,10 @@ TEST_CASE("rangeQueriesClass", "Tree") {
 	int D = 10;
 	double r = 10.;
 	depth_t P = 4;
-	
+
 	MatrixXd X(N, D);
 	X.setRandom();
-	
+
 	volatile BinTree tree(X, P);
 }
 
