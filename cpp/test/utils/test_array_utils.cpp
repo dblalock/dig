@@ -38,7 +38,8 @@ TEST_CASE("elementwise","utils") {
 	vector<int>		y = {3,2,4,1};
 	vector<double>	z = {3,2,4,1.5};
 
-	const int len = 4;
+//	const int len = 4;
+	int len = 4;
 	int		a[] = {1,4,2,3};
 	int		b[] = {3,2,4,1};
 	double	c[] = {3,2,4,1.5};
@@ -192,14 +193,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("vects") {
 			SECTION("ints") {
 				vector<int> ans {3,6,4,5};
-				auto v = adds(x, k);
+				auto v = add(x, k);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				vector<double> ans {2.5,5.5,3.5,4.5};
-				auto v = adds(x, q);
+				auto v = add(x, q);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
@@ -208,14 +209,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("arrays") {
 			SECTION("ints") {
 				int ans[] = {3,6,4,5};
-				auto v = adds(a, k, len);
+				auto v = add(a, len, k);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				double ans[] = {2.5,5.5,3.5,4.5};
-				auto v = adds(a, q, len);
+				auto v = add(a, len, q);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
@@ -226,14 +227,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("vects") {
 			SECTION("ints") {
 				vector<int> ans {-1,2,0,1};
-				auto v = subs(x, k);
+				auto v = sub(x, k);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				vector<double> ans {-.5, 2.5, .5, 1.5};
-				auto v = subs(x, q);
+				auto v = sub(x, q);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
@@ -242,14 +243,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("arrays") {
 			SECTION("ints") {
 				int ans[] = {-1,2,0,1};
-				auto v = subs(a, k, len);
+				auto v = sub(a, len, k);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				double ans[] = {-.5, 2.5, .5, 1.5};
-				auto v = subs(a, q, len);
+				auto v = sub(a, len, q);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
@@ -260,14 +261,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("vects") {
 			SECTION("ints") {
 				vector<int> ans {2,8,4,6};
-				auto v = muls(x, k);
+				auto v = mul(x, k);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				vector<double> ans {1.5, 6, 3, 4.5};
-				auto v = muls(x, q);
+				auto v = mul(x, q);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
@@ -276,14 +277,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("arrays") {
 			SECTION("ints") {
 				int ans[] = {2,8,4,6};
-				auto v = muls(a, k, len);
+				auto v = mul(a, len, k);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				double ans[] = {1.5, 6, 3, 4.5};
-				auto v = muls(a, q, len);
+				auto v = mul(a, len, q);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
@@ -294,14 +295,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("vects") {
 			SECTION("ints") {
 				vector<int> ans {0, 2, 1, 1};
-				auto v = divs(x, k);
+				auto v = div(x, k);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				vector<double> ans {x[0]/q, x[1]/q, x[2]/q, x[3]/q};
-				auto v = divs(x, q);
+				auto v = div(x, q);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
 				REQUIRE(equal);
@@ -310,14 +311,14 @@ TEST_CASE("scalar","utils") {
 		SECTION("arrays") {
 			SECTION("ints") {
 				double ans[] = {0, 2, 1, 1};
-				auto v = divs(a, k, len);
+				auto v = div(a, len, k);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);
 			}
 			SECTION("int + float") {
 				double ans[] = {x[0]/q, x[1]/q, x[2]/q, x[3]/q};
-				auto v = divs(a, q, len);
+				auto v = div(a, len, q);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
 				REQUIRE(equal);

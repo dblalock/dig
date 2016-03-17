@@ -16,6 +16,8 @@
 #include <sstream>
 #include <random>
 #include <unordered_map>
+
+#include "restrict.h"
 #include "debug_utils.hpp"
 
 using std::begin;
@@ -25,7 +27,30 @@ using std::unique_ptr;
 using std::unordered_map;
 using std::vector;
 
+#include <type_traits>
+
+// #define ASSERT_TRAIT(TRAIT, T, MSG) static_assert(std::TRAIT<T>::value, MSG)
+// #define ASSERT_INTEGRAL(T) ASSERT_TRAIT(is_integral, T, "Type not integral!")
+
+//template <bool B, typename T = void>
+//using enable_if_t = typename std::enable_if<B, T>::type;
+
+// typename enable_if_t<std::is_literal_type<data_t2>::value, data_t2> val)
+//typename enable_if_t<std::is_integral<data_t2>::value, data_t2> val)
+//#define REQUIRE_TRAIT(TRAIT, T) typename enable_if_t<std::TRAIT<T>::value, T> val)
+// #define REQUIRE_INT(T) typename std::enable_if<std::is_integral<T>, T>::type
+// #define REQUIRE_INT(T) typename std::enable_if<1, T>::type // disabled?
+// #define REQUIRE_INT(T) typename std::enable_if<std::is_integral<T>::value, T>::type
+// #define REQUIRE_INT(T) typename std::enable_if<std::is_literal_type< T >::value, T >::type = 0
+// #define REQUIRE_INT(T) typename std::enable_if<std::is_integral<int>::value, T>::type
+
+// put these as extra template params to enforce constraints on previous template params
+#define REQUIRE_INT(T) typename std::enable_if<std::is_integral<T>::value, T>::type = 0
+#define REQUIRE_NUM(T) typename std::enable_if<std::is_arithmetic<T>::value, T >::type = 0
+
 namespace ar {
+
+static const double kDefaultNonzeroThresh = .001;
 
 // ================================================================
 // Scalar funcs
@@ -65,16 +90,29 @@ static inline auto absDiff(data_t1 x, data_t2 y) -> decltype(x - y) {
 
 // ------------------------------- 1 container version
 
-template <class F, class data_t, class len_t=size_t>
-static inline void map_inplace(const F&& func, const data_t* data, len_t len) {
+template <class F, class data_t, class data_t2, class len_t>
+static inline void map(const F&& func, const data_t *RESTRICT data,
+	len_t len,
+	data_t2 *RESTRICT out) {
+	// static_assert(std::is_integral<len_t>::value, "");
+//	ASSERT_INTEGRAL(len_t);
 	for (len_t i = 0; i < len; i++) {
-		data[i] = (data_t) func(data[i]);
+		out[i] = static_cast<data_t2>(func(data[i]));
 	}
 }
-template <class F, class data_t, class len_t=size_t>
+template <class F, class data_t, class len_t>
+static inline void map_inplace(const F&& func, const data_t* data, len_t len) {
+	// static_assert(std::is_integral<len_t>::value, "");
+//	ASSERT_INTEGRAL(len_t);
+	for (len_t i = 0; i < len; i++) {
+		data[i] = static_cast<data_t>(func(data[i]));
+	}
+}
+template <class F, class data_t, class len_t>
 static inline auto map(const F&& func, const data_t* data, len_t len)
 	-> unique_ptr<decltype(func(data[0]))[]>
 {
+//	ASSERT_INTEGRAL(len_t);
 	unique_ptr<decltype(func(data[0]))[]> ret(new decltype(func(data[0]))[len]);
 	for (len_t i = 0; i < len; i++) {
 		ret[i] = func(data[i]);
@@ -96,7 +134,15 @@ static inline auto map(const F&& func, const Container<Args...>& container)
 
 // ------------------------------- 2 container version
 
-template <class F, class data_t1, class data_t2, class len_t=size_t>
+template <class F, class data_t1, class data_t2, class data_t3, class len_t>
+static inline void map(const F&& func, const data_t1* x, const data_t2* y,
+	len_t len, data_t3 *RESTRICT out)
+{
+	for (len_t i = 0; i < len; i++) {
+		out[i] = static_cast<data_t3>(func(x[i], y[i]));
+	}
+}
+template <class F, class data_t1, class data_t2, class len_t>
 static inline auto map(const F&& func, const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(func(x[0], y[0]))[]>
 {
@@ -122,13 +168,20 @@ static inline auto map(const F&& func, const Container1<Args1...>& x, const Cont
 
 // ------------------------------- mapi, 1 container version
 
-template <class F, class data_t, class len_t=size_t>
+template <class F, class data_t, class data_t2, class len_t>
+static inline void mapi(const F&& func, const data_t *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out) {
+	for (len_t i = 0; i < len; i++) {
+		out[i] = static_cast<data_t2>(func(i, data[i]));
+	}
+}
+template <class F, class data_t, class len_t>
 static inline void mapi_inplace(const F&& func, const data_t* data, len_t len) {
 	for (len_t i = 0; i < len; i++) {
 		data[i] = (data_t) func(i, data[i]);
 	}
 }
-template <class F, class data_t, class len_t=size_t>
+template <class F, class data_t, class len_t>
 static inline auto mapi(const F&& func, const data_t* data, len_t len)
 	-> unique_ptr<decltype(func(len, data[0]))[]>
 {
@@ -157,7 +210,15 @@ static inline auto mapi(const F&& func, const Container<Args...>& container)
 }
 
 // ------------------------------- mapi, 2 container version
-template <class F, class data_t1, class data_t2, class len_t=size_t>
+template <class F, class data_t1, class data_t2, class data_t3, class len_t>
+static inline void mapi(const F&& func, const data_t1* x, const data_t2* y,
+	len_t len, data_t3 *RESTRICT out)
+{
+	for (len_t i = 0; i < len; i++) {
+		out[i] = static_cast<data_t3>(func(i, x[i], y[i]));
+	}
+}
+template <class F, class data_t1, class data_t2, class len_t>
 static inline auto mapi(const F&& func, const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(func(len, x[0], y[0]))[]>
 {
@@ -170,7 +231,8 @@ static inline auto mapi(const F&& func, const data_t1* x, const data_t2* y, len_
 }
 template<class F, template <class...> class Container1, class... Args1,
 	template <class...> class Container2, class... Args2>
-static inline auto mapi(const F&& func, const Container1<Args1...>& x, const Container2<Args2...>& y)
+static inline auto mapi(const F&& func, const Container1<Args1...>& x,
+	const Container2<Args2...>& y)
 	-> Container1<decltype(func(x.size(), *begin(x), *begin(y)))>
 {
 	assert(x.size() == y.size());
@@ -444,7 +506,7 @@ static inline int32_t num_elements_in_exprange(data_t1 startVal,
 	auto absStartVal = abs(startVal);
 	auto absStopVal = abs(stopVal);
 	auto absStep = abs(step);
-	
+
 	if (absStartVal > absStopVal) {
 		assertf(absStep < 1,
 				"exprange(): |startVal| %.3g > |stopVal| %.3g, but |step| %.3g >= 1",
@@ -460,7 +522,7 @@ static inline int32_t num_elements_in_exprange(data_t1 startVal,
 	// compute how many values we'll have
 	double ratio = static_cast<double>(absStopVal) / absStartVal;
 	double logBaseStep = log2(ratio) / log2(absStep);
-//	std::cout << "----" << "\n";
+//	std::cout << "----" << "\n";
 //	std::cout << "    startVal, stopVal, step: " << startVal << ", " << stopVal << ", " << step << "\n";
 //	std::cout << "abs startVal, stopVal, step: " << absStartVal << ", " << absStopVal << ", " << absStep << "\n";
 //	std::cout << "ratio, logBaseStep: " << ratio << ", " << logBaseStep << "\n";
@@ -482,14 +544,9 @@ template <class data_t, class step_t=int8_t>
 static inline auto exprange(data_t startVal, data_t stopVal, step_t step=2)
 	-> unique_ptr<decltype(stopVal * startVal * step)[]>
 {
-//	if (startVal == stopVal) {
-//		unique_ptr<decltype(stopVal * startVal * step)[]> data(new decltype(stopVal * startVal * step)[1]);
-//		data[0] = startVal;
-//		return data;
-//	}
-
 	int32_t len = num_elements_in_exprange(startVal, stopVal, step);
-	unique_ptr<decltype(stopVal * startVal * step)[]> data(new decltype(stopVal * startVal * step)[len]);
+	unique_ptr<decltype(stopVal * startVal * step)[]> data(
+		new decltype(stopVal * startVal * step)[len]);
 	exprange_inplace(data, startVal, stopVal, step);
 	return data;
 }
@@ -539,7 +596,6 @@ static data_t** split(const data_t* data, len_t len, len_t newNumDims) {
 	return arrays;
 }
 
-
 // ================================================================
 // Statistics (V -> R)
 // ================================================================
@@ -547,7 +603,7 @@ static data_t** split(const data_t* data, len_t len, len_t newNumDims) {
 // ================================ Max
 
 /** Returns the maximum value in data[0..len-1] */
-template <class data_t, class len_t=size_t>
+template <class data_t, class len_t>
 static inline data_t max(const data_t *data, len_t len) {
 	data_t max = std::numeric_limits<data_t>::min();
 	for (len_t i = 0; i < len; i++) {
@@ -566,7 +622,7 @@ static inline data_t max(const Container<data_t>& data) {
 // ================================ Min
 
 /** Returns the minimum value in data[0..len-1] */
-template <class data_t, class len_t=size_t>
+template <class data_t, class len_t>
 static inline data_t min(const data_t *data, len_t len) {
 	data_t min = std::numeric_limits<data_t>::max();
 	for (len_t i = 0; i < len; i++) {
@@ -585,7 +641,7 @@ static inline data_t min(const Container<data_t>& data) {
 // ================================ Sum
 
 /** Computes the sum of data[0..len-1] */
-template <class data_t, class len_t=size_t>
+template <class data_t, class len_t>
 static inline data_t sum(const data_t *data, len_t len) {
 	return reduce([](data_t x, data_t y){ return x+y;}, data, len);
 }
@@ -600,7 +656,7 @@ static inline data_t sum(const Container<data_t>& data) {
 // ================================ Sum of Squares
 
 /** Computes the sum of data[i]^2 for i = [0..len-1] */
-template <class data_t, class len_t=size_t>
+template <class data_t, class len_t>
 static inline data_t sumsquares(const data_t *data, len_t len) {
 	data_t sum = 0;
 	for (len_t i=0; i < len; i++) {
@@ -617,7 +673,7 @@ static inline data_t sumsquares(const Container<data_t>& data) {
 // ================================ Mean
 
 /** Computes the arithmetic mean of data[0..len-1] */
-template <class data_t, class len_t=size_t>
+template <class data_t, class len_t>
 static inline double mean(const data_t* data, len_t len) {
 	return sum(data, len) / ((double) len);
 }
@@ -631,26 +687,31 @@ static inline double mean(const Container<data_t>& data) {
 
 // ================================ Variance
 
-/** Computes the population variance of data[0..len-1] */
-template <class data_t, class len_t=size_t>
-static inline double variance(const data_t *data, len_t len) {
-	if (len <= 1) {
-		if (len < 1) {
-			printf("WARNING: variance(): received length %lu, returning 0",
-				len);
-		}
-		return 0;
-	}
-
-	//use Knuth's numerically stable algorithm
-	double mean = data[0];
-	double sse = 0;
+// Knuth's numerically stable algorithm for online mean + variance. See:
+// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
+template<class data_t, class len_t>
+static inline void knuth_sse_stats(const data_t* data, len_t len,
+	double& mean, double& sse)
+{
+	mean = data[0];
+	sse = 0;
 	double delta;
 	for (len_t i=1; i < len; i++) {
 		delta = data[i] - mean;
 		mean += delta / (i+1);
 		sse += delta * (data[i] - mean);
 	}
+}
+
+/** Computes the population variance of data[0..len-1] */
+template <class data_t, class len_t=size_t>
+static inline double variance(const data_t *data, len_t len) {
+	assert(len > 0);
+	if (len == 1) {
+		return 0;
+	}
+	double mean, sse;
+	knuth_sse_stats(data, len, mean, sse);
 	return sse / len;
 }
 // template <class data_t>
@@ -674,6 +735,54 @@ static inline double stdev(const Container<data_t>& data) {
 	return sqrt(variance(data));
 }
 
+// ================================ LP norm
+
+/** Computes the arithmetic mean of data[0..len-1] */
+template <class data_t, class len_t, class pow_t=int>
+static inline data_t norm(const data_t* data, len_t len, pow_t p=2) {
+	data_t sum = 0;
+	for(len_t i = 0; i < len; i++) {
+		sum += std::pow(data[i], p);
+	}
+	return std::pow(sum, 1.0 / p);
+}
+/** Computes the arithmetic mean of data[0..len-1] */
+template <int P, class data_t, class len_t>
+static inline data_t norm(const data_t* data, len_t len) {
+	return norm(data, len, P);
+}
+
+template<int P, template <class...> class Container, class data_t>
+static inline data_t norm(const Container<data_t>& data) {
+	return norm<P>(data.data(), data.size());
+}
+template<template <class...> class Container, class data_t, class pow_t=int>
+static inline data_t norm(const Container<data_t>& data, pow_t p=2) {
+	return norm(data.data(), data.size(), p);
+}
+
+// ================================ L1 norm
+
+template <class data_t, class len_t>
+static inline data_t norm_L1(const data_t* data, len_t len) {
+	return sum(data, len);
+}
+template<template <class...> class Container, class data_t>
+static inline data_t norm_L1(const Container<data_t>& data) {
+	return sum(data);
+}
+
+// ================================ L2 norm
+
+template <class data_t, class len_t>
+static inline data_t norm_L2(const data_t* data, len_t len) {
+	return sqrt(sumsquares(data, len));
+}
+template<template <class...> class Container, class data_t>
+static inline data_t norm_L2(const Container<data_t>& data) {
+	return sqrt(sumsquares(data));
+}
+
 // ================================================================
 // V x V -> R
 // ================================================================
@@ -684,8 +793,6 @@ template<class data_t1, class data_t2, class len_t=size_t>
 static inline auto dot(const data_t1* x, const data_t2* y, len_t len)
 	-> decltype(x[0] * y[0])
 {
-	// auto sum = x[0] * y[0]; // get type of sum correct
-	// sum = 0;
 	decltype(x[0] * y[0]) sum = 0; // get type of sum correct
 	for (len_t i = 0; i < len; i++) {
 		sum += x[i] * y[i];
@@ -719,7 +826,7 @@ static inline double dist_L1(const Container1<data_t1>& x,
 	const Container2<data_t2>& y)
 {
 	assert(x.size() == y.size());
-	return dist_L1(&x[0],&y[0],x.size());
+	return dist_L1(x.data(), y.data(), x.size());
 }
 
 // ================================ L2^2 Distance
@@ -741,7 +848,7 @@ static inline double dist_sq(const Container1<data_t1>& x,
 	const Container2<data_t2>& y)
 {
 	assert(x.size() == y.size());
-	return dist_sq(&x[0],&y[0],x.size());
+	return dist_sq(x.data(), y.data(), x.size());
 }
 
 // ================================ L2 Distance
@@ -758,7 +865,7 @@ static inline double dist_L2(const Container1<data_t1>& x,
 	const Container2<data_t2>& y)
 {
 	assert(x.size() == y.size());
-	return sqrt(dist_sq(&x[0],&y[0],x.size()));
+	return sqrt(dist_sq(x.data(), y.data(), x.size()));
 }
 
 // ================================================================
@@ -812,7 +919,7 @@ static inline unique_ptr<data_t[]> cummean(data_t* data, len_t len) {
 template<template <class...> class Container, class data_t>
 static inline Container<data_t> cummean(const Container<data_t>& data) {
 	Container<data_t> ret{data.size()};
-	array_cummean(&data[0],&ret[0],data.size());
+	array_cummean(data.data(), ret.data(), data.size());
 	return ret;
 }
 
@@ -820,12 +927,8 @@ static inline Container<data_t> cummean(const Container<data_t>& data) {
 
 /** Cumulative SSE of elements in src, storing the result in dest */
 template <class data_t, class len_t=size_t>
-static inline void cumsxx(const data_t* src, data_t* dest, len_t len) {
-	if (len < 1) {
-		printf("WARNING: cumsxx(): received length %lu, returning 0",
-			len);
-		return;
-	}
+static inline void cumsxx(const data_t* src, len_t len, data_t* dest) {
+	assert(len > 0);
 	dest[0] = 0;
 	if (len == 1) {
 		return;
@@ -846,14 +949,14 @@ static inline void cumsxx(const data_t* src, data_t* dest, len_t len) {
 template <class data_t, class len_t=size_t>
 static inline unique_ptr<data_t[]> cumsxx(data_t *data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
-	array_cumsxx(data, ret, len);
+	array_cumsxx(data, len, ret);
 	return ret;
 }
 /** Returns the sum of squared differences from the mean of data[0..i] */
 template<template <class...> class Container, class data_t>
 static inline Container<data_t> cumsxx(const Container<data_t>& data) {
 	Container<data_t> ret{data.size()};
-	array_cumsxx(&data[0],&ret[0],data.size());
+	array_cumsxx(data.data(), data.size(), ret.data());
 	return ret;
 }
 
@@ -863,25 +966,54 @@ static inline Container<data_t> cumsxx(const Container<data_t>& data) {
 
 // ================================ Add
 
+//typedef int len_t;
+//
+///** Elementwise x + y, storing the result in dest */
+//// template <class data_t1, class data_t2, class data_t3, class len_t>
+//template <class data_t1, class data_t2, class data_t3>
+//static inline void add(const data_t1* x, const data_t2* y, len_t len,
+//	data_t3* out)
+//{
+//	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y, len, out);
+//}
+///** Returns a new array composed of elementwise x + y */
+//// template <class data_t1, class data_t2, class len_t>
+//template <class data_t1, class data_t2>
+//static inline auto add(const data_t1* x, const data_t2* y, len_t len)
+//	-> unique_ptr<decltype(x[0]+y[0])[]>
+//{
+//	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y, len);
+//}
+///** Returns a new array composed of elementwise x + y */
+//template<template <class...> class Container1, class data_t1,
+//	template <class...> class Container2, class data_t2>
+//static inline auto add(const Container1<data_t1>& x, const Container2<data_t2>& y)
+//	-> Container1<decltype(x[0]+y[0])>
+//{
+//	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y);
+//}
+
 /** Elementwise x + y, storing the result in dest */
-template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
-static inline void add(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
-	for (len_t i = 0; i < len; i++) {
-		dest[i] = x[i] + y[i];
-	}
+// template <class data_t1, class data_t2, class data_t3, class len_t>
+template <class data_t1, class data_t2, class len_t, class data_t3>
+static inline void add(const data_t1* x, const data_t2* y, len_t len,
+					   data_t3* out)
+{
+	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y, len, out);
 }
 /** Returns a new array composed of elementwise x + y */
-template <class data_t1, class data_t2, class len_t=size_t>
+// template <class data_t1, class data_t2, class len_t>
+template <class data_t1, class data_t2, class len_t>
 static inline auto add(const data_t1* x, const data_t2* y, len_t len)
-	-> unique_ptr<decltype(x[0]+y[0])[]>
+-> unique_ptr<decltype(x[0]+y[0])[]>
 {
 	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y, len);
 }
 /** Returns a new array composed of elementwise x + y */
 template<template <class...> class Container1, class data_t1,
-	template <class...> class Container2, class data_t2>
+template <class...> class Container2, class data_t2>
 static inline auto add(const Container1<data_t1>& x, const Container2<data_t2>& y)
-	-> Container1<decltype(x[0]+y[0])>
+-> Container1<decltype(x[0]+y[0])>
 {
 	return map([](data_t1 a, data_t2 b){ return a + b;}, x, y);
 }
@@ -889,14 +1021,14 @@ static inline auto add(const Container1<data_t1>& x, const Container2<data_t2>& 
 // ================================ Subtract
 
 /** Elementwise x - y, storing the result in dest */
-template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
-static inline void sub(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
-	for (len_t i = 0; i < len; i++) {
-		dest[i] = x[i] - y[i];
-	}
+template <class data_t1, class data_t2, class data_t3, class len_t>
+static inline void sub(const data_t1* x, const data_t2* y, len_t len,
+	data_t3* out)
+{
+	return map([](data_t1 a, data_t2 b){ return a - b;}, x, y, len, out);
 }
 /** Returns a new array composed of elementwise x - y */
-template <class data_t1, class data_t2, class len_t=size_t>
+template <class data_t1, class data_t2, class len_t>
 static inline auto sub(const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(x[0]+y[0])[]>
 {
@@ -914,14 +1046,14 @@ static inline auto sub(const Container1<data_t1>& x, const Container2<data_t2>& 
 // ================================ Multiply
 
 /** Elementwise x * y, storing the result in dest */
-template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
-static inline void mul(const data_t1* x, const data_t2* y, data_t3* dest, len_t len) {
-	for (len_t i = 0; i < len; i++) {
-		dest[i] = x[i] * y[i];
-	}
+template <class data_t1, class data_t2, class data_t3, class len_t>
+static inline void mul(const data_t1* x, const data_t2* y, len_t len,
+	data_t3* out)
+{
+	return map([](data_t1 a, data_t2 b){ return a * b;}, x, y, len, out);
 }
 /** Returns a new array composed of elementwise x * y */
-template <class data_t1, class data_t2, class len_t=size_t>
+template <class data_t1, class data_t2, class len_t>
 static inline auto mul(const data_t1* x, const data_t2* y, len_t len)
 	-> unique_ptr<decltype(x[0]*y[0])[]>
 {
@@ -937,20 +1069,20 @@ static inline auto mul(const Container1<data_t1>& x, const Container2<data_t2>& 
 }
 
 // ================================ Divide
-//
-// TODO decide if we like forcing everything to be a double for this
 
 /** Elementwise x / y, storing the result in dest */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline void div(const data_t1* x, const data_t2* y, double* dest, len_t len) {
-	for (len_t i = 0; i < len; i++) {
-		dest[i] = x[i] / (double) y[i];
-	}
+template <class data_t1, class data_t2, class data_t3, class len_t>
+static inline void div(const data_t1* x, const data_t2* y, len_t len,
+	data_t3* out)
+{
+	return map([](data_t1 a, data_t2 b){ return a / (double) b;}, x, y, len, out);
 }
 /** Returns a new array composed of elementwise x / y */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline unique_ptr<double[]> div(const data_t1* x, const data_t2* y, len_t len) {
-	return map([](data_t1 a, data_t2 b){ return (double)a / b;}, x, y, len);
+template <class data_t1, class data_t2, class len_t>
+static inline unique_ptr<double[]> div(const data_t1* x, const data_t2* y,
+	len_t len)
+{
+	return map([](data_t1 a, data_t2 b){ return a / (double) b;}, x, y, len);
 }
 /** Returns a new array composed of elementwise x / y */
 template<template <class...> class Container1, class data_t1,
@@ -958,7 +1090,34 @@ template<template <class...> class Container1, class data_t1,
 static inline Container1<double> div(const Container1<data_t1>& x,
 	const Container2<data_t2>& y)
 {
-	return map([](data_t1 a, data_t2 b){ return (double) a / b;}, x, y);
+	return map([](data_t1 a, data_t2 b){ return a / (double) b;}, x, y);
+}
+
+// ================================ Pow
+
+/** Elementwise x / y, storing the result in dest */
+template <class data_t1, class data_t2, class data_t3, class len_t=size_t>
+static inline void pow(const data_t1* x, const data_t2* y, data_t3* dest,
+	len_t len)
+{
+	for (len_t i = 0; i < len; i++) {
+		dest[i] = static_cast<data_t3>(std::pow(x[i], y[i]));
+	}
+}
+/** Returns a new array composed of elementwise x / y */
+template <class data_t1, class data_t2, class len_t>
+static inline unique_ptr<double[]> pow(const data_t1* x, const data_t2* y,
+	len_t len)
+{
+	return map([](data_t1 a, data_t2 b){ return std::pow(a, b);}, x, y, len);
+}
+/** Returns a new array composed of elementwise x / y */
+template<template <class...> class Container1, class data_t1,
+	template <class...> class Container2, class data_t2>
+static inline Container1<double> pow(const Container1<data_t1>& x,
+	const Container2<data_t2>& y)
+{
+	return map([](data_t1 a, data_t2 b){ return std::pow(a, b);}, x, y);
 }
 
 // ================================ Concatenate
@@ -992,102 +1151,252 @@ static inline Container1<data_t> concat(const Container1<data_t>& x,
 // ================================================================
 // V x R -> V
 // ================================================================
+//#include <type_traits>
+//
+//template <bool B, typename T = void>
+//using enable_if_t = typename std::enable_if<B, T>::type;
 
-// ================================ Add, scalar
+// typename enable_if_t<std::is_literal_type<data_t2>::value, data_t2> val) \‘
 
-/** Adds each element in data[0..len-1] by the scalar val */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline void adds_inplace(data_t1* data, data_t2 val, len_t len) {
-	map_inplace([val](data_t1 x){return x + val;}, data, len);
-}
-/** Returns a new array composed of (data[i] + val) for all i */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto adds(const data_t1* data, data_t2 val, len_t len)
-	-> unique_ptr<decltype(data[0] + val)[]>
+#define WRAP_VECTOR_SCALAR_OP_WITH_NAME(OP, NAME) \
+template <class data_t1, class data_t2, class data_t3, class len_t, REQUIRE_INT(len_t)> \
+static inline void NAME(data_t1 *RESTRICT data, len_t len, data_t2 val, \
+	data_t3 *RESTRICT out) \
+{ \
+	map([val](data_t1 x){return x OP val;}, data, len, out); \
+} \
+template <class data_t1, class data_t2, class len_t, REQUIRE_INT(len_t)> \
+static inline void NAME ## _inplace(data_t1* data, len_t len, data_t2 val) { \
+	map_inplace([val](data_t1 x){return x OP val;}, data, len); \
+} \
+template <class data_t1, class data_t2, class len_t, REQUIRE_INT(len_t)> \
+static inline auto NAME(const data_t1* data, len_t len, data_t2 val) \
+	-> unique_ptr<decltype(data[0] OP val)[]> \
+{ \
+	return map([val](data_t1 x) {return x OP val;}, data, len); \
+} \
+template<template <class...> class Container, class data_t1, class data_t2> \
+static inline auto NAME(const Container<data_t1>& data, data_t2 val) \
+	-> Container<decltype(*begin(data) OP val)> \
+{ \
+	return map([val](data_t1 x) {return x OP val;}, data); \
+} \
+
+
+//WRAP_VECTOR_SCALAR_OP_WITH_NAME(+, adds)
+//WRAP_VECTOR_SCALAR_OP_WITH_NAME(-, subs)
+//WRAP_VECTOR_SCALAR_OP_WITH_NAME(*, muls)
+//WRAP_VECTOR_SCALAR_OP_WITH_NAME(/, divs)
+
+WRAP_VECTOR_SCALAR_OP_WITH_NAME(+, add)
+WRAP_VECTOR_SCALAR_OP_WITH_NAME(-, sub)
+WRAP_VECTOR_SCALAR_OP_WITH_NAME(*, mul)
+WRAP_VECTOR_SCALAR_OP_WITH_NAME(/, div)
+
+//template <class data_t1, class data_t2, class data_t3, class len_t, REQUIRE_INT(len_t)>
+//static inline void add(data_t1 *RESTRICT data, len_t len, data_t2 val,
+//data_t3 *RESTRICT out)
+//{
+//	map([val](data_t1 x){return x + val;}, data, len, out);
+//}
+///** Adds each element in data[0..len-1] by the scalar val */
+//template <class data_t1, class data_t2, class len_t, REQUIRE_INT(len_t)>
+//static inline void add_inplace(data_t1* data, len_t len, data_t2 val) {
+//	map_inplace([val](data_t1 x){return x + val;}, data, len);
+//}
+///** Returns a new array composed of (data[i] + val) for all i */
+//template <class data_t1, class len_t, class data_t2, REQUIRE_INT(len_t)>
+//static inline auto add(const data_t1* data, len_t len, data_t2 val)
+//-> unique_ptr<decltype(data[0] + val)[]>
+//{
+//	return map([val](data_t1 x) {return x + val;}, data, len);
+//}
+////template <class data_t1, class data_t2>
+////static inline auto add(const data_t1* data, int64_t len, data_t2 val)
+////-> unique_ptr<decltype(data[0] + val)[]>
+////{
+////	return map([val](data_t1 x) {return x + val;}, data, len);
+////}
+///** Returns a new vector composed of (data[i] + val) for all i */
+//// template <class data_t>
+//// vector<data_t> add(const vector<data_t>& data, data_t val) {
+//template<template <class...> class Container, class data_t1, class data_t2>
+//static inline auto add(const Container<data_t1>& data, data_t2 val)
+//-> Container<decltype(*begin(data) + val)>
+//{
+//	return map([val](data_t1 x) {return x + val;}, data);
+//}
+
+// // ================================ Add, scalar
+
+// template <class data_t1, class data_t2, class data_t3, class len_t>
+// static inline void adds(data_t1 *RESTRICT data, len_t len, data_t2 val,
+// 	data_t3 *RESTRICT out)
+// {
+// 	map([val](data_t1 x){return x + val;}, data, len, out);
+// }
+// /** Adds each element in data[0..len-1] by the scalar val */
+// template <class data_t1, class data_t2, class len_t>
+// static inline void adds_inplace(data_t1* data, len_t len, data_t2 val) {
+// 	map_inplace([val](data_t1 x){return x + val;}, data, len);
+// }
+// /** Returns a new array composed of (data[i] + val) for all i */
+// template <class data_t1, class data_t2, class len_t>
+// static inline auto adds(const data_t1* data, len_t len, data_t2 val)
+// 	-> unique_ptr<decltype(data[0] + val)[]>
+// {
+// 	return map([val](data_t1 x) {return x + val;}, data, len);
+// }
+// /** Returns a new vector composed of (data[i] + val) for all i */
+// // template <class data_t>
+// // vector<data_t> add(const vector<data_t>& data, data_t val) {
+// template<template <class...> class Container, class data_t1, class data_t2>
+// static inline auto adds(const Container<data_t1>& data, data_t2 val)
+// 	-> Container<decltype(*begin(data) + val)>
+// {
+// 	return map([val](data_t1 x) {return x + val;}, data);
+// }
+
+// // ================================ Subtract, scalar
+
+// template <class data_t1, class data_t2, class data_t3, class len_t>
+// static inline void subs(data_t1 *RESTRICT data, len_t len, data_t2 val,
+// 	data_t3 *RESTRICT out)
+// {
+// 	map([val](data_t1 x){return x - val;}, data, len, out);
+// }
+// /** Adds each element in data[0..len-1] by the scalar val */
+// template <class data_t1, class data_t2, class len_t>
+// static inline void subs_inplace(data_t1* data, len_t len, data_t2 val) {
+// 	map_inplace([val](data_t1 x){return x - val;}, data, len);
+// }
+// /** Returns a new array composed of (data[i] + val) for all i */
+// template <class data_t1, class data_t2, class len_t>
+// static inline auto subs(const data_t1* data, len_t len, data_t2 val)
+// 	-> unique_ptr<decltype(data[0] + val)[]>
+// {
+// 	return map([val](data_t1 x) {return x - val;}, data, len);
+// }
+// /** Returns a new vector composed of (data[i] + val) for all i */
+// template<template <class...> class Container, class data_t1, class data_t2>
+// static inline auto subs(const Container<data_t1>& data, data_t2 val)
+// 	-> Container<decltype(*begin(data) + val)>
+// {
+// 	return map([val](data_t1 x) {return x - val;}, data);
+// }
+
+// // ================================ Multiply, scalar
+// template <class data_t1, class data_t2, class data_t3, class len_t>
+// static inline void muls(data_t1 *RESTRICT data, len_t len, data_t2 val,
+// 	data_t3 *RESTRICT out)
+// {
+// 	map([val](data_t1 x){return x * val;}, data, len, out);
+// }
+// /** Multiplies each element in data[0..len-1] by the scalar val */
+// template <class data_t1, class data_t2, class len_t>
+// static inline void muls_inplace(data_t1* data, len_t len, data_t2 val) {
+// 	map_inplace([val](data_t1 x){return x * val;}, data, len);
+// }
+// /** Returns a new array composed of (data[i] * val) for all i */
+// template <class data_t1, class data_t2, class len_t>
+// static inline auto muls(const data_t1* data, len_t len, data_t2 val)
+// 	-> unique_ptr<decltype(data[0] + val)[]>
+// {
+// 	return map([val](data_t1 x) {return x * val;}, data, len);
+// }
+// /** Returns a new vector composed of (data[i] * val) for all i */
+// template<template <class...> class Container, class data_t1, class data_t2>
+// static inline auto muls(const Container<data_t1>& data, data_t2 val)
+// 	-> Container<decltype(*begin(data) + val)>
+// {
+// 	return map([val](data_t1 x) {return x * val;}, data);
+// }
+
+// // ================================ Divide, scalars
+
+// template <class data_t1, class data_t2, class data_t3, class len_t>
+// static inline void divs(data_t1 *RESTRICT data, len_t len, data_t2 val,
+// 	data_t3 *RESTRICT out)
+// {
+// 	map([val](data_t1 x){return x / val;}, data, len, out);
+// }
+// /** Divides each element in data[0..len-1] by the scalar val */
+// template <class data_t1, class data_t2, class len_t>
+// static inline void divs_inplace(data_t1* data, len_t len, data_t2 val) {
+// 	map_inplace([val](data_t1 x){return x / val;}, data, len);
+// }
+// /** Returns a new array composed of (data[i] / val) for all i */
+// template <class data_t1, class data_t2, class len_t>
+// static inline auto divs(const data_t1* data, len_t len, data_t2 val)
+// 	-> unique_ptr<decltype(data[0] + val)[]>
+// {
+// 	return map([val](data_t1 x) {return x / val;}, data, len);
+// }
+// /** Returns a new vector composed of (data[i] / val) for all i */
+// template<template <class...> class Container, class data_t1, class data_t2>
+// static inline auto divs(const Container<data_t1>& data, data_t2 val)
+// 	-> Container<decltype(*begin(data) + val)>
+// {
+// 	return map([val](data_t1 x) {return x / val;}, data);
+// }
+
+// ================================ Pow
+
+// ------------------------ elements to scalar power
+
+template <class data_t1, class data_t2, class data_t3, class len_t>
+static inline void pows(data_t1 *RESTRICT data, len_t len, data_t2 val,
+	data_t3 *RESTRICT out)
 {
-	return map([val](data_t1 x) {return x + val;}, data, len);
+	map([val](data_t1 x){return std::pow(x, val);}, data, len, out);
 }
-/** Returns a new vector composed of (data[i] + val) for all i */
-// template <class data_t>
-// vector<data_t> add(const vector<data_t>& data, data_t val) {
+template <class data_t1, class data_t2, class len_t>
+static inline void pows_inplace(data_t1* data, len_t len, data_t2 val) {
+	map_inplace([val](data_t1 x){return std::pow(x, val);}, data, len);
+}
+template <class data_t1, class data_t2, class len_t>
+static inline unique_ptr<double[]> pows(const data_t1* data, len_t len,
+	data_t2 val)
+{
+	return map([val](data_t1 x) {return std::pow(x, val);}, data, len);
+}
 template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto adds(const Container<data_t1>& data, data_t2 val)
-	-> Container<decltype(*begin(data) + val)>
+static inline Container<double> pows(const Container<data_t1>& data,
+	data_t2 val)
 {
-	return map([val](data_t1 x) {return x + val;}, data);
+	return map([val](data_t1 x) {return std::pow(x, val);}, data);
 }
 
-// ================================ Subtract, scalar
+// ------------------------ scalar to power of elements
 
-/** Adds each element in data[0..len-1] by the scalar val */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline void subs_inplace(data_t1* data, data_t2 val, len_t len) {
-	map_inplace([val](data_t1 x){return x - val;}, data, len);
-}
-/** Returns a new array composed of (data[i] + val) for all i */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto subs(const data_t1* data, data_t2 val, len_t len)
-	-> unique_ptr<decltype(data[0] + val)[]>
+template <class data_t1, class data_t2, class data_t3, class len_t>
+static inline void pows(data_t2 val, data_t1 *RESTRICT data, len_t len,
+	data_t3 *RESTRICT out)
 {
-	return map([val](data_t1 x) {return x - val;}, data, len);
+	map([val](data_t1 x){return std::pow(val, x);}, data, len, out);
 }
-/** Returns a new vector composed of (data[i] + val) for all i */
+template <class data_t1, class data_t2, class len_t>
+static inline void pows_inplace(data_t2 val, data_t1* data, len_t len) {
+	map_inplace([val](data_t1 x){return std::pow(val, x);}, data, len);
+}
+template <class data_t1, class data_t2, class len_t>
+static inline unique_ptr<double[]> pows(data_t2 val, const data_t1* data,
+	len_t len)
+{
+	return map([val](data_t1 x) {return std::pow(val, x);}, data, len);
+}
 template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto subs(const Container<data_t1>& data, data_t2 val)
-	-> Container<decltype(*begin(data) + val)>
+static inline Container<double> pows(data_t2 val,
+	const Container<data_t1>& data)
 {
-	return map([val](data_t1 x) {return x - val;}, data);
-}
-
-// ================================ Multiply, scalar
-
-/** Multiplies each element in data[0..len-1] by the scalar val */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline void muls_inplace(data_t1* data, data_t2 val, len_t len) {
-	map_inplace([val](data_t1 x){return x * val;}, data, len);
-}
-/** Returns a new array composed of (data[i] * val) for all i */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto muls(const data_t1* data, data_t2 val, len_t len)
-	-> unique_ptr<decltype(data[0] + val)[]>
-{
-	return map([val](data_t1 x) {return x * val;}, data, len);
-}
-/** Returns a new vector composed of (data[i] * val) for all i */
-template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto muls(const Container<data_t1>& data, data_t2 val)
-	-> Container<decltype(*begin(data) + val)>
-{
-	return map([val](data_t1 x) {return x * val;}, data);
-}
-
-// ================================ Divide, scalars
-
-/** Divides each element in data[0..len-1] by the scalar val */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline void divs_inplace(data_t1* data, data_t2 val, len_t len) {
-	map_inplace([val](data_t1 x){return x / val;}, data, len);
-}
-/** Returns a new array composed of (data[i] / val) for all i */
-template <class data_t1, class data_t2, class len_t=size_t>
-static inline auto divs(const data_t1* data, data_t2 val, len_t len)
-	-> unique_ptr<decltype(data[0] + val)[]>
-{
-	return map([val](data_t1 x) {return x / val;}, data, len);
-}
-/** Returns a new vector composed of (data[i] / val) for all i */
-template<template <class...> class Container, class data_t1, class data_t2>
-static inline auto divs(const Container<data_t1>& data, data_t2 val)
-	-> Container<decltype(*begin(data) + val)>
-{
-	return map([val](data_t1 x) {return x / val;}, data);
+	return map([val](data_t1 x) {return std::pow(val, x);}, data);
 }
 
 // ================================ Copy
 
 /** Copies src[0..len-1] to dest[0..len-1] */
 template <class data_t, class len_t=size_t>
-static inline void copy_inplace(const data_t* src, data_t* dest, len_t len) {
+static inline void copy(const data_t* src, data_t* dest, len_t len) {
 	std::copy(src, src+len, dest);
 }
 /** Returns a copy of the provided array */
@@ -1104,11 +1413,257 @@ static inline Container<data_t> copy(const Container<data_t>& data) {
 	return ret;
 }
 
+// ================================================================
+// V -> V
+// ================================================================
+
+#define WRAP_UNARY_FUNC_WITH_NAME(FUNC, NAME) \
+\
+template <class data_t, class data_t2, class len_t> \
+static inline void NAME(data_t *RESTRICT data, len_t len, \
+	data_t2 *RESTRICT out) \
+{ \
+	map([](data_t x){return FUNC(x);}, data, len, out); \
+} \
+template <class data_t, class len_t> \
+static inline void NAME ## _inplace (data_t* data, len_t len) { \
+	map_inplace([](data_t x){return FUNC(x);}, data, len); \
+} \
+template <class data_t, class len_t> \
+static inline auto NAME(const data_t* data, len_t len) \
+	-> unique_ptr<decltype(FUNC(*std::begin(data)))[]> \
+{ \
+	return map([](data_t x) {return FUNC(x);}, data, len); \
+} \
+template<template <class...> class Container, class data_t> \
+static inline auto NAME(const Container<data_t>& data) \
+	-> Container<decltype(FUNC(*std::begin(data)))> \
+{ \
+	return map([](data_t x) {return FUNC(x);}, data); \
+} \
+
+#define WRAP_UNARY_FUNC(FUNC) WRAP_UNARY_FUNC_WITH_NAME(FUNC, FUNC)
+
+#define WRAP_STD_UNARY_FUNC_WITH_NAME(FUNC, NAME) \
+using std::FUNC; \
+WRAP_UNARY_FUNC_WITH_NAME(FUNC, NAME)
+
+#define WRAP_STD_UNARY_FUNC(FUNC) WRAP_STD_UNARY_FUNC_WITH_NAME(FUNC, FUNC)
+
+// ================================ Exp
+
+// exponents and logs
+WRAP_UNARY_FUNC(sqrt);
+WRAP_STD_UNARY_FUNC(cbrt);
+WRAP_STD_UNARY_FUNC(exp);
+WRAP_STD_UNARY_FUNC(exp2);
+WRAP_STD_UNARY_FUNC(log);
+WRAP_STD_UNARY_FUNC(log2);
+WRAP_STD_UNARY_FUNC(log10);
+
+// trig
+WRAP_STD_UNARY_FUNC(sin);
+WRAP_STD_UNARY_FUNC(asin);
+WRAP_STD_UNARY_FUNC(sinh);
+WRAP_STD_UNARY_FUNC(cos);
+WRAP_STD_UNARY_FUNC(acos);
+WRAP_STD_UNARY_FUNC(cosh);
+WRAP_STD_UNARY_FUNC(tan);
+WRAP_STD_UNARY_FUNC(atan);
+WRAP_STD_UNARY_FUNC(tanh);
+
+// err and gamma
+WRAP_STD_UNARY_FUNC(erf);
+WRAP_STD_UNARY_FUNC(erfc);
+WRAP_STD_UNARY_FUNC_WITH_NAME(lgamma, log_gamma);
+WRAP_STD_UNARY_FUNC_WITH_NAME(tgamma, gamma);
+
+// rounding
+WRAP_STD_UNARY_FUNC(ceil);
+WRAP_STD_UNARY_FUNC(floor);
+WRAP_STD_UNARY_FUNC(round);
+
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void exp(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::exp(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void exp_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::exp(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> exp(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::exp(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> exp(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::exp(x);}, data);
+// }
+
+// // ================================ Sqrt
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void sqrt(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return sqrt(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void sqrt_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return sqrt(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> sqrt(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return sqrt(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> sqrt(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return sqrt(x);}, data);
+// }
+
+// // ================================ Log
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void log(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::log(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void log_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::log(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> log(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::log(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> log(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::log(x);}, data);
+// }
+
+// // ================================ Log2
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void log2(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::log2(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void log2_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::log2(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> log2(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::log2(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> log2(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::log2(x);}, data);
+// }
+
+// // ================================ Log10
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void log10(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::log10(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void log10_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::log10(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> log10(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::log10(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> log10(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::log10(x);}, data);
+// }
+
+// // ================================ Sin
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void sin(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::sin(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void sin_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::sin(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> sin(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::sin(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> sin(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::sin(x);}, data);
+// }
+
+// // ================================ Cos
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void cos(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::cos(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void cos_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::cos(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> cos(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::cos(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> cos(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::cos(x);}, data);
+// }
+
+// // ================================ Tan
+
+// template <class data_t1, class data_t2, class len_t>
+// static inline void tan(data_t1 *RESTRICT data, len_t len,
+// 	data_t2 *RESTRICT out)
+// {
+// 	map([](data_t1 x){return std::tan(x);}, data, len, out);
+// }
+// template <class data_t1, class len_t>
+// static inline void tan_inplace(data_t1* data, len_t len) {
+// 	map_inplace([](data_t1 x){return std::tan(x);}, data, len);
+// }
+// template <class data_t1, class len_t>
+// static inline unique_ptr<double[]> tan(const data_t1* data, len_t len) {
+// 	return map([](data_t1 x) {return std::tan(x);}, data, len);
+// }
+// template<template <class...> class Container, class data_t1>
+// static inline Container<double> tan(const Container<data_t1>& data) {
+// 	return map([](data_t1 x) {return std::tan(x);}, data);
+// }
+
 // ================================ Reverse
+
+template <class data_t, class len_t=size_t> // TODO test this
+static inline void reverse_inplace(const data_t* data, len_t len) {
+	for (len_t i = 0; i < len / 2; i++) {
+		std::swap(data[i], data[len-i-1]);
+	}
+}
 
 /** Copies src[0..len-1] to dest[len-1..0] */
 template <class data_t, class len_t=size_t>
-static inline void reverse(const data_t *src, data_t *dest, len_t len) {
+static inline void reverse(const data_t *RESTRICT src, data_t *RESTRICT dest,
+	len_t len)
+{
 	len_t j = len - 1;
 	for (len_t i = 0; i < len; i++, j--) {
 		dest[i] = src[j];
@@ -1123,7 +1678,7 @@ static inline unique_ptr<data_t[]> reverse(const data_t* data, len_t len) {
 }
 /** Returns data[len-1..0] */
 template<template <class...> class Container, class data_t>
-static inline Container<data_t> add(const Container<data_t>& data) {
+static inline Container<data_t> reverse(const Container<data_t>& data) {
 	Container<data_t> ret(data.size());
 	array_reverse(data, &ret[0], data.size());
 	return ret;
@@ -1132,7 +1687,7 @@ static inline Container<data_t> add(const Container<data_t>& data) {
 // ================================ Create constant array
 
 /** Sets each element of the array to the value specified */
-template <class data_t1, class data_t2, class len_t=size_t>
+template <class data_t1, class data_t2, class len_t>
 static inline void constant_inplace(data_t1 *x, len_t len, data_t2 value) {
 	for (len_t i = 0; i < len; i++) {
 		x[i] = static_cast<data_t1>(value);
@@ -1145,15 +1700,15 @@ static inline void constant_inplace(Container<data_t1>& data, data_t2 value) {
 }
 
 /** Returns an array of length len with all elements equal to value */
-template <class data_t, class len_t=size_t>
-static inline unique_ptr<data_t[]> constant(data_t value, len_t len) {
+template <class data_t, class len_t>
+static inline unique_ptr<data_t[]> constant(len_t len, data_t value) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	constant_inplace(ret, value, len);
 	return ret;
 }
 /** Returns an array of length len with all elements equal to value */
-template <class data_t, class len_t=size_t>
-static inline vector<data_t> constant_vect(data_t value, len_t len) {
+template <class data_t, class len_t>
+static inline vector<data_t> constant_vect(len_t len, data_t value) {
 	vector<data_t> ret(len, value);
 	return ret;
 }
@@ -1250,6 +1805,221 @@ static inline Container<data_t> unique(const Container<data_t>& data) {
 	return ret;
 }
 
+// ================================================================
+// Normalizing
+// ================================================================
+
+// ------------------------ znormalize
+
+template<class data_t1, class data_t2, class len_t, class float_t=double>
+static inline bool znormalize(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	double mean, sse;
+	knuth_sse_stats(data, len, mean, sse);
+	double std = sqrt(sse / len);
+	if (std < nonzeroThresh) {
+		return false;
+	}
+	for (len_t i = 0; i < len; i++) {
+		out[i] = static_cast<data_t2>((data[i] - mean) / std);
+	}
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double>
+static inline bool znormalize_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	double mean, sse;
+	knuth_sse_stats(data, len, mean, sse);
+	double std = sqrt(sse / len);
+	if (std < nonzeroThresh) {
+		return false;
+	}
+	for (len_t i = 0; i < len; i++) {
+		data[i] = static_cast<data_t1>((data[i] - mean) / std);
+	}
+	return true;
+}
+template <class data_t, class len_t, class float_t=double>
+static inline unique_ptr<data_t[]> znormalize(const data_t* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	znormalize(data, len, ret, nonzeroThresh);
+	return ret;
+}
+template <template <class...> class Container, class data_t,
+	class float_t=double>
+static inline Container<data_t> znormalize(Container<data_t> data,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	Container<data_t> ret(data.size());
+	znormalize(data.data(), data.size(), ret.data(), nonzeroThresh);
+	return ret;
+}
+
+// ------------------------ mean normalize
+
+template<class data_t1, class data_t2, class len_t, class float_t=double>
+static inline bool mean_normalize(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto avg = mean(data, len);
+	subs(data, len, mean, out);
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double>
+static inline bool mean_normalize_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto avg = mean(data, len);
+	subs(data, len, mean);
+	return true;
+}
+template <class data_t, class len_t, class float_t=double>
+static inline unique_ptr<data_t[]> mean_normalize(const data_t* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	mean_normalize(data, len, ret, nonzeroThresh);
+	return ret;
+}
+template <template <class...> class Container, class data_t,
+	class float_t=double>
+static inline Container<data_t> mean_normalize(Container<data_t> data,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	Container<data_t> ret(data.size());
+	mean_normalize(data.data(), data.size(), ret.data(), nonzeroThresh);
+	return ret;
+}
+
+// ------------------------ std normalize
+
+template<class data_t1, class data_t2, class len_t, class float_t=double>
+static inline bool stdev_normalize(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto std = stdev(data, len);
+	if (std < nonzeroThresh) {
+		return false;
+	}
+	divs(data, len, std, out);
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double>
+static inline bool stdev_normalize_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto std = stdev(data, len);
+	if (std < nonzeroThresh) {
+		return false;
+	}
+	divs_inplace(data, len, std);
+	return true;
+}
+template <class data_t, class len_t, class float_t=double>
+static inline unique_ptr<data_t[]> stdev_normalize(const data_t* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	stdev_normalize(data, len, ret, nonzeroThresh);
+	return ret;
+}
+template <template <class...> class Container, class data_t,
+	class float_t=double>
+static inline Container<data_t> stdev_normalize(Container<data_t> data,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	Container<data_t> ret(data.size());
+	stdev_normalize(data.data(), data.size(), ret.data(), nonzeroThresh);
+	return ret;
+}
+
+// ------------------------ L1 normalize
+
+template<class data_t1, class data_t2, class len_t, class float_t=double>
+static inline bool L1_normalize(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto norm = sum(data, len);
+	if (norm < nonzeroThresh) {
+		return false;
+	}
+	divs(data, len, norm, out);
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double>
+static inline bool L1_normalize_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto norm = sum(data, len);
+	if (norm < nonzeroThresh) {
+		return false;
+	}
+	divs_inplace(data, len, norm);
+	return true;
+}
+template <class data_t, class len_t, class float_t=double>
+static inline unique_ptr<data_t[]> L1_normalize(const data_t* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	L1_normalize(data, len, ret, nonzeroThresh);
+	return ret;
+}
+template <template <class...> class Container, class data_t,
+	class float_t=double>
+static inline Container<data_t> L1_normalize(Container<data_t> data,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	Container<data_t> ret(data.size());
+	L1_normalize(data.data(), data.size(), ret.data(), nonzeroThresh);
+	return ret;
+}
+
+// ------------------------ L2 normalize
+
+template<class data_t1, class data_t2, class len_t, class float_t=double>
+static inline bool L2_normalize(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto norm = sqrt(sumsquares(data, len));
+	if (norm < nonzeroThresh) {
+		return false;
+	}
+	divs(data, len, norm, out);
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double>
+static inline bool L2_normalize_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto norm = sqrt(sumsquares(data, len));
+	if (norm < nonzeroThresh) {
+		return false;
+	}
+	divs_inplace(data, len, norm);
+	return true;
+}
+template <class data_t, class len_t, class float_t=double>
+static inline unique_ptr<data_t[]> L2_normalize(const data_t* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	unique_ptr<data_t[]> ret(new data_t[len]);
+	L1_normalize(data, len, ret, nonzeroThresh);
+	return ret;
+}
+template <template <class...> class Container, class data_t,
+	class float_t=double>
+static inline Container<data_t> L2_normalize(Container<data_t> data,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	Container<data_t> ret(data.size());
+	L1_normalize(data.data(), data.size(), ret.data(), nonzeroThresh);
+	return ret;
+}
 
 // ================================================================
 // Stringification / IO
