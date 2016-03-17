@@ -15,17 +15,25 @@
 #include "type_defs.h"
 #include "eigen_array_utils.hpp"
 #include "eigen_utils.hpp"
+#include "subseq.hpp"
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 using ar::constant_inplace;
-using ar::exprange_vect;
+using ar::dist_sq;
+using ar::exprange;
 using ar::first_derivs;
 using ar::randwalks;
 using ar::stdev;
-
 using ar::max; // move scalar funcs elsewhere?
+using ar::variance;
+
+using subseq::mapSubseqs;
+
+#define DEFAULT_NONZERO_THRESH .001
+
+typedef int64_t length_t;
 
 // ================================================================
 // Private functions
@@ -36,8 +44,8 @@ using ar::max; // move scalar funcs elsewhere?
 // ------------------------------------------------
 
 template<class data_t>
-static MatrixXd createRandWalks(const data_t* seq, length_t seqLen, length_t walkLen,
-	length_t nwalks=100) {
+static MatrixXd createRandWalks(const data_t* seq, length_t seqLen,
+	length_t walkLen, length_t nwalks=100) {
 
 	auto derivs = first_derivs(seq, seqLen);
 	double std = stdev(derivs);
@@ -46,13 +54,13 @@ static MatrixXd createRandWalks(const data_t* seq, length_t seqLen, length_t wal
 }
 
 template<class MatrixT, class VectorT>
-static inline squaredDistsToVector(const MatrixT& X, const VectorT& v) {
+static inline distsSqToVector(const MatrixT& X, const VectorT& v) {
 	auto diffs = X.rowwise() - v.transpose();
 	return diffs.rowwise().squaredNorm();
 }
 
 template<class MatrixT, class VectorT>
-static inline VectorT minDistToVector(const MatrixT& X, const VectorT& v) {
+static inline VectorT minDistSqToVector(const MatrixT& X, const VectorT& v) {
 	auto diffs = X.rowwise() - v.transpose();
 	return diffs.rowwise().squaredNorm().minCoeff();
 }
@@ -64,9 +72,8 @@ static inline VectorT minDistToVector(const MatrixT& X, const VectorT& v) {
 template<class len_t>
 static inline vector<len_t> defaultLengths(len_t Lmax) {
 	Lmax = max(Lmax, 16)
-	return exprange_vect(8, Lmax + 1);
+	return exprange(8, Lmax + 1);
 }
-
 
 // ================================================================
 // Public functions
@@ -95,6 +102,32 @@ static void structureScores1D(const data_t1* seq, length_t seqLen,
 		out[i] = static_cast<data_t2>(min);
 	}
 }
+
+template<class data_t1, class data_t2, class dist_t>
+static void neighborSims1D(const data_t* seq, length_t seqLen,
+	const data_t2* neighbor, length_t neighborLen, dist_t* out)
+{
+	double neighborVariance = variance(neighbor, neighborLen);
+	if (neighborVariance < DEFAULT_NONZERO_THRESH) {
+		return;
+	}
+	data_t tmp[neighborLen];
+	mapSubseqs([neighbor, neighborLen](data_t* subseq) {
+
+	}, neighborLen, seq, seqLen, out);
+}
+
+
+
+// SELF: pick up here by adding code to:
+// 1) randomly sample subseqs
+// 2) compute sims for a given shape + signal
+	// prolly using mapSubseqs
+
+
+
+
+
 
 // ------------------------------------------------
 // Feature Matrix

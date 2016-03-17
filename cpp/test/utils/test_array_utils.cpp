@@ -149,7 +149,8 @@ TEST_CASE("elementwise","utils") {
 	SECTION("div") {
 		SECTION("vects") {
 			SECTION("ints") {
-				vector<double> ans {1.0/3, 2.0, 1.0/2, 3.0};
+				// vector<double> ans {1.0/3, 2.0, 1.0/2, 3.0};
+				vector<int> ans {0, 2, 0, 3};
 				auto v = div(x, y);
 				short int equal = all_eq(ans, v);
 				INFO("output = " + to_string(v))
@@ -165,7 +166,8 @@ TEST_CASE("elementwise","utils") {
 		}
 		SECTION("arrays") {
 			SECTION("ints") {
-				double ans[] = {1.0/3, 2.0, 1.0/2, 3.0};
+				// double ans[] = {1.0/3, 2.0, 1.0/2, 3.0};
+				int ans[] = {0, 2, 0, 3};
 				auto v = div(a, b, len);
 				short int equal = all_eq(ans, v.get(), len);
 				INFO("output = " + to_string(v.get(), len))
@@ -416,15 +418,15 @@ TEST_CASE("reverse", "utils") {
 
 TEST_CASE("reshape", "utils") {
 
-	SECTION("dimensions not factor of length returns null") {
-		unsigned int len = 7;
-		data_t x[] = {1,2,3,4,5,6,7};
-		unsigned int newNumDims = 2;
-
-		data_t** newArrays = split(x, len, newNumDims);
-
-		REQUIRE(newArrays == nullptr);
-	}
+//	SECTION("dimensions not factor of length returns null") {
+//		unsigned int len = 7;
+//		data_t x[] = {1,2,3,4,5,6,7};
+//		unsigned int newNumDims = 2;
+//
+//		data_t** newArrays = split(x, len, newNumDims);
+//
+//		REQUIRE(newArrays == nullptr);
+//	}
 
 	SECTION("dimensions = 1 returns pointer to copy of original array") {
 		unsigned int len = 7;
@@ -692,32 +694,32 @@ TEST_CASE("range", "array_utils") {
 	SECTION("ints") {
 		SECTION("length=1") {
 			vector<int> ans {-7};
-			auto out = range_vect(-7, -6);
+			auto out = range(-7, -6);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 		}
 		SECTION("step=1") {
 			vector<int> ans {0, 1, 2, 3};
 
-			auto out = range_vect(0.0, 4);
+			auto out = range(0.0, 4);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 
-			auto out2 = range_vect(0, 4, 1);
+			auto out2 = range(0, 4, 1);
 			INFO(to_string(out2));
 			REQUIRE(all_eq(ans, out2));
 		}
 		SECTION("step=3") {
 			vector<int> ans {-2, 1, 4, 7};
 
-			auto out = range_vect(-2, 10, 3);
+			auto out = range(-2, 10, 3);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 		}
 		SECTION("step=-2") {
 			vector<int> ans {4, 2, 0, -2};
 
-			auto out = range_vect(4, -2.5, -2);
+			auto out = range(4, -2.5, -2);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 		}
@@ -725,32 +727,32 @@ TEST_CASE("range", "array_utils") {
 	SECTION("floats") {
 		SECTION("length=1") {
 			vector<float> ans {-7};
-			auto out = range_vect(-7, -6);
+			auto out = range(-7, -6);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 		}
 		SECTION("step=1") {
 			vector<float> ans {0, 1, 2, 3};
 
-			auto out = range_vect(0, 4);
+			auto out = range(0, 4);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 
-			auto out2 = range_vect(0, 4, 1);
+			auto out2 = range(0, 4, 1);
 			INFO(to_string(out2));
 			REQUIRE(all_eq(ans, out2));
 		}
 		SECTION("step=3") {
 			vector<float> ans {-2, 1, 4, 7};
 
-			auto out = range_vect(-2, 10, 3);
+			auto out = range(-2, 10, 3);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 		}
 		SECTION("step=-2") {
 			vector<float> ans {4, 2, 0, -2};
 
-			auto out = range_vect(4, -2.5, -2);
+			auto out = range(4, -2.5, -2);
 			INFO(to_string(out));
 			REQUIRE(all_eq(ans, out));
 		}
@@ -760,40 +762,40 @@ TEST_CASE("range", "array_utils") {
 TEST_CASE("exprange", "array_utils") {
 	SECTION("length=1") {
 		vector<int> ans {-7};
-		auto out = exprange_vect(-7, -8);
+		auto out = exprange(-7, -8);
 		INFO(to_string(out));
 		REQUIRE(all_eq(ans, out));
 	}
 	SECTION("step=2") {
 		vector<int> ans {3, 6, 12, 24};
 
-		auto out = exprange_vect(3, 25, 2);
+		auto out = exprange(3, 25, 2);
 		INFO(to_string(out));
 		REQUIRE(all_eq(ans, out));
 
-		auto out2 = exprange_vect(3.0, 25, 2);
+		auto out2 = exprange(3.0, 25, 2);
 		INFO(to_string(out2));
 		REQUIRE(all_eq(ans, out2));
 	}
 	SECTION("step=-.5") {
 		vector<int> ans {24, -12, 6, -3};
 
-		auto out = exprange_vect(24, 2, -.5);
+		auto out = exprange(24, 2, -.5);
 		INFO(to_string(out));
 		REQUIRE(all_eq(ans, out));
 
-		auto out2 = exprange_vect(24, 2.0, -.5);
+		auto out2 = exprange(24, 2.0, -.5);
 		INFO(to_string(out2));
 		REQUIRE(all_eq(ans, out2));
 	}
 	SECTION("step=-.5, fraction in ans") {
 		vector<float> ans {24, -12, 6, -3, 1.5, -.75};
 
-		auto out = exprange_vect(24, .5, -.5);
+		auto out = exprange(24, .5, -.5);
 		INFO(to_string(out));
 		REQUIRE(all_eq(ans, out));
 
-		auto out2 = exprange_vect(24, .5, -.5);
+		auto out2 = exprange(24, .5, -.5);
 		INFO(to_string(out2));
 		REQUIRE(all_eq(ans, out2));
 	}

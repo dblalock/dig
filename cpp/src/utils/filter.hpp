@@ -21,12 +21,12 @@ namespace filter {
 
 // constructed using Lemire's algorithm; see "Faster Retrieval with a
 // Two-Pass Dynamic-Time-Warping Lower Bound", Pattern Recognition 42(9), 2009.
-template <class data_t>
-void min_max_filter(const data_t *t, length_t len, length_t r,
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+void min_max_filter(const data_t *t, len_t len, len_t r,
 	data_t *l, data_t *u)
 {
-    length_t i = 0;
-	length_t width = 2 * r + 1;
+    len_t i = 0;
+	len_t width = 2 * r + 1;
 
     deque du(width + 1);
     deque dl(width + 1);
@@ -74,10 +74,10 @@ void min_max_filter(const data_t *t, length_t len, length_t r,
     }
 }
 
-template <class data_t>
-void min_filter(const data_t *t, length_t len, length_t r, data_t *l) {
-    length_t i = 0;
-	length_t width = 2 * r + 1;
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+void min_filter(const data_t *t, len_t len, len_t r, data_t *l) {
+    len_t i = 0;
+	len_t width = 2 * r + 1;
 
     deque dl(width + 1);
     dl.push_back(0);
@@ -105,10 +105,10 @@ void min_filter(const data_t *t, length_t len, length_t r, data_t *l) {
         }
     }
 }
-template <class data_t>
-void max_filter(const data_t *t, length_t len, length_t r, data_t *u) {
-    length_t i = 0;
-	length_t width = 2 * r + 1;
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+void max_filter(const data_t *t, len_t len, len_t r, data_t *u) {
+    len_t i = 0;
+	len_t width = 2 * r + 1;
 
     deque du(width + 1);
     du.push_back(0);
@@ -137,27 +137,37 @@ void max_filter(const data_t *t, length_t len, length_t r, data_t *u) {
     }
 }
 
-template <class data_t>
-static inline unique_ptr<data_t[]> min_filter(const data_t* data, length_t len, length_t r) {
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline unique_ptr<data_t[]> min_filter(const data_t* data,
+	len_t len, len_t r)
+{
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	min_filter(data, len, r, ret.get());
 	return ret;
 }
-template <class data_t>
-static inline unique_ptr<data_t[]> max_filter(const data_t* data, length_t len, length_t r) {
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline unique_ptr<data_t[]> max_filter(const data_t* data,
+	len_t len, len_t r)
+{
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	max_filter(data, len, r, ret.get());
 	return ret;
 }
 
-template<template <class...> class Container, class data_t>
-static inline Container<data_t> min_filter(const Container& data, length_t len, length_t r) {
+template<template <class...> class Container, class data_t,
+	class len_t, REQUIRE_INT(len_t)>
+static inline Container<data_t> min_filter(const Container& data,
+	len_t len, len_t r)
+{
 	Container<data_t> ret(len);
 	min_filter(t, len, r, ret.data());
 	return ret;
 }
-template<template <class...> class Container, class data_t>
-static inline Container<data_t> max_filter(const Container& data, length_t len, length_t r) {
+template<template <class...> class Container, class data_t,
+	class len_t, REQUIRE_INT(len_t)>
+static inline Container<data_t> max_filter(const Container& data,
+	len_t len, len_t r)
+{
 	Container<data_t> ret(len);
 	max_filter(t, len, r, ret.data());
 	return ret;
@@ -165,55 +175,54 @@ static inline Container<data_t> max_filter(const Container& data, length_t len, 
 
 // ================================ Apodization windows
 
-template<alpha, beta, class data_t>
-static inline void _generalized_hamming(data_t* out, length_t len) {
-	for (length_t i = 0; i < len; i++) {
+template<alpha, beta, class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline void _generalized_hamming(data_t* out, len_t len) {
+	for (len_t i = 0; i < len; i++) {
 		double val = alpha - beta * std::cos(2.0 * pi * i / (len-1));
 		out[i] = static_cast<data_t>(val);
 	}
 }
 
 // ------------------------ hann
-template<class data_t>
-static inline void hann(data_t* out, length_t len) {
+template<class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline void hann(data_t* out, len_t len) {
 	return _generalized_hamming<.5, .5>(out, len);
 }
-template <class data_t=double>
-static inline unique_ptr<data_t[]> hann(length_t len) {
+template <class data_t=double, class len_t, REQUIRE_INT(len_t)>
+static inline unique_ptr<data_t[]> hann(len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	hann(ret.get(), len);
 	return ret;
 }
-template<class data_t=double>
-static inline vector<data_t> hann(length_t len) {
+template<class data_t=double, class len_t, REQUIRE_INT(len_t)>
+static inline vector<data_t> hann(len_t len) {
 	vector<data_t> ret(len);
 	hann(ret.data(), len);
 	return ret;
 }
 
-
 // ------------------------ hamming
-template<class data_t>
-static inline void hamming(data_t* out, length_t len) {
+template<class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline void hamming(data_t* out, len_t len) {
 	return _generalized_hamming<.54, .46>(out, len);
 }
-template <class data_t=double>
-static inline unique_ptr<data_t[]> hamming(length_t len) {
+template <class data_t=double, class len_t, REQUIRE_INT(len_t)>
+static inline unique_ptr<data_t[]> hamming(len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	hamming(ret.get(), len);
 	return ret;
 }
-template<class data_t=double>
-static inline vector<data_t> hamming(length_t len) {
+template<class data_t=double, class len_t, REQUIRE_INT(len_t)>
+static inline vector<data_t> hamming(len_t len) {
 	vector<data_t> ret(len);
 	hamming(ret.data(), len);
 	return ret;
 }
 
 // ------------------------ gaussian
-template<class data_t>
-static inline void gaussian(data_t* out, length_t len, double sigma) {
-	for (length_t i = 0; i < len; i++) {
+template<class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline void gaussian(data_t* out, len_t len, double sigma) {
+	for (len_t i = 0; i < len; i++) {
 		double numerator = i - (len-1) / 2;
 		double denominator = sigma * (len-1) / 2;
 		double frac = numerator / denominator;
@@ -221,14 +230,14 @@ static inline void gaussian(data_t* out, length_t len, double sigma) {
 		out[i] = static_cast<data_t>(std::exp(exponent));
 	}
 }
-template <class data_t=double>
-static inline unique_ptr<data_t[]> gaussian(length_t len, double sigma) {
+template <class data_t=double, class len_t, REQUIRE_INT(len_t)>
+static inline unique_ptr<data_t[]> gaussian_ar(len_t len, double sigma) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
 	gaussian(ret.get(), len, sigma);
 	return ret;
 }
-template<class data_t=double>
-static inline vector<data_t> gaussian_vect(length_t len, double sigma) {
+template<class data_t=double, class len_t, REQUIRE_INT(len_t)>
+static inline vector<data_t> gaussian(len_t len, double sigma) {
 	vector<data_t> ret(len);
 	hamming(ret.data(), len, sigma);
 	return ret;
@@ -236,3 +245,4 @@ static inline vector<data_t> gaussian_vect(length_t len, double sigma) {
 
 
 } // namespace filter
+#endif

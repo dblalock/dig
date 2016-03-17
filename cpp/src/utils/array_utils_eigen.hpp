@@ -33,9 +33,9 @@ static inline auto copy(const F&& func, const EigenBase<Derived1>& in,
 // random numbers
 // ================================================================
 
-template<class MatrixType, class float_t=double>
-static inline void randn(MatrixType& X, float_t mean=0, float_t std=1) {
-	typedef typename MatrixType::Index index_t;
+template<class EigenType, class float_t=double>
+static inline void randn(EigenType& X, float_t mean=0, float_t std=1) {
+	typedef typename EigenType::Index index_t;
 
 	// create normal distro object
 	std::random_device rd;
@@ -57,8 +57,8 @@ static inline void randn(MatrixType& X, float_t mean=0, float_t std=1) {
 	}
 }
 
-template<class MatrixType>
-static inline axis_t _infer_axis(const MatrixType& X, axis_t axis) {
+template<class EigenType>
+static inline axis_t _infer_axis(const EigenType& X, axis_t axis) {
 	if (axis < 0) {
 		if (X.rows() == 1) { // row vect -> along rows
 			axis = 1;
@@ -72,10 +72,10 @@ static inline axis_t _infer_axis(const MatrixType& X, axis_t axis) {
 	return axis;
 }
 
-template<class MatrixType, class float_t=double>
-static inline void randwalk_inplace(MatrixType& X, axis_t axis=-1, float_t std=1)
+template<class EigenType, class float_t=double>
+static inline void randwalk_inplace(EigenType& X, axis_t axis=-1, float_t std=1)
 {
-	typedef typename MatrixType::Index index_t;
+	typedef typename EigenType::Index index_t;
 	axis = _infer_axis(X, axis);
 
 	// create normal distro object
@@ -130,6 +130,40 @@ static inline Matrix<data_t, Dynamic, Dynamic, RowMajor> randwalks(
 	return ret;
 }
 
+// ================================================================
+// nonzeros
+// ================================================================
+
+template<class DenseT>
+static vector<size_t> nonzero_rows(const DenseT& X) {
+	vector<size_t> ret;
+	for (size_t i = 0; i < X.rows(); i++) {
+		for (size_t j = 0; j < X.cols(); j++) {
+			if (X(i, j)) {
+				ret.push_back(i);
+				continue;
+			}
+		}
+	}
+	return ret;
+}
+template<class DenseT>
+static vector<size_t> nonzero_cols(const DenseT& X) {
+	vector<size_t> ret;
+	for (size_t j = 0; j < X.cols(); j++) {
+		for (size_t i = 0; i < X.rows(); i++) {
+			if (X(i, j)) {
+				ret.push_back(j);
+				continue;
+			}
+		}
+	}
+	return ret;
+}
+
+// ================================================================
+// vstack and hstack
+// ================================================================
 
 } // namespace ar
 #endif
