@@ -800,3 +800,28 @@ TEST_CASE("exprange", "array_utils") {
 		REQUIRE(all_eq(ans, out2));
 	}
 }
+
+TEST_CASE("pad", "array_utils") {
+	vector<float> x = {1,3,2};
+	vector<float> ans = {0,0,1,3,2,0};
+
+	SECTION("zero padding") {
+		auto out = pad(x, 2, 1); // 2 on left, 1 on right
+		INFO(to_string(out));
+		REQUIRE(all_eq(out, ans));
+
+		vector<float> ans2 = {1,3,2};
+		auto out2 = pad(x, -1, 0); // 0 on left, 0 on right
+		INFO(to_string(out2));
+		REQUIRE(all_eq(out2, ans2));
+	}
+
+	// pad with a value, not just 0
+	SECTION("constant padding") {
+		vector<float> ans3 = {1,3,2, 99, 99, 99};
+		auto out3 = pad(x, 0, 3, PAD_CONSTANT, 99); // 0 on left, 3 on right
+		INFO(to_string(out3));
+		REQUIRE(all_eq(out3, ans3));
+	}
+}
+

@@ -30,6 +30,8 @@ using std::vector;
 
 namespace ar {
 
+typedef int64_t length_t;
+
 static const double kDefaultNonzeroThresh = .001;
 
 // ================================================================
@@ -54,8 +56,13 @@ static inline auto min(data_t1 x, data_t2 y) -> decltype(x + y) {
 }
 
 template<class data_t1, class data_t2>
-static inline auto absDiff(data_t1 x, data_t2 y) -> decltype(x - y) {
+static inline auto dist_L1(data_t1 x, data_t2 y) -> decltype(x - y) {
 	return x >= y ? x - y : y - x;
+}
+
+template<class data_t1, class data_t2>
+static inline auto dist_sq(data_t1 x, data_t2 y) -> decltype(x - y) {
+	return (x - y) * (x - y);
 }
 
 // ------------------------ logical ops
@@ -775,18 +782,26 @@ static inline double mean(const Container<data_t>& data) {
 // Knuth's numerically stable algorithm for online mean + variance. See:
 // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
 template<class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline void knuth_sse_stats(const data_t* data, len_t len,
-	double& mean, double& sse)
+static inline void mean_and_variance(const data_t* data, len_t len,
+	double& mean, double& variance)
 {
 	mean = data[0];
-	sse = 0;
+	double sse = 0;
 	double delta;
 	for (len_t i=1; i < len; i++) {
 		delta = data[i] - mean;
 		mean += delta / (i+1);
 		sse += delta * (data[i] - mean);
 	}
+	variance = sse / len;
 }
+
+// template<class data_t, class len_t, REQUIRE_INT(len_t)>
+// static inline void mean_and_variance(const data_t* data, len_t len,
+// 	double& mean, double& variance) {
+// 	knuth_sse_stats(data, len, mean, variance);
+// 	variance /= len;
+// }
 
 /** Computes the population variance of data[0..len-1] */
 template <class data_t, class len_t, REQUIRE_INT(len_t)>
@@ -795,9 +810,9 @@ static inline double variance(const data_t *data, len_t len) {
 	if (len == 1) {
 		return 0;
 	}
-	double mean, sse;
-	knuth_sse_stats(data, len, mean, sse);
-	return sse / len;
+	double mean, variance;
+	mean_and_variance(data, len, mean, variance);
+	return variance;
 }
 template<template <class...> class Container, class data_t>
 static inline double variance(const Container<data_t>& data) {
@@ -897,7 +912,7 @@ static inline auto dist_L1(const data_t1* x, const data_t2* y, len_t len)
 {
 	decltype(x[0] - y[0]) sum = 0; // get type of sum correct
 	for (len_t i = 0; i < len; i++) {
-		sum += absDiff(x[i], y[i]);
+		sum += dist_L1(x[i], y[i]);
 	}
 	return sum;
 }
@@ -1385,7 +1400,7 @@ WRAP_BINARY_STD_FUNC(pow);
 
 /** Copies src[0..len-1] to dest[0..len-1] */
 template <class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline void copy(const data_t* src, data_t* dest, len_t len) {
+static inline void copy(const data_t* src, len_t len, data_t* dest) {
 	std::copy(src, src+len, dest);
 }
 /** Returns a copy of the provided array */
@@ -1443,7 +1458,7 @@ WRAP_UNARY_FUNC_WITH_NAME(FUNC, NAME)
 
 // exponents and logs
 WRAP_UNARY_FUNC(abs);
-WRAP_UNARY_FUNC(sqrt);
+WRAP_UNARY_STD_FUNC(sqrt);
 WRAP_UNARY_STD_FUNC(cbrt);
 WRAP_UNARY_STD_FUNC(exp);
 WRAP_UNARY_STD_FUNC(exp2);
@@ -1536,6 +1551,88 @@ static inline Container<data_t> resample(const Container<data_t>& data,
 	array_resample(data.data(), ret.data(), data.size(), newLen);
 	return ret;
 }
+
+// ================================ Pad
+
+enum PadType {PAD_ZERO, PAD_CONSTANT, PAD_WRAP, PAD_EDGE};
+
+template<class data_t1, class data_t2, class data_t3=data_t1>
+static void pad(const data_t1* data, length_t len,
+	length_t leftPadLen, length_t rightPadLen, data_t2* out,
+	PadType padType=PAD_ZERO, data_t3 val=0)
+{
+	leftPadLen = max(leftPadLen, 0);
+	rightPadLen = max(rightPadLen, 0);
+	length_t newLen = leftPadLen + len + rightPadLen;
+
+	// handle cases where we append fixed values to start and end
+	data_t3 initialVal = val;
+	data_t3 finalVal = val;
+	if (padType == PAD_ZERO) {
+		initialVal = 0;
+		finalVal = 0;
+	} else if (padType == PAD_EDGE) {
+		initialVal = data[0];
+		finalVal = data[len-1];
+	}
+	if (padType == PAD_ZERO || padType == PAD_CONSTANT || padType == PAD_EDGE) {
+		for (length_t i = 0; i < leftPadLen; i++) {
+			out[i] = initialVal;
+		}
+		copy(data, len, out+leftPadLen);
+		for (length_t i = leftPadLen + len; i < newLen; i++) {
+			out[i] = finalVal;
+		}
+	}
+	return;
+
+	// handle cases where we append different values to start and end
+	const data_t1* initialAr = nullptr;
+	const data_t1* finalAr = nullptr;
+	if (padType == PAD_WRAP) {
+		initialAr = &data[len - rightPadLen];
+		finalAr = data;
+	}
+
+	assert(padType == PAD_WRAP); // no other pad types supported at present
+
+	for (length_t i = 0; i < leftPadLen; i++) {
+		out[i] = initialAr[i];
+	}
+	copy(data, len, out+leftPadLen);
+	for (length_t i = 0; i < rightPadLen; i++) {
+		out[leftPadLen + len + i] = finalAr[i];
+	}
+}
+
+template<class data_t1, class data_t3=data_t1>
+static unique_ptr<data_t1> pad(const data_t1* data, length_t len,
+	length_t leftPadLen, length_t rightPadLen, PadType padType=PAD_ZERO,
+	data_t3 val=0)
+{
+	leftPadLen = max(leftPadLen, 0);
+	rightPadLen = max(rightPadLen, 0);
+	auto newLen = leftPadLen + len + rightPadLen;
+	unique_ptr<data_t1> ret(new data_t1[newLen]);
+	pad(data, len, leftPadLen, rightPadLen, ret, padType, val);
+	return ret;
+}
+
+template<template <class...> class Container1, class data_t1,
+	class data_t3=data_t1>
+static Container1<data_t1> pad(const Container1<data_t1>& data,
+	length_t leftPadLen, length_t rightPadLen, PadType padType=PAD_ZERO,
+	data_t3 val=0)
+{
+	leftPadLen = max(leftPadLen, 0);
+	rightPadLen = max(rightPadLen, 0);
+	auto newLen = leftPadLen + data.size() + rightPadLen;
+	Container1<data_t1> ret(newLen);
+	pad(data.data(), data.size(), leftPadLen, rightPadLen,
+		ret.data(), padType, val);
+	return ret;
+}
+
 
 // ================================ Equality
 
@@ -1693,9 +1790,9 @@ template<class data_t1, class data_t2, class len_t, class float_t=double,
 static inline bool znormalize(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
-	double mean, sse;
-	knuth_sse_stats(data, len, mean, sse);
-	double std = sqrt(sse / len);
+	double mean, variance;
+	mean_and_variance(data, len, mean, variance);
+	double std = std::sqrt(variance);
 	if (std < nonzeroThresh) {
 		return false;
 	}
@@ -1708,9 +1805,9 @@ template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
 static inline bool znormalize_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
-	double mean, sse;
-	knuth_sse_stats(data, len, mean, sse);
-	double std = sqrt(sse / len);
+	double mean, variance;
+	mean_and_variance(data, len, mean, variance);
+	double std = std::sqrt(variance);
 	if (std < nonzeroThresh) {
 		return false;
 	}
@@ -1898,6 +1995,8 @@ inline V map_get(Container<K, V> map, K key, V defaultVal) {
 	return defaultVal;
 }
 
+// ------------------------ rand_ints
+
 static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
 						 bool replace=false) {
 	vector<int64_t> ret;
@@ -1941,8 +2040,9 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 }
 
 template<class float_t>
-static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
-						 bool replace, const float_t* probs) {
+static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
+	uint64_t howMany, bool replace, const float_t* probs)
+{
 	vector<int64_t> ret;
 	int64_t numPossibleVals = maxVal - minVal + 1;
 
@@ -1993,8 +2093,9 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 }
 
 template<template <class...> class Container, class float_t>
-static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
-						 bool replace, const Container<float_t>& probs) {
+static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
+	uint64_t howMany, bool replace, const Container<float_t>& probs)
+{
 	int64_t numPossibleVals = maxVal - minVal + 1;
 	assertf(probs.size() == numPossibleVals,
 		"Number of probabilities %llu doesn't match number of possible values %lld",
@@ -2002,22 +2103,41 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 	return rand_ints(minVal, maxVal, howMany, replace, probs.data());
 }
 
+// ------------------------ rand_idxs
+
+template<class float_t>
+static inline vector<int64_t> rand_idxs(uint64_t len, uint64_t howMany,
+	bool replace, const float_t* probs)
+{
+	return rand_ints(0, len-1, howMany, replace, probs);
+}
+template<template <class...> class Container, class float_t>
+static inline vector<int64_t> rand_idxs(uint64_t len, uint64_t howMany,
+	bool replace, const Container<float_t>& probs)
+{
+	return rand_ints(0, len-1, howMany, replace, probs);
+}
+
 // ================================ Random Sampling
 
 template<template <class...> class Container, class data_t>
-static inline vector<data_t> rand_choice(const Container<data_t>& data, size_t howMany,
-							   bool replace=false) {
-	auto maxIdx = data.size() - 1;
-	auto idxs = rand_ints(0, maxIdx, howMany, replace);
+static inline vector<data_t> rand_choice(const Container<data_t>& data,
+	size_t howMany, bool replace=false)
+{
+	// auto maxIdx = data.size() - 1;
+	// auto idxs = rand_ints(0, maxIdx, howMany, replace);
+	auto idxs = rand_idxs(data.size(), howMany, replace);
 	return at_idxs(data, idxs);
 }
 
 template<template <class...> class Container1, class data_t,
 	template <class...> class Container2, class float_t>
-static inline vector<data_t> rand_choice(const Container1<data_t>& data, size_t howMany,
-							   bool replace, const Container2<float_t>& probs) {
-	auto maxIdx = data.size() - 1;
-	auto idxs = rand_ints(0, maxIdx, howMany, replace, probs);
+static inline vector<data_t> rand_choice(const Container1<data_t>& data,
+	size_t howMany, bool replace, const Container2<float_t>& probs)
+{
+	// auto maxIdx = data.size() - 1;
+	// auto idxs = rand_ints(0, maxIdx, howMany, replace, probs);
+	auto idxs = rand_idxs(data.size(), howMany, replace, probs);
 	return at_idxs(data, idxs);
 }
 
@@ -2046,7 +2166,7 @@ static inline unique_ptr<data_t[]> randn(len_t len,
 {
 	assert(len > 0);
 	unique_ptr<data_t[]> ret(new data_t[len]);
-	randn_inplace(ret.get(), len, mean, std);
+	randn_inplace(ret, len, mean, std);
 	return ret;
 }
 
@@ -2072,7 +2192,7 @@ static inline unique_ptr<data_t[]> randwalk(len_t len, float_t std=1)
 {
 	assert(len > 0);
 	unique_ptr<data_t[]> ret(new data_t[len]);
-	randwalk_inplace(ret.get(), len, std);
+	randwalk_inplace(ret, len, std);
 	return ret;
 }
 
