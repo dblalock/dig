@@ -12,138 +12,98 @@
 
 #include <Dense>
 
-#include "type_defs.h"
-#include "eigen_array_utils.hpp"
-#include "eigen_utils.hpp"
+#include "array_utils_eigen.hpp" // for randwalks
 #include "subseq.hpp"
+#include "eigen_utils.hpp"
 
-using Eigen::MatrixXd;
-using Eigen::VectorXd;
+using Eigen::Map; // TODO remove
+using Eigen::Matrix;
+using Eigen::Dynamic;
+using Eigen::RowMajor;
 
 using ar::constant_inplace;
-using ar::dist_sq;
-using ar::exprange;
-using ar::first_derivs;
+using ar::normalize_mean_inplace;
 using ar::randwalks;
 using ar::stdev;
-using ar::max; // move scalar funcs elsewhere?
-using ar::variance;
 
-using subseq::mapSubseqs;
-
-#define DEFAULT_NONZERO_THRESH .001
+using subs::first_derivs;
 
 typedef int64_t length_t;
+// typedef Matrix<double, Dynamic, Dynamic, RowMajor> CMatrixXd;
 
-// ================================================================
-// Private functions
-// ================================================================
+//template<class data_t>
+//using CMatrix = Matrix<data_t, Dynamic, Dynamic, RowMajor>;
+typedef Matrix<double, Dynamic, Dynamic, RowMajor> CMatrix;
+
+//template<class data_t>
+//using FMatrix = Matrix<data_t, Dynamic, Dynamic>
+typedef Matrix<double, Dynamic, Dynamic> FMatrix;
 
 // ------------------------------------------------
 // Structure scores
 // ------------------------------------------------
 
 template<class data_t>
-static MatrixXd createRandWalks(const data_t* seq, length_t seqLen,
-	length_t walkLen, length_t nwalks=100) {
-
+static Matrix<data_t, Dynamic, Dynamic, RowMajor> createRandWalks(
+	const data_t* seq, length_t seqLen, length_t walkLen, length_t nwalks=100)
+{
 	auto derivs = first_derivs(seq, seqLen);
-	double std = stdev(derivs);
+	double std = stdev(derivs.get(), seqLen - 1);
 
-	return randwalks<data_t>(nwalks, walkLen, std);
+	Matrix<data_t, Dynamic, Dynamic, RowMajor> walks = randwalks<data_t>(nwalks,
+		walkLen, std);
+	for (int i = 0; i < nwalks; i++) {
+		data_t* rowStart = walks.row(i).data();
+		normalize_mean_inplace(rowStart, walkLen);
+	}
+	return walks;
 }
 
-template<class MatrixT, class VectorT>
-static inline distsSqToVector(const MatrixT& X, const VectorT& v) {
-	auto diffs = X.rowwise() - v.transpose();
-	return diffs.rowwise().squaredNorm();
+template<class DenseT, class VectorT>
+static inline auto distsSqToVector(const DenseT& X, const VectorT& v)
+	-> Matrix<typename VectorT::Scalar, Dynamic, 1>
+{
+	return (X.rowwise() - v.transpose()).rowwise().squaredNorm().eval();
 }
 
-template<class MatrixT, class VectorT>
-static inline VectorT minDistSqToVector(const MatrixT& X, const VectorT& v) {
-	auto diffs = X.rowwise() - v.transpose();
-	return diffs.rowwise().squaredNorm().minCoeff();
+template<class DenseT, class VectorT>
+static inline double minDistSqToVector(const DenseT& X, const VectorT& v) {
+	return distsSqToVector(X, v).minCoeff();
 }
 
-// ------------------------------------------------
-// Feature mat construction
-// ------------------------------------------------
-
-template<class len_t>
-static inline vector<len_t> defaultLengths(len_t Lmax) {
-	Lmax = max(Lmax, 16)
-	return exprange(8, Lmax + 1);
-}
-
-// ================================================================
-// Public functions
-// ================================================================
-
-// ------------------------------------------------
-// Structure scores
-// ------------------------------------------------
-
-template<class data_t1, class data_t2, class MatrixT>
+template<class data_t1, class data_t2, class DenseT>
 static void structureScores1D(const data_t1* seq, length_t seqLen,
-	const MatrixT walks, data_t2* out) {
-
-	length_t subseqLen = walks.cols(); // each row of walks is one random walk
+							  length_t subseqLen, const DenseT& walks,
+							  data_t2* out)
+{
+	//	length_t subseqLen = walks.cols(); // each row of walks is one random walk
 	length_t numSubseqs = seqLen - subseqLen + 1;
 	assert(numSubseqs >= 1);
 
-	if (walkLen < 4) {
-		numSubseqs = length > 0 ? numSubseqs : seqLen;
+	if (subseqLen < 4) {
+		//		numSubseqs = subseqLen > 0 ? numSubseqs : seqLen;
 		constant_inplace(out, seqLen, 0); // scores of 0
 	}
 
 	for (length_t i = 0; i < numSubseqs; i++) {
-		auto seqVect = eigenWrap1D_nocopy(seq + i, subseqLen);
-		double min = minDistToVector(walks, seqVect);
+		const data_t1* subseq = seq + i;
+		// NOTE: it is *really* important that this be a const matrix or
+		// Eigen will spew a wall of inscrutable errors about ambiguous
+		// function overloads and return types
+		Map<const Matrix<data_t1, Dynamic, 1> > seqVect(subseq, subseqLen);
+		double min = minDistSqToVector(walks, seqVect);
 		out[i] = static_cast<data_t2>(min);
 	}
+	// write 0s past end of valid range
+	constant_inplace(out + numSubseqs, seqLen - numSubseqs, 0);
 }
 
-template<class data_t1, class data_t2, class dist_t>
-static void neighborSims1D(const data_t* seq, length_t seqLen,
-	const data_t2* neighbor, length_t neighborLen, dist_t* out)
-{
-	double neighborVariance = variance(neighbor, neighborLen);
-	if (neighborVariance < DEFAULT_NONZERO_THRESH) {
-		return;
-	}
-	data_t tmp[neighborLen];
-	mapSubseqs([neighbor, neighborLen](data_t* subseq) {
-
-	}, neighborLen, seq, seqLen, out);
-}
-
-
-
-// SELF: pick up here by adding code to:
-// 1) randomly sample subseqs
-// 2) compute sims for a given shape + signal
-	// prolly using mapSubseqs
-
-
-
-
-
-
 // ------------------------------------------------
-// Feature Matrix
+// Feature matrix
 // ------------------------------------------------
 
-// SELF: fill in necessary funcs until we can code this
-// template<class data_t, class len_t=size_t>
-// static Matrix<data_t, Dynamic, Dynamic, RowMajor> buildShapeFeatureMat(
-// 	const data_t* T, len_t n, len_t d, len_t Lmin, len_t Lmax) {
-
-// 	auto lengths = defaultLengths(Lmax);
-// 	int numNeighbors = log2(n);
-// 	Phi = _neighborSimsMat(T, n, d, lengths, numNeighbors);
-
-
-// }
+std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
+	length_t d, length_t n, length_t Lmin, length_t Lmax, length_t Lfilt);
 
 #endif
 

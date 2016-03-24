@@ -34,6 +34,8 @@ typedef int64_t length_t;
 
 static const double kDefaultNonzeroThresh = .001;
 
+// TODO support for negative strides / asserts where they can't be negative
+
 // ================================================================
 // Scalar funcs
 // ================================================================
@@ -45,54 +47,64 @@ static inline data_t abs(data_t x) {
 	return x >= 0 ? x : -x;
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline auto max(data_t1 x, data_t2 y) -> decltype(x + y) {
 	return x >= y ? x : y;
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline auto min(data_t1 x, data_t2 y) -> decltype(x + y) {
 	return x <= y ? x : y;
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline auto dist_L1(data_t1 x, data_t2 y) -> decltype(x - y) {
 	return x >= y ? x - y : y - x;
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline auto dist_sq(data_t1 x, data_t2 y) -> decltype(x - y) {
 	return (x - y) * (x - y);
 }
 
 // ------------------------ logical ops
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline bool logical_and(data_t1 x, data_t2 y) {
 	return static_cast<bool>(x) && static_cast<bool>(y);
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline bool logical_nand(data_t1 x, data_t2 y) {
 	return !logical_and(x, y);
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline bool logical_or(data_t1 x, data_t2 y) {
 	return static_cast<bool>(x) || static_cast<bool>(y);
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline bool logical_nor(data_t1 x, data_t2 y) {
 	return !logical_or(x, y);
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline bool logical_xor(data_t1 x, data_t2 y) {
 	return static_cast<bool>(x) != static_cast<bool>(y);
 }
 
-template<class data_t1, class data_t2>
+template<class data_t1, class data_t2,
+	REQUIRE_NOT_PTR(data_t1), REQUIRE_NOT_PTR(data_t2)>
 static inline bool logical_xnor(data_t1 x, data_t2 y) {
 	return static_cast<bool>(x) == static_cast<bool>(y);
 }
@@ -158,38 +170,40 @@ static inline data_t bitwise_not(data_t x) {
 
 template <class F, class data_t, class data_t2, class len_t, REQUIRE_INT(len_t)>
 static inline void map(const F&& func, const data_t *RESTRICT data,
-	len_t len, data_t2 *RESTRICT out) {
+	len_t len, data_t2 *RESTRICT out, length_t inStride=1, length_t outStride=1)
+{
 	for (len_t i = 0; i < len; i++) {
-		out[i] = static_cast<data_t2>(func(data[i]));
+		out[i * outStride] = static_cast<data_t2>(func(data[i * inStride]));
 	}
 }
 template <class F, class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline void map_inplace(const F&& func, const data_t* data, len_t len) {
-	// static_assert(std::is_integral<len_t>::value, "");
-//	ASSERT_INTEGRAL(len_t);
+static inline void map_inplace(const F&& func, data_t* data, len_t len,
+	length_t stride=1)
+{
 	for (len_t i = 0; i < len; i++) {
-		data[i] = static_cast<data_t>(func(data[i]));
+		data[i * stride] = static_cast<data_t>(func(data[i * stride]));
 	}
 }
 template <class F, class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline auto map(const F&& func, const data_t* data, len_t len)
+static inline auto map(const F&& func, const data_t* data, len_t len,
+	length_t stride=1)
 	-> unique_ptr<decltype(func(data[0]))[]>
 {
-//	ASSERT_INTEGRAL(len_t);
 	unique_ptr<decltype(func(data[0]))[]> ret(new decltype(func(data[0]))[len]);
 	for (len_t i = 0; i < len; i++) {
-		ret[i] = func(data[i]);
+		ret[i] = func(data[i * stride]);
 	}
 	return ret;
 }
 /** Returns a new container holding the results of applying the function
  * to the given container */
 template<class F, template <class...> class Container, class... Args>
-static inline auto map(const F&& func, const Container<Args...>& container)
+static inline auto map(const F&& func, const Container<Args...>& container,
+	length_t stride=1)
 	-> Container<decltype(func(*begin(container)))>
 {
 	Container<decltype(func(*begin(container)))> ret;
-	for (auto i = begin(container); i < end(container); i++) {
+	for (auto i = begin(container); i < end(container); i+= stride) {
 		ret.emplace_back(func(*i));
 	}
 	return ret;
@@ -200,34 +214,37 @@ static inline auto map(const F&& func, const Container<Args...>& container)
 template <class F, class data_t1, class data_t2, class data_t3, class len_t,
 	 REQUIRE_INT(len_t)>
 static inline void map(const F&& func, const data_t1* x, const data_t2* y,
-	len_t len, data_t3 *RESTRICT out)
+	len_t len, data_t3 *RESTRICT out, length_t xStride=1, length_t yStride=1,
+	length_t outStride=1)
 {
 	for (len_t i = 0; i < len; i++) {
-		out[i] = static_cast<data_t3>(func(x[i], y[i]));
+		out[i * outStride] = static_cast<data_t3>(
+			func(x[i * xStride], y[i * yStride]));
 	}
 }
 template <class F, class data_t1, class data_t2, class len_t,
 	REQUIRE_INT(len_t)>
 static inline auto map(const F&& func, const data_t1* x, const data_t2* y,
-	len_t len) -> unique_ptr<decltype(func(x[0], y[0]))[]>
+	len_t len,  length_t xStride=1, length_t yStride=1)
+	-> unique_ptr<decltype(func(x[0], y[0]))[]>
 {
 	unique_ptr<decltype(func(x[0], y[0]))[]> ret(
 		new decltype(func(x[0], y[0]))[len]);
 	for (len_t i = 0; i < len; i++) {
-		ret[i] = func(x[i], y[i]);
+		ret[i] = func(x[i * xStride], y[i * yStride]);
 	}
 	return ret;
 }
 template<class F, template <class...> class Container1, class... Args1,
 	template <class...> class Container2, class... Args2>
 static inline auto map(const F&& func, const Container1<Args1...>& x,
-	const Container2<Args2...>& y)
+	const Container2<Args2...>& y, length_t xStride=1, length_t yStride=1)
 	-> Container1<decltype(func(*begin(x), *begin(y)))>
 {
-	assert(x.size() == y.size());
+	assert(x.size() / xStride == y.size() / yStride);
 	Container1<decltype(func(*begin(x), *begin(y)))> ret;
 	auto ity = begin(y);
-	for (auto itx = begin(x); itx < end(x); itx++, ity++) {
+	for (auto itx = begin(x); itx < end(x); itx += xStride, ity += yStride) {
 		ret.emplace_back(func(*itx, *ity));
 	}
 	return ret;
@@ -237,25 +254,29 @@ static inline auto map(const F&& func, const Container1<Args1...>& x,
 
 template <class F, class data_t, class data_t2, class len_t, REQUIRE_INT(len_t)>
 static inline void mapi(const F&& func, const data_t *RESTRICT data, len_t len,
-	data_t2 *RESTRICT out) {
+	data_t2 *RESTRICT out, length_t inStride=1, length_t outStride=1)
+{
 	for (len_t i = 0; i < len; i++) {
-		out[i] = static_cast<data_t2>(func(i, data[i]));
+		out[i * outStride] = static_cast<data_t2>(func(i, data[i * inStride]));
 	}
 }
 template <class F, class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline void mapi_inplace(const F&& func, const data_t* data, len_t len) {
+static inline void mapi_inplace(const F&& func, data_t* data, len_t len,
+	length_t stride=1)
+{
 	for (len_t i = 0; i < len; i++) {
-		data[i] = (data_t) func(i, data[i]);
+		data[i * stride] = (data_t) func(i, data[i * stride]);
 	}
 }
 template <class F, class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline auto mapi(const F&& func, const data_t* data, len_t len)
+static inline auto mapi(const F&& func, const data_t* data, len_t len,
+	length_t stride=1)
 	-> unique_ptr<decltype(func(len, data[0]))[]>
 {
 	unique_ptr<decltype(func(len, data[0]))[]>
 			ret(new decltype(func(len, data[0]))[len]);
 	for (len_t i = 0; i < len; i++) {
-		ret[i] = func(i, data[i]);
+		ret[i] = func(i, data[i * stride]);
 	}
 	return ret;
 }
@@ -263,15 +284,20 @@ static inline auto mapi(const F&& func, const data_t* data, len_t len)
  * to the given container; the index within the array, as well as the
  * array element itself, are passed to func. */
 template<class F, template <class...> class Container, class... Args>
-static inline auto mapi(const F&& func, const Container<Args...>& container)
-	-> Container<decltype(func(container.size(), *begin(container)))>
+static inline auto mapi(const F&& func, const Container<Args...>& container,
+	length_t stride=1)
+	-> Container<decltype(func(0, *begin(container)))>
 {
 	Container<decltype(func(container.size(), *begin(container)))> ret;
-	size_t i = 0;
-	for (const auto& el : container) {
-		ret.emplace_back(func(i, el));
-		i++;
+	length_t i = 0;
+	for (auto it = begin(container); it < end(container); it += stride, i++) {
+		ret.emplace_back(func(i, *it));
 	}
+	// size_t i = 0;
+	// for (const auto& el : container) {
+	// 	ret.emplace_back(func(i, el));
+	// 	i++;
+	// }
 	return ret;
 }
 
@@ -279,36 +305,38 @@ static inline auto mapi(const F&& func, const Container<Args...>& container)
 template <class F, class data_t1, class data_t2, class data_t3, class len_t,
 	REQUIRE_INT(len_t)>
 static inline void mapi(const F&& func, const data_t1* x, const data_t2* y,
-	len_t len, data_t3 *RESTRICT out)
+	len_t len, data_t3 *RESTRICT out, length_t xStride=1, length_t yStride=1,
+	length_t outStride=1)
 {
 	for (len_t i = 0; i < len; i++) {
-		out[i] = static_cast<data_t3>(func(i, x[i], y[i]));
+		out[i * outStride] = static_cast<data_t3>(
+			func(i, x[i * xStride], y[i * yStride]));
 	}
 }
 template <class F, class data_t1, class data_t2, class len_t,
 	REQUIRE_INT(len_t)>
 static inline auto mapi(const F&& func, const data_t1* x,
-	const data_t2* y, len_t len)
+	const data_t2* y, len_t len, length_t xStride=1, length_t yStride=1)
 	-> unique_ptr<decltype(func(len, x[0], y[0]))[]>
 {
 	unique_ptr<decltype(func(len, x[0], y[0]))[]>
 		ret(new decltype(func(len, x[0], y[0]))[len]);
 	for (len_t i = 0; i < len; i++) {
-		ret[i] = func(i, x[i], y[i]);
+		ret[i] = func(i, x[i * xStride], y[i * yStride]);
 	}
 	return ret;
 }
 template<class F, template <class...> class Container1, class... Args1,
 	template <class...> class Container2, class... Args2>
 static inline auto mapi(const F&& func, const Container1<Args1...>& x,
-	const Container2<Args2...>& y)
-	-> Container1<decltype(func(x.size(), *begin(x), *begin(y)))>
+	const Container2<Args2...>& y, length_t xStride=1, length_t yStride=1)
+	-> Container1<decltype(func(0, *begin(x), *begin(y)))>
 {
-	assert(x.size() == y.size());
+	assert(x.size() / xStride == y.size() / yStride);
 	Container1<decltype(func(x.size(), *begin(x), *begin(y)))> ret;
 	auto ity = begin(y);
-	size_t i = 0;
-	for (auto itx = begin(x); itx < end(x); itx++, ity++, i++) {
+	length_t i = 0;
+	for (auto itx = begin(x); itx < end(x); itx += xStride, ity += yStride, i++) {
 		ret.emplace_back(func(i, *itx, *ity));
 	}
 	return ret;
@@ -521,6 +549,8 @@ static inline Container1<Args1...> at_idxs(const Container1<Args1...>& container
 
 // ================================ range
 
+// ------------------------ start and stop
+
 template <class data_t1, class data_t2, class step_t=int8_t>
 static inline int32_t num_elements_in_range(data_t1 startVal,
 											data_t2 stopVal, step_t step)
@@ -548,8 +578,9 @@ template <class data_t1, class data_t2, class step_t=int8_t>
 static inline auto range_ar(data_t1 startVal, data_t2 stopVal, step_t step=1)
 	-> unique_ptr<decltype(stopVal - startVal + step)[]>
 {
+	typedef decltype(stopVal - startVal + step) out_t;
 	int32_t len = num_elements_in_range(startVal, stopVal, step);
-	unique_ptr<decltype(stopVal - startVal + step)[]> data(new decltype(stopVal - startVal + step)[len]);
+	unique_ptr<out_t[]> data(new out_t[len]);
 	range_inplace(data, startVal, stopVal, step);
 	return data;
 }
@@ -564,6 +595,32 @@ static inline auto range(data_t1 startVal, data_t2 stopVal, step_t step=1)
 	range_inplace(data.data(), startVal, stopVal, step);
 	return data;
 }
+
+// ------------------------ stop only
+// note that this is different from python range in that range(-k) is
+// equivalent range(0, -k, -1), rather than returning an empty collection
+
+template <class data_t0, class data_t1>
+static inline void range_inplace(data_t0* data, data_t1 stopVal) {
+	int8_t step = stopVal >= 0 ? 1 : -1;
+	return range_inplace(data, 0, stopVal, step);
+}
+
+/** Create an array containing a sequence of values; equivalent to Python
+ * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
+template <class data_t>
+static inline unique_ptr<data_t> range_ar(data_t stopVal) {
+	int8_t step = stopVal >= 0 ? 1 : -1;
+	return range_ar(0, stopVal, step);
+}
+/** Create an array containing a sequence of values; equivalent to Python
+ * range(stopVal) */
+template <class data_t>
+static inline vector<data_t> range(data_t stopVal) {
+	int8_t step = stopVal >= 0 ? 1 : -1;
+	return range(0, stopVal, step);
+}
+
 
 // ================================ exprange
 
@@ -1068,6 +1125,15 @@ static inline void NAME(const data_t1* x, const data_t2* y, len_t len, \
 { \
 	return map([](data_t1 a, data_t2 b){ return a OP b;}, x, y, len, out); \
 } \
+template <class data_t1, class data_t2, class len_t, \
+	REQUIRE_INT(len_t)> \
+static inline void NAME ## _inplace(data_t1 *RESTRICT x, \
+	const data_t2 *RESTRICT y, len_t len) \
+{ \
+	for (len_t i = 0; i < len; i++) { \
+		x[i] = static_cast<data_t1>(x[i] OP y[i]); \
+	} \
+} \
 template <class data_t1, class data_t2, class len_t, REQUIRE_INT(len_t)> \
 static inline auto NAME(const data_t1* x, const data_t2* y, len_t len) \
 	-> unique_ptr<decltype(x[0] OP y[0])[]> \
@@ -1098,6 +1164,15 @@ static inline void NAME(const data_t1* x, const data_t2* y, data_t3* out, \
 { \
 	for (len_t i = 0; i < len; i++) { \
 		out[i] = static_cast<data_t3>(FUNC(x[i], y[i])); \
+	} \
+} \
+template <class data_t1, class data_t2, class len_t, \
+	REQUIRE_INT(len_t)> \
+static inline void NAME ## _inplace(data_t1 *RESTRICT x, \
+	const data_t2 *RESTRICT y, len_t len) \
+{ \
+	for (len_t i = 0; i < len; i++) { \
+		x[i] = static_cast<data_t1>(FUNC(x[i], y[i])); \
 	} \
 } \
 template <class data_t1, class data_t2, class len_t, REQUIRE_INT(len_t)> \
@@ -1201,32 +1276,47 @@ static inline auto NAME(const Container<data_t1>& data, data_t2 val) \
 { \
 	return map([val](data_t1 x) {return x OP val;}, data); \
 } \
+template<template <class...> class Container, class data_t1, \
+	class data_t2, REQUIRE_NOT_PTR(data_t2)> \
+static inline void NAME ## _inplace(Container<data_t1>& data, data_t2 val) \
+{ \
+	map_inplace([val](data_t1 x) {return x OP val;}, \
+		data.data(), data.size()); \
+} \
+\
 \
 template <class data_t1, class data_t2, class data_t3, class len_t, \
-	REQUIRE_INT(len_t), REQUIRE_NUM(data_t2)> \
+	REQUIRE_INT(len_t), REQUIRE_NOT_PTR(data_t2)> \
 static inline void NAME(data_t2 val, data_t1 *RESTRICT data, len_t len, \
 	data_t3 *RESTRICT out) \
 { \
 	map([val](data_t1 x){return val OP x;}, data, len, out); \
 } \
 template <class data_t1, class data_t2, class len_t, \
-	REQUIRE_INT(len_t), REQUIRE_NUM(data_t2)> \
+	REQUIRE_INT(len_t), REQUIRE_NOT_PTR(data_t2)> \
 static inline void NAME ## _inplace(data_t2 val, data_t1* data, len_t len) { \
 	map_inplace([val](data_t1 x){return val OP x;}, data, len); \
 } \
 template <class data_t1, class data_t2, class len_t, \
-	REQUIRE_INT(len_t), REQUIRE_NUM(data_t2)> \
+	REQUIRE_INT(len_t), REQUIRE_NOT_PTR(data_t2)> \
 static inline auto NAME(data_t2 val, const data_t1* data, len_t len) \
 	-> unique_ptr<decltype(val OP data[0])[]> \
 { \
 	return map([val](data_t1 x) {return val OP x;}, data, len); \
 } \
 template<template <class...> class Container, class data_t1, \
-	class data_t2, REQUIRE_NUM(data_t2)> \
+	class data_t2, REQUIRE_NOT_PTR(data_t2)> \
 static inline auto NAME(data_t2 val, const Container<data_t1>& data) \
 	-> Container<decltype(val OP *begin(data))> \
 { \
 	return map([val](data_t1 x) {return val OP x;}, data); \
+} \
+template<template <class...> class Container, class data_t1, \
+	class data_t2, REQUIRE_NOT_PTR(data_t2)> \
+static inline void NAME ## _inplace(data_t2 val, Container<data_t1>& data) \
+{ \
+	map_inplace([val](data_t1 x) {return val OP x;}, \
+		data.data(), data.size()); \
 } \
 
 // TODO do +=, etc, also via map_inplace
@@ -1266,26 +1356,26 @@ static inline auto NAME(const Container<data_t1>& data, data_t2 val) \
 } \
 \
 template <class data_t1, class data_t2, class data_t3, class len_t, \
-	REQUIRE_INT(len_t), REQUIRE_NUM(data_t2)> \
+	REQUIRE_INT(len_t), REQUIRE_NOT_PTR(data_t2)> \
 static inline void NAME(data_t2 val, data_t1 *RESTRICT data, len_t len, \
 	data_t3 *RESTRICT out) \
 { \
 	map([val](data_t1 x){return FUNC(val, x);}, data, len, out); \
 } \
 template <class data_t1, class data_t2, class len_t, \
-	REQUIRE_INT(len_t), REQUIRE_NUM(data_t2)> \
+	REQUIRE_INT(len_t), REQUIRE_NOT_PTR(data_t2)> \
 static inline void NAME ## _inplace(data_t2 val, data_t1* data, len_t len) { \
 	map_inplace([val](data_t1 x){return FUNC(val, x);}, data, len); \
 } \
 template <class data_t1, class data_t2, class len_t, \
-	REQUIRE_INT(len_t), REQUIRE_NUM(data_t2)> \
+	REQUIRE_INT(len_t), REQUIRE_NOT_PTR(data_t2)> \
 static inline auto NAME(data_t2 val, const data_t1* data, len_t len) \
 	-> unique_ptr<decltype(FUNC(val, data[0]))[]> \
 { \
 	return map([val](data_t1 x) {return FUNC(val, x);}, data, len); \
 } \
 template<template <class...> class Container, class data_t1, \
-	class data_t2, REQUIRE_NUM(data_t2)> \
+	class data_t2, REQUIRE_NOT_PTR(data_t2)> \
 static inline auto NAME(data_t2 val, const Container<data_t1>& data) \
 	-> Container<decltype(FUNC(val, *begin(data)))> \
 { \
@@ -1312,7 +1402,7 @@ static inline auto NAME(data_t2 val, const Container<data_t1>& data) \
 	WRAP_BINARY_FUNC_WITH_NAME(FUNC, FUNC)
 
 #define WRAP_BINARY_FUNC_WITH_NAME_IN_NAMESPACE(FUNC, NAME, NAMESPACE) \
-	using NAMESPACE::FUNC;
+	using NAMESPACE::FUNC; \
 	WRAP_BINARY_FUNC_WITH_NAME(FUNC, NAME)
 
 #define WRAP_BINARY_STD_FUNC_WITH_NAME(FUNC, NAME) \
@@ -1453,8 +1543,6 @@ using std::FUNC; \
 WRAP_UNARY_FUNC_WITH_NAME(FUNC, NAME)
 
 #define WRAP_UNARY_STD_FUNC(FUNC) WRAP_UNARY_STD_FUNC_WITH_NAME(FUNC, FUNC)
-
-// ================================ Exp
 
 // exponents and logs
 WRAP_UNARY_FUNC(abs);
@@ -1826,7 +1914,7 @@ static inline bool normalize_mean(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
 	auto avg = mean(data, len);
-	sub(data, len, mean, out);
+	sub(data, len, avg, out);
 	return true;
 }
 template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
@@ -1834,7 +1922,7 @@ static inline bool normalize_mean_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
 	auto avg = mean(data, len);
-	sub(data, len, mean);
+	sub(data, len, avg);
 	return true;
 }
 WRAP_NORMALIZE_FUNC(normalize_mean)
@@ -1919,6 +2007,68 @@ static inline bool normalize_L2_inplace(data_t1* data, len_t len,
 	return true;
 }
 WRAP_NORMALIZE_FUNC(normalize_L2)
+
+// ------------------------ Linf norm (max norm)
+
+template<class data_t1, class data_t2, class len_t, class float_t=double,
+	REQUIRE_INT(len_t)>
+static inline bool normalize_max(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	data_t1 norm = max(data, len);
+	if (norm < nonzeroThresh) {
+		return false;
+	}
+	div(data, len, norm, out);
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+static inline bool normalize_max_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	data_t1 norm = max(data, len);
+	if (norm < nonzeroThresh) {
+		return false;
+	}
+	div_inplace(data, len, norm);
+	return true;
+}
+WRAP_NORMALIZE_FUNC(normalize_max)
+
+// ------------------------ 0-1 normalize
+
+template<class data_t1, class data_t2, class len_t, class float_t=double,
+	REQUIRE_INT(len_t)>
+static inline bool normalize_zero_one(data_t1 *RESTRICT data, len_t len,
+	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto minVal = min(data, len);
+	auto maxVal = max(data, len);
+	double range = maxVal - minVal;
+	if (range < nonzeroThresh) {
+		return false;
+	}
+	for (len_t i = 0; i < len; i++) {
+		out[i] = static_cast<data_t2>((data[i] - minVal) / range);
+	}
+	return true;
+}
+template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+static inline bool normalize_zero_one_inplace(data_t1* data, len_t len,
+	float_t nonzeroThresh=kDefaultNonzeroThresh)
+{
+	auto minVal = min(data, len);
+	auto maxVal = max(data, len);
+	double range = maxVal - minVal;
+	if (range < nonzeroThresh) {
+		return false;
+	}
+	for (len_t i = 0; i < len; i++) {
+		data[i] = static_cast<data_t1>((data[i] - minVal) / range);
+	}
+	return true;
+}
+WRAP_NORMALIZE_FUNC(normalize_zero_one)
 
 // ================================================================
 // Stringification / IO
@@ -2041,8 +2191,12 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 
 template<class float_t>
 static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
-	uint64_t howMany, bool replace, const float_t* probs)
+	uint64_t howMany, bool replace=false, const float_t* probs=nullptr)
 {
+	if (! probs) {
+		return rand_ints(minVal, maxVal, howMany, replace);
+	}
+
 	vector<int64_t> ret;
 	int64_t numPossibleVals = maxVal - minVal + 1;
 
@@ -2053,7 +2207,7 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 			"Can't sample %llu values without replacement between min %lld and max %lld",
 			howMany, minVal, maxVal);
 
-	assertf(all_nonnegative(probs), "Probabilities must be nonnegative!");
+	assertf(all_nonnegative(probs, numPossibleVals), "Probabilities must be nonnegative!");
 	auto totalProb = sum(probs, numPossibleVals);
 	assertf(totalProb > 0, "Probabilities sum to a value <= 0");
 
@@ -2107,7 +2261,7 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 
 template<class float_t>
 static inline vector<int64_t> rand_idxs(uint64_t len, uint64_t howMany,
-	bool replace, const float_t* probs)
+	bool replace=false, const float_t* probs=nullptr)
 {
 	return rand_ints(0, len-1, howMany, replace, probs);
 }
@@ -2208,12 +2362,68 @@ static inline void sort_inplace(Container<data_t>& data) {
 }
 
 template<template <class...> class Container, class data_t>
-static inline void sort(Container<data_t>& data) {
+static inline Container<data_t> sort(const Container<data_t>& data) {
 	Container<data_t> ret(data);
 	sort(ret);
+	return ret;
+}
+
+// ================================ Argsort
+
+template<class data_t, class len_t, REQUIRE_INT(len_t)>
+static void argsort(const data_t* data, length_t len, len_t* out,
+	bool ascending=true)
+{
+	typedef std::pair<length_t, data_t> pair;
+
+	// pair idx with value
+	auto pairs = mapi([](length_t i, data_t x) {
+		return pair(i, x);
+	}, data, len);
+	// sort pairs by value
+	if (ascending) {
+		std::sort(pairs.get(), pairs.get() + len,
+		[](const pair& lhs, const pair& rhs) {
+			return lhs.second < rhs.second;
+		});
+	} else {
+		std::sort(pairs.get(), pairs.get() + len,
+		[](const pair& lhs, const pair& rhs) {
+			return lhs.second > rhs.second;
+		});
+	}
+	// return idxs that yield values in sorted order
+	map([](const pair& p) { return p.first; }, pairs.get(), len, out);
+}
+template<class data_t>
+static inline unique_ptr<length_t[]> argsort(const data_t* data, length_t len,
+	bool ascending=true)
+{
+	unique_ptr<length_t[]> ret(new length_t[len]);
+	argsort(data, len, ret, ascending);
+	return ret;
+}
+
+template<template <class...> class Container, class data_t>
+static inline Container<length_t> argsort(const Container<data_t>& data,
+	bool ascending=true)
+{
+	Container<length_t> ret(data.size());
+	argsort(data.data(), data.size(), ret.data(), ascending);
 	return ret;
 }
 
 
 } // namespace ar
 #endif
+
+
+
+
+
+
+
+
+
+
+

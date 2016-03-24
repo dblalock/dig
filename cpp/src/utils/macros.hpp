@@ -8,7 +8,9 @@
 #ifndef __MACROS_HPP
 #define __MACROS_HPP
 
+// ------------------------ restrict keyword
 // adapted from http://stackoverflow.com/a/5948101/1153180
+
 #if defined(__GNUC__) && ((__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1))
 	#define RESTRICT __restrict__
 #elif defined(__clang__)
@@ -19,6 +21,7 @@
 	#define RESTRICT
 #endif
 
+// ------------------------ type traits macros
 #ifdef __cplusplus
 	#include <type_traits>
 
@@ -29,12 +32,26 @@
 	#define ASSERT_INTEGRAL(T) ASSERT_TRAIT(is_integral, T, "Type not integral!")
 
 	// put these as extra template params to enforce constraints
-	// on previous template params
+	// on previous template params; e.g.:
+	//
+	// template<class T, REQUIRE_INT(T)> T foo(T arg) { return arg + 1; }
+	//
 	#define REQUIRE_TRAIT(TRAIT, T) \
-		typename std::enable_if<std::TRAIT<T>::value, T>::type = 0
+		typename = typename std::enable_if<std::TRAIT<T>::value, T>::type
+
+	#define REQUIRE_NOT_TRAIT(TRAIT, T) \
+		typename = typename std::enable_if<!std::TRAIT<T>::value, T>::type
+
+	#define REQUIRE_IS_A(BASE, T) \
+		typename = typename std::enable_if<std::is_base_of<BASE, T>::value, T>::type
+
+	#define REQUIRE_IS_NOT_A(BASE, T) \
+		typename = typename std::enable_if<!std::is_base_of<BASE, T>::value, T>::type
+
 	#define REQUIRE_INT(T) REQUIRE_TRAIT(is_integral, T)
 	#define REQUIRE_NUM(T) REQUIRE_TRAIT(is_arithmetic, T)
 	#define REQUIRE_PRIMITIVE(T) REQUIRE_TRAIT(is_arithmetic, T)
-#endif
+	#define REQUIRE_NOT_PTR(T) REQUIRE_NOT_TRAIT(is_pointer, T)
+#endif // __cplusplus
 
-#endif
+#endif // __MACROS_HPP

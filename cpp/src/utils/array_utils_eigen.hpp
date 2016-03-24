@@ -12,17 +12,20 @@
 #include <algorithm>
 #include "array_utils.hpp"
 
-using std::min;
+using Eigen::Dynamic;
+using Eigen::EigenBase;
+using Eigen::Matrix;
+using Eigen::RowMajor;
 
 typedef int8_t axis_t;
 
 namespace ar {
 
 template<class F, class Derived1, class Derived2>
-static inline auto copy(const F&& func, const EigenBase<Derived1>& in,
+static inline void copy(const F&& func, const EigenBase<Derived1>& in,
 	EigenBase<Derived2>& out, size_t len=-1) {
-	len = min(len, in.size())
-	assert(len <= out.size())
+	len = min(len, in.size());
+	assert(len <= out.size());
 
 	for (size_t i = 0; i < len; i++) {
 		out(i) = in(i);
@@ -43,14 +46,14 @@ static inline void randn(EigenType& X, float_t mean=0, float_t std=1) {
     std::normal_distribution<> d(mean, std);
 
 	if (X.IsRowMajor) {
-		for (index_t i = 0; i < X.rows()) {
-			for (index_t j = 0; i < X.cols()) {
+		for (index_t i = 0; i < X.rows(); i++) {
+			for (index_t j = 0; i < X.cols(); j++) {
 				X(i, j) = d(gen);
 			}
 		}
 	} else {
-		for (index_t j = 0; i < X.cols()) {
-			for (index_t i = 0; i < X.rows()) {
+		for (index_t j = 0; j < X.cols(); j++) {
+			for (index_t i = 0; i < X.rows(); i++) {
 				X(i, j) = d(gen);
 			}
 		}
@@ -84,11 +87,11 @@ static inline void randwalk_inplace(EigenType& X, axis_t axis=-1, float_t std=1)
     std::normal_distribution<> d(0, std);
 
 	if (X.IsRowMajor && axis == 0) {
-		for (index_t j = 0; i < X.cols()) { // fill in 1st row
+		for (index_t j = 0; j < X.cols(); j++) { // fill in 1st row
 			X(0, j) = d(gen);
 		}
-		for (index_t i = 1; i < X.rows()) { // fill in remaining rows
-			for (index_t j = 0; i < X.cols()) {
+		for (index_t i = 1; i < X.rows(); i++) { // fill in remaining rows
+			for (index_t j = 0; j < X.cols(); j++) {
 				X(i, j) = X(i-1, j) + d(gen);
 			}
 		}
