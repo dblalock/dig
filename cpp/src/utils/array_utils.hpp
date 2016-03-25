@@ -16,16 +16,20 @@
 #include <sstream>
 #include <random>
 #include <unordered_map>
+#include <unordered_set>
 
 // #include "restrict.h"
 #include "macros.hpp"
 #include "debug_utils.hpp"
+
+// #include "type_defs.h" // just for length_t
 
 using std::begin;
 using std::end;
 using std::log2;
 using std::unique_ptr;
 using std::unordered_map;
+using std::unordered_set;
 using std::vector;
 
 namespace ar {
@@ -381,7 +385,7 @@ static auto reduce(const F&& func, const data_t* data, len_t len)
 	-> decltype(func(data[0], data[0]))
 {
 	if (len < 1) {
-		return NULL;
+		return static_cast<decltype(func(data[0], data[0]))>(NULL);
 	}
 	if (len == 1) {
 		// ideally we would just return the first element,
@@ -2207,7 +2211,8 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 			"Can't sample %llu values without replacement between min %lld and max %lld",
 			howMany, minVal, maxVal);
 
-	assertf(all_nonnegative(probs, numPossibleVals), "Probabilities must be nonnegative!");
+	assertf(all_nonnegative(probs, numPossibleVals),
+		"Probabilities must be nonnegative!");
 	auto totalProb = sum(probs, numPossibleVals);
 	assertf(totalProb > 0, "Probabilities sum to a value <= 0");
 
@@ -2225,24 +2230,40 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 		return ret;
 	}
 
-	// sample without replacement; each returned int is unique
-	unordered_map<int64_t, int64_t> possibleIdxs;
-	for (size_t i = 0; i < howMany; i++) {
-		int64_t idx = static_cast<int64_t>(distro(gen));
+	// if we would be selecting most of the values, it will take a long time
+	// to get this many distinct values randomly; instead, select the values
+	// not to return randomly and then return everything else
+	if (howMany > numPossibleVals / 2) {
+		auto notThese = rand_ints(minVal, maxVal, numPossibleVals - howMany,
+			replace, probs);
 
-		// next value to add to array; just the idx, unless we've picked this
-		// idx before, in which case it's whatever the highest unused value
-		// was the last time we picked it
-		auto val = map_get(possibleIdxs, idx, idx);
-
-		// move highest unused idx into this idx; the result is that the
-		// first numPossibleVals-i idxs are all available idxs
-		int64_t highestUnusedIdx = maxVal - i;
-		possibleIdxs[idx] = map_get(possibleIdxs, highestUnusedIdx,
-									highestUnusedIdx);
-
-		ret.push_back(val);
+		// check whether idx exists in notThese; if not, insert it; fast
+		// checks by sorting notThese first
+		std::sort(std::begin(notThese), std::end(notThese));
+		int notIdx = 0;
+		for (int64_t idx = minVal; idx <= maxVal; idx++) {
+			// invariant: notThese[notIdx] >= idx or undefined
+			while (idx > notThese[notIdx] && notIdx < notThese.size()) {
+				notIdx++;
+			}
+			if (idx != notThese[notIdx]) {
+				ret.push_back(idx);
+			}
+		}
+		return ret;
 	}
+
+	// sample without replacement; each returned int is unique
+	unordered_set<int64_t> usedIdxs;
+	usedIdxs.reserve(howMany);
+	while(usedIdxs.size() < howMany) {
+		int64_t idx = static_cast<int64_t>(distro(gen));
+		if (! usedIdxs.count(idx)) { // if new idx
+			usedIdxs.insert(idx);
+			ret.push_back(idx);
+		}
+	}
+
 	return ret;
 }
 
@@ -2364,7 +2385,7 @@ static inline void sort_inplace(Container<data_t>& data) {
 template<template <class...> class Container, class data_t>
 static inline Container<data_t> sort(const Container<data_t>& data) {
 	Container<data_t> ret(data);
-	sort(ret);
+	sort_inplace(ret);
 	return ret;
 }
 

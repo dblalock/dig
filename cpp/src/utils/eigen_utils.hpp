@@ -33,7 +33,8 @@ static inline Map<Matrix<T, Dynamic, 1> > eigenWrap1D_nocopy(T* x, size_t len) {
 	return v;
 }
 template<typename T>
-static inline Map<const Matrix<T, Dynamic, 1> > eigenWrap1D_nocopy(const T* x, size_t len) {
+static inline Map<const Matrix<T, Dynamic, 1> >
+eigenWrap1D_nocopy_const(const T* x, size_t len) {
 	Map<const Matrix<T, Dynamic, 1> > v(x, len);
 	return v;
 }
@@ -54,6 +55,12 @@ static inline auto eigenWrap1D_nocopy(const Container<T>& data)
 	-> decltype(eigenWrap1D_nocopy(data.data(), data.size()))
 {
 	return eigenWrap1D_nocopy(data.data(), data.size());
+}
+template<template <class...> class Container, class T>
+static inline auto eigenWrap1D_nocopy_const(const Container<T>& data)
+	-> decltype(eigenWrap1D_nocopy_const(data.data(), data.size()))
+{
+	return eigenWrap1D_nocopy_const(data.data(), data.size());
 }
 
 template<template <class...> class Container, class T>

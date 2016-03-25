@@ -30,6 +30,12 @@
 
 #include "type_defs.h"
 
+// TODO remove dup typedefs
+//typedef int32_t length_t; // length of a time series in main memory; needs to be signed
+//typedef int16_t idx_t;
+//typedef int32_t tick_t;
+//typedef double data_t;
+
 typedef tick_t deq_data;	// type of data this deque stores
 
 #ifdef __cplusplus

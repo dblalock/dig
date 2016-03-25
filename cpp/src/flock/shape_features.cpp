@@ -8,6 +8,8 @@
 #include "slice.hpp"
 #include "filter.hpp"
 
+#include "debug_utils.h" // TODO remove
+
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
@@ -146,9 +148,16 @@ static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 	auto idxs = selectShapeIdxs(seq, seqLen, subseqLen, numNeighbors, walks,
 								scores_tmp);
 
+	// PRINT_VAR(walks.rows());
+	// PRINT_VAR(walks.cols());
+	// PRINT_VAR(ar::to_string(idxs));
+
 	data_t1 neighborTmp[subseqLen];
 	//	auto numSubseqs = seqLen - subseqLen + 1;
 	auto numShapes = idxs.size();
+
+	DEBUGF("using %lu neighbors", numShapes);
+
 	// CMatrix ret(numShapes, numSubseqs);
 	//	double* retPtr = ret.data();
 	for (int i = 0; i < numShapes; i++) {
@@ -166,13 +175,21 @@ static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 
 // NOTE: assumes each signal is a row in the matrix, not a column
 template<class data_t>
-static CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
-							   length_t Lmin, length_t Lmax)
+//void neighborSimsMat(const data_t* T, length_t d, length_t n,
+CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
+						length_t Lmin, length_t Lmax)
 {
 	auto lengths = defaultLengths(Lmax);
 	length_t numNeighbors = std::log2(n);
 
-	length_t numRows = d * numNeighbors;
+	// PRINT_VAR(d);
+	// PRINT_VAR(n);
+	// PRINT_VAR(ar::to_string(lengths));
+	// PRINT_VAR(ar::to_string(lengths));
+	// PRINT_VAR(numNeighbors);
+
+	length_t numLengths = lengths.size();
+	length_t numRows = d * numNeighbors * numLengths;
 	length_t paddedLen = n + 2 * Lmax;
 	// length_t numCols = n;
 	length_t numCols = paddedLen;
@@ -185,29 +202,38 @@ static CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 	double scores_tmp[paddedLen];
 	double sims_tmp[numNeighbors * paddedLen];
 
+	// print("about to enter neighborSims for loop...");
+
 	length_t currentRowOut = 0;
 	// double* rowOutPtr = Phi.data();
 	double* rowOutPtr;
-	for (int dim = 0; dim < n; dim++) {
+	for (int dim = 0; dim < d; dim++) {
 		auto rowPtr = rowStartPtr(dim, T, d, n);
 		// extend signal by replicating endpoints; store result in signal_tmp
 		pad(rowPtr, n, Lmax, Lmax, signal_tmp, PAD_EDGE);
 
 		for (const auto subseqLen : lengths) {
+			DEBUGF("computing neighbor sims for dim %d...", dim);
 			neighborSimsOneSignal(signal_tmp, paddedLen, subseqLen,
 								  numNeighbors, scores_tmp, sims_tmp);
+			// DEBUGF("computed neighbor sims for dim %d", dim);
 
+			// copy similarities for each feature into output matrix
 			auto numSubseqs = n - subseqLen + 1;
 			double* simsRowPtr;
 			for (int i = 0; i < numNeighbors; i++) {
 				rowOutPtr = Phi.data() + (i * numCols);
 				simsRowPtr = sims_tmp + (i * paddedLen);
+
+#define SKIP_FOR_NOW
+#ifndef SKIP_FOR_NOW
 				auto rowSum = sum(simsRowPtr + Lmax, numSubseqs);
 				if (rowSum < 1) {
 					continue;
 				} else if (rowSum > (numSubseqs / 4)) {
 					continue;
 				}
+#endif
 
 				// Phi has numSubseqs cols, but sims in each row
 				// have seqLen + 2*Lmax cols due to padding; thus,
@@ -217,10 +243,36 @@ static CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 
 				copy(simsRowPtr, paddedLen, rowOutPtr); // actually, remove padding after Phi_blur
 				currentRowOut++; // increment output row
+				// DEBUGF("copied over neighbor sims for feature %d", i);
 			}
 		}
 	}
+
 	return Phi.topRows(currentRowOut).eval(); // remove empty rows
+
+//	PRINT_VAR(Phi.rows());
+//	PRINT_VAR(currentRowOut);
+//	print("finished calculating phi");
+////	CMatrix tmp(Phi.topRows(currentRowOut)); // remove empty rows
+//
+//
+//
+//	CMatrix tmp(currentRowOut, Phi.cols());
+//	tmp = Phi.topRows(currentRowOut);
+//
+//
+//	std::cout << "tmp rows: " << tmp.rows() << "\n";
+//	PRINT_VAR(tmp.rows());
+//	PRINT_VAR(tmp.cols());
+//	PRINT_VAR(tmp.IsRowMajor);
+//	PRINT_VAR(Phi.rows());
+//
+//	CMatrix out(tmp);
+//	out += out;
+//
+//	print("finished calculating out");
+//
+//	// return out;
 }
 
 // ------------------------------------------------
@@ -259,11 +311,27 @@ static CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
 std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 	length_t d, length_t n, length_t Lmin, length_t Lmax, length_t Lfilt)
 {
-	CMatrix Phi = neighborSimsMat(T, d, n, Lmin, Lmax);
-	CMatrix Phi_blur = blurFeatureMat(Phi, Lfilt);
+//	neighborSimsMat(T, d, n, Lmin, Lmax);
+	CMatrix Phi(neighborSimsMat(T, d, n, Lmin, Lmax));
+//	CMatrix Phi(3, 4);
+//	Phi.setRandom();
+	print("computed neighbor sims mat without asploding");
 
-	FMatrix Phi_colmajor(Phi.rows(), n);
-	FMatrix Phi_blur_colmajor(Phi_blur.rows(), n);
+	CMatrix Phi_blur(blurFeatureMat(Phi, Lfilt));
+	print("blurred neighbor sims mat without asploding");
+
+	PRINT_VAR(Phi.rows());
+	PRINT_VAR(Phi.cols());
+
+	// FMatrix Phi_colmajor(Phi.rows(), n);
+	// FMatrix Phi_blur_colmajor(Phi_blur.rows(), n);
+
+	// Phi_colmajor = Phi.middleCols(Lmax, n);
+	// Phi_blur_colmajor = Phi_blur.middleCols(Lmax, n);
+
+	FMatrix Phi_colmajor(Phi.middleCols(Lmax, n));
+	FMatrix Phi_blur_colmajor(Phi_blur.middleCols(Lmax, n));
+	print("built col-major mats without asploding");
 
 	return std::pair<FMatrix, FMatrix>(Phi_colmajor, Phi_blur_colmajor);
 }

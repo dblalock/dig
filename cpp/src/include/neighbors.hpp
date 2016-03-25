@@ -14,7 +14,9 @@
 
 #include "Dense"
 
-#include "type_defs.h"
+//#include "type_defs.h"
+
+//typedef int32_t length_t;
 
 using std::vector;
 using Eigen::MatrixXd;
@@ -25,7 +27,7 @@ double swigEigenTest(double* X, int m, int n);
 // ------------------------------------------------ Neighbor
 typedef struct Neighbor {
 	double dist;
-	length_t idx;
+	int32_t idx;
 } Neighbor;
 
 // ================================================================
@@ -59,7 +61,7 @@ public:
 
 	BinTree(const MatrixXd& X, depth_t numProjections=16);
 
-	vector<length_t> rangeQuery(const VectorXd& q, double radiusL2);
+	vector<int32_t> rangeQuery(const VectorXd& q, double radiusL2);
 	vector<Neighbor> knnQuery(const VectorXd& q, int k);
 
 	// ------------------------ versions for numpy typemaps

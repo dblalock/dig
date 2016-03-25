@@ -1,5 +1,7 @@
 #!/bin/env python
 
+print("------------------------ running dig tests")
+
 import numpy as np
 # from ..src import dig
 import dig

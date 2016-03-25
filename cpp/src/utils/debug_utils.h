@@ -15,16 +15,35 @@
 #include <assert.h>
 
 #ifdef __cplusplus
+	#include <iostream>
+	#define PRINT_VAR(VAR) \
+		std::cout << __func__ << "(): " #VAR << ": " << VAR << "\n";
+	// #define PRINT_VAR(VAR) \
+	// 	std::cout << #VAR << ": " << VAR << "\n";
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
-#define clean_errno() (errno == 0 ? "None" : strerror(errno))
-#define log_error(M, ...) fprintf(stderr, "[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
-#define assertf(A, M, ...) if(!(A)) {log_error(M, ##__VA_ARGS__); assert(A); }
+// #ifdef DEBUG
+	#define clean_errno() (errno == 0 ? "None" : strerror(errno))
+	#define log_error(M, ...) fprintf(stderr, "[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
+	#define assertf(A, M, ...) if(!(A)) {log_error(M, ##__VA_ARGS__); assert(A); }
+// #else
+// 	#define assertf(A, M, ...)
+// #endif
 
 inline void print_var(const char* name, double val) {
-	printf("%s=%g\n",name, val);
+	printf("%s=%g\n", name, val);
 }
+
+inline void print(const char* str) {
+	printf("%s\n", str);
+}
+
+#define DEBUGF(format, ...) \
+    printf("%s(): " format "\n", __func__, ##__VA_ARGS__);
 
 // won't work cuz we don't know size of elements for void*
 //inline void print_array(const char* name, void* ar, int len) {

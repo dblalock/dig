@@ -22,13 +22,16 @@ using Eigen::Dynamic;
 using Eigen::RowMajor;
 
 using ar::constant_inplace;
+using ar::length_t;
 using ar::normalize_mean_inplace;
 using ar::randwalks;
 using ar::stdev;
 
 using subs::first_derivs;
 
-typedef int64_t length_t;
+typedef double data_t;
+
+//typedef int64_t length_t;
 // typedef Matrix<double, Dynamic, Dynamic, RowMajor> CMatrixXd;
 
 //template<class data_t>
@@ -37,7 +40,8 @@ typedef Matrix<double, Dynamic, Dynamic, RowMajor> CMatrix;
 
 //template<class data_t>
 //using FMatrix = Matrix<data_t, Dynamic, Dynamic>
-typedef Matrix<double, Dynamic, Dynamic> FMatrix;
+// typedef Matrix<double, Dynamic, Dynamic> FMatrix;
+typedef Eigen::MatrixXd FMatrix;
 
 // ------------------------------------------------
 // Structure scores
@@ -58,6 +62,10 @@ static Matrix<data_t, Dynamic, Dynamic, RowMajor> createRandWalks(
 	}
 	return walks;
 }
+// explicit instantiation for SWIG
+template Matrix<data_t, Dynamic, Dynamic, RowMajor>
+createRandWalks<double>(const data_t* seq, length_t seqLen, length_t walkLen,
+	length_t nwalks);
 
 template<class DenseT, class VectorT>
 static inline auto distsSqToVector(const DenseT& X, const VectorT& v)

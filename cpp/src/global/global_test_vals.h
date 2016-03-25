@@ -11,6 +11,7 @@
 
 #include "type_defs.h"
 
+typedef long dist_calls_t;
 extern dist_calls_t global_dist_calls;	///< The number of times that the innermost distance subroutine has been called
 
 extern double gAbandonAbovePruningPower;	///< The pruning power above which inefficient searches can be abandoned

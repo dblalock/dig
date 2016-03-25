@@ -98,14 +98,14 @@ static inline void randwalk_inplace(EigenType& X, axis_t axis=-1, float_t std=1)
 	} else if (X.IsRowMajor && axis == 1) {
 		for (index_t i = 0; i < X.rows(); i++) { // randwalk in each row
 			X(i, 0) = d(gen);
-			for (index_t j = 0; j < X.cols(); j++) {
+			for (index_t j = 1; j < X.cols(); j++) {
 				X(i, j) = X(i, j-1) + d(gen);
 			}
 		}
 	} else if (!X.IsRowMajor && axis == 0) {
 		for (index_t j = 0; j < X.cols(); j++) { // randwalk in each col
 			X(0, j) = d(gen);
-			for (index_t i = 0; i < X.rows(); i++) {
+			for (index_t i = 1; i < X.rows(); i++) {
 				X(i, j) = X(i-1, j) + d(gen);
 			}
 		}

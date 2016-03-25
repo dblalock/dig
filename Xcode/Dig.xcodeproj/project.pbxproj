@@ -10,6 +10,7 @@
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
+		72B610E91CA5B3E1008B50D3 /* test_filter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B610E81CA5B3E1008B50D3 /* test_filter.cpp */; };
 		72C4195C1C5337AD004689A2 /* deque.c in Sources */ = {isa = PBXBuildFile; fileRef = 72C4192C1C5337AD004689A2 /* deque.c */; };
 		72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C4192E1C5337AD004689A2 /* distance_utils.cpp */; };
 		72C4195E1C5337AD004689A2 /* ucr_funcs.c in Sources */ = {isa = PBXBuildFile; fileRef = 72C419341C5337AD004689A2 /* ucr_funcs.c */; };
@@ -28,6 +29,7 @@
 		72C81BE81C90B6EE00639302 /* flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE61C90B6EE00639302 /* flock.cpp */; };
 		72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE91C90DC0100639302 /* shape_features.cpp */; };
 		72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BF01C93629D00639302 /* test_subseq.cpp */; };
+		72F66F441CA4B0F900EDB8E7 /* test_flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -375,6 +377,7 @@
 		728F874A1C55DE9C004E4AA0 /* SVD */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SVD; sourceTree = "<group>"; };
 		728F874B1C55DE9C004E4AA0 /* UmfPackSupport */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = UmfPackSupport; sourceTree = "<group>"; };
 		728F874E1C55DE9C004E4AA0 /* redsvd.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = redsvd.hpp; sourceTree = "<group>"; };
+		72B610E81CA5B3E1008B50D3 /* test_filter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_filter.cpp; sourceTree = "<group>"; };
 		72C4192C1C5337AD004689A2 /* deque.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = deque.c; sourceTree = "<group>"; };
 		72C4192D1C5337AD004689A2 /* deque.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = deque.h; sourceTree = "<group>"; };
 		72C4192E1C5337AD004689A2 /* distance_utils.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = distance_utils.cpp; sourceTree = "<group>"; };
@@ -423,6 +426,7 @@
 		72C81BEE1C93621300639302 /* pimpl_impl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = pimpl_impl.hpp; sourceTree = "<group>"; };
 		72C81BEF1C93621300639302 /* pimpl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = pimpl.hpp; sourceTree = "<group>"; };
 		72C81BF01C93629D00639302 /* test_subseq.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_subseq.cpp; sourceTree = "<group>"; };
+		72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_flock.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1211,6 +1215,7 @@
 		72C4194C1C5337AD004689A2 /* test */ = {
 			isa = PBXGroup;
 			children = (
+				72F66F421CA4B0F900EDB8E7 /* flock */,
 				72247DA91C600AA300B74A64 /* neighbors */,
 				72C4194D1C5337AD004689A2 /* distance */,
 				72C419521C5337AD004689A2 /* external */,
@@ -1257,6 +1262,7 @@
 				72C81BF01C93629D00639302 /* test_subseq.cpp */,
 				72C4195A1C5337AD004689A2 /* test_array_utils.cpp */,
 				72C4195B1C5337AD004689A2 /* test_array_utils.h */,
+				72B610E81CA5B3E1008B50D3 /* test_filter.cpp */,
 			);
 			path = utils;
 			sourceTree = "<group>";
@@ -1268,6 +1274,14 @@
 				72C81BE71C90B6EE00639302 /* flock.hpp */,
 				72C81BE91C90DC0100639302 /* shape_features.cpp */,
 				72C81BEA1C90DC0100639302 /* shape_features.hpp */,
+			);
+			path = flock;
+			sourceTree = "<group>";
+		};
+		72F66F421CA4B0F900EDB8E7 /* flock */ = {
+			isa = PBXGroup;
+			children = (
+				72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */,
 			);
 			path = flock;
 			sourceTree = "<group>";
@@ -1345,10 +1359,12 @@
 				72C419691C5337AD004689A2 /* testing_utils.cpp in Sources */,
 				72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */,
 				72C419631C5337AD004689A2 /* array_utils.c in Sources */,
+				72B610E91CA5B3E1008B50D3 /* test_filter.cpp in Sources */,
 				72C419621C5337AD004689A2 /* nearest_neighbor.cpp in Sources */,
 				72C419681C5337AD004689A2 /* main.cpp in Sources */,
 				72C419651C5337AD004689A2 /* test_distance_utils.cpp in Sources */,
 				72C419601C5337AD004689A2 /* type_defs.c in Sources */,
+				72F66F441CA4B0F900EDB8E7 /* test_flock.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1381,7 +1397,7 @@
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_ENABLE_CPP_EXCEPTIONS = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 1;
+				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",

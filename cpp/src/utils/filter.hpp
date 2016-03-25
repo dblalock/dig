@@ -10,12 +10,17 @@
 
 // #include <stdlib.h> // for size_t
 #define _USE_MATH_DEFINES //so that M_PI shows up
+#include <assert.h>
 #include <cmath>
 #include <deque>
 #include <memory>
+#include <vector>
+
+#include "macros.hpp"
 
 using std::deque;
 using std::unique_ptr;
+using std::vector;
 
 namespace filter {
 
@@ -29,16 +34,16 @@ template <class data_t>
 void min_max_filter(const data_t *t, length_t len, length_t r,
 	data_t *l, data_t *u)
 {
-    length_t i = 0;
+    assert(r >= 0);
 	length_t width = 2 * r + 1;
 
-    deque<length_t> du(width + 1);
-    deque<length_t> dl(width + 1);
+    deque<length_t> du;
+    deque<length_t> dl;
 
     du.push_back(0);
     dl.push_back(0);
 
-    for (i = 1; i < len; i++) {
+    for (length_t i = 1; i < len; i++) {
         if (i > r) {
             u[i - r - 1] = t[du.front()];
             l[i - r - 1] = t[dl.front()];
@@ -61,12 +66,15 @@ void min_max_filter(const data_t *t, length_t len, length_t r,
         // check if current extrema are passing out of window
         if (i == width + du.front()) {
             du.pop_front();
-        } else if (i == width + dl.front()) {
+        // } else if (i == width + dl.front()) {
+        }
+        if (i == width + dl.front()) {
             dl.pop_front();
         }
     }
 
-    for (i = len; i < len + r + 1; i++) {
+    // populate end of array
+    for (length_t i = len; i < len + r + 1; i++) {
         u[i - r - 1] = t[du.front()];
         l[i - r - 1] = t[dl.front()];
         if (i - du.front() >= width) {
@@ -80,10 +88,11 @@ void min_max_filter(const data_t *t, length_t len, length_t r,
 
 template <class data_t>
 void min_filter(const data_t *t, length_t len, length_t r, data_t *l) {
+    assert(r >= 0);
     length_t i = 0;
 	length_t width = 2 * r + 1;
 
-    deque<length_t> dl(width + 1);
+    deque<length_t> dl;
     dl.push_back(0);
 
     for (i = 1; i < len; i++) {
@@ -111,6 +120,7 @@ void min_filter(const data_t *t, length_t len, length_t r, data_t *l) {
 }
 template <class data_t>
 void max_filter(const data_t *t, length_t len, length_t r, data_t *u) {
+    assert(r >= 0);
     length_t i = 0;
 	length_t width = 2 * r + 1;
 
@@ -182,6 +192,7 @@ static inline Container<data_t> max_filter(const Container<data_t>& data,
 template<class data_t>
 static inline void _generalized_hamming(data_t* out, length_t len,
 										double alpha, double beta) {
+    assert(len > 0);
 	for (length_t i = 0; i < len; i++) {
 		double val = alpha - beta * std::cos(2.0 * M_PI * i / (len-1));
 		out[i] = static_cast<data_t>(val);
@@ -227,6 +238,7 @@ static inline vector<data_t> hamming(length_t len) {
 // ------------------------ gaussian
 template<class data_t>
 static inline void gaussian(data_t* out, length_t len, double sigma) {
+    assert(len > 0);
 	for (length_t i = 0; i < len; i++) {
 		double numerator = i - (len-1) / 2;
 		double denominator = sigma * (len-1) / 2;

@@ -12,9 +12,27 @@
 #include <sys/types.h>
 #include "type_defs.h"
 
+#include "global_test_vals.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+	
+//typedef int32_t length_t; // length of a time series in main memory; needs to be signed
+//typedef int16_t idx_t;
+//typedef int32_t tick_t;
+//typedef double data_t;
+	
+//extern const int kINVALID;
+//extern const int kSUCCESS;
+//extern const int kFAILURE;
+//
+//extern const float kFLOATING_PT_ERROR;
+	
+//typedef struct Index {
+//	data_t value;
+//	tick_t index;
+// } Index;
 	
 typedef struct us_query {
 	length_t m, minLen, maxLen;

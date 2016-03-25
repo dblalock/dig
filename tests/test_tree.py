@@ -1,8 +1,12 @@
 #!/bin/env python
 
+print("------------------------ running tree tests")
+
 import numpy as np
 import dig
 
+def all_eq(x, y):
+	return np.max(np.abs(x - y)) < .001
 
 def main():
 	N = 100
@@ -24,14 +28,20 @@ def main():
 	# neighborIdxs = tree.rangeQuery(q, np.sqrt(r2), -1)
 	neighborIdxs = tree.rangeQuery(q, np.sqrt(r2))
 
+	print "neighborIdxs: ", neighborIdxs
+
 	diffs = X - q
 	trueDists = np.sum(diffs*diffs, axis=1)
 	trueNeighborIdxs = np.where(trueDists <= r2)[0]
 
 	neighborIdxs = np.sort(neighborIdxs)
 
+	print "neighborIdxs: ", neighborIdxs
+	print "trueNeighborIdxs: ", trueNeighborIdxs
+
 	assert(len(neighborIdxs) == len(trueNeighborIdxs))
-	assert(np.array_equal(neighborIdxs, trueNeighborIdxs))
+	# assert(np.allclose(neighborIdxs, trueNeighborIdxs))
+	assert(all_eq(neighborIdxs, trueNeighborIdxs))
 
 	print("test_tree: done")
 

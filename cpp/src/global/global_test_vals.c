@@ -8,6 +8,7 @@
 
 #include "type_defs.h"
 
+typedef long dist_calls_t;
 dist_calls_t global_dist_calls = 0;
 
 double gAbandonAbovePruningPower = 10.0;

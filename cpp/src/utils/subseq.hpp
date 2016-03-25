@@ -24,9 +24,11 @@ using ar::dist_L1;
 using ar::dist_L2;
 using ar::dist_sq;
 
-using ar::length_t;
+// using ar::length_t;
 
 namespace subs {
+
+typedef int64_t length_t;
 
 // ================================ Map
 
@@ -353,7 +355,7 @@ static Container2<data_t2> first_derivs(const Container2<data_t2>& x,
 
 template<class data_t>
 static void maximum_subarray(const data_t* data,
-	length_t len, length_t& start_best, length_t end_best,
+	length_t len, length_t& start_best, length_t& end_best,
 	length_t minSpacing=1)
 {
 	data_t sum_current = 0, sum_best = 0;
@@ -409,24 +411,27 @@ static vector<length_t> local_optima(const F&& func, const data_t* data,
 	length_t candidateIdx = 0;
 	length_t candidateVal = data[0];
 
-	for(length_t idx = 0; idx < len; idx++) {
+	for(length_t idx = 1; idx < len; idx++) {
 		auto val = data[idx];
-		if (abs(idx - candidateIdx) < minSpacing) { // within minSpacing
+		if ((idx - candidateIdx) <= minSpacing) { // within minSpacing
 			if (func(val, candidateVal)) {
 				candidateIdx = idx;
 				candidateVal = val;
-			} else { // no overlap, so flush candidate
-				idxs.push_back(candidateIdx);
-				// set current point as new candidate
-				candidateIdx = idx;
-				candidateVal = val;
 			}
+		} else { // no overlap, so flush candidate
+			idxs.push_back(candidateIdx);
+			// set current point as new candidate
+			candidateIdx = idx;
+			candidateVal = val;
 		}
 	}
 	idxs.push_back(candidateIdx); // add final candidate idx
 	return idxs;
 }
 
+// note that if there are multiple copies of the same val within minSpacing of
+// each other, the behavior is undefined; what actually happens at present is
+// that the first index among the tied values is returned
 template<class data_t>
 static vector<length_t> local_maxima(const data_t* data, length_t len,
 		length_t minSpacing=1)
