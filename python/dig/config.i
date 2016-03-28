@@ -119,6 +119,7 @@ typedef Array<double, Dynamic, Dynamic, RowMajor> CArray;
 %apply (double* IN_ARRAY1, int DIM1) {(const double* v2, int m)};
 %apply (double* IN_ARRAY1, int DIM1) {(const double* v2, int n)};
 %apply (double* IN_ARRAY1, int DIM1) {(const double* v2, int len2)};
+%apply (double* IN_ARRAY1, int DIM1) {(const double* seq, int seqLen)};
 
 // ------------------------------- 2D arrays
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* A, int m, int n)};

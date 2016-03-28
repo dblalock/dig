@@ -50,6 +50,7 @@
 
 	#define REQUIRE_INT(T) REQUIRE_TRAIT(is_integral, T)
 	#define REQUIRE_NUM(T) REQUIRE_TRAIT(is_arithmetic, T)
+	#define REQUIRE_FLOAT(T) REQUIRE_TRAIT(is_floating_point, T)
 	#define REQUIRE_PRIMITIVE(T) REQUIRE_TRAIT(is_arithmetic, T)
 	#define REQUIRE_NOT_PTR(T) REQUIRE_NOT_TRAIT(is_pointer, T)
 #endif // __cplusplus

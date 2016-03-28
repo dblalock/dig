@@ -23,6 +23,7 @@ using Eigen::RowMajor;
 
 using ar::constant_inplace;
 using ar::length_t;
+using ar::mean;
 using ar::normalize_mean_inplace;
 using ar::randwalks;
 using ar::stdev;
@@ -54,8 +55,8 @@ static Matrix<data_t, Dynamic, Dynamic, RowMajor> createRandWalks(
 	auto derivs = first_derivs(seq, seqLen);
 	double std = stdev(derivs.get(), seqLen - 1);
 
-	Matrix<data_t, Dynamic, Dynamic, RowMajor> walks = randwalks<data_t>(nwalks,
-		walkLen, std);
+	CMatrix walks = randwalks<data_t>(nwalks, walkLen, std);
+
 	for (int i = 0; i < nwalks; i++) {
 		data_t* rowStart = walks.row(i).data();
 		normalize_mean_inplace(rowStart, walkLen);
@@ -63,9 +64,9 @@ static Matrix<data_t, Dynamic, Dynamic, RowMajor> createRandWalks(
 	return walks;
 }
 // explicit instantiation for SWIG
-template Matrix<data_t, Dynamic, Dynamic, RowMajor>
-createRandWalks<double>(const data_t* seq, length_t seqLen, length_t walkLen,
-	length_t nwalks);
+// template Matrix<data_t, Dynamic, Dynamic, RowMajor>
+// createRandWalks<double>(const data_t* seq, length_t seqLen, length_t walkLen,
+// 	length_t nwalks);
 
 template<class DenseT, class VectorT>
 static inline auto distsSqToVector(const DenseT& X, const VectorT& v)

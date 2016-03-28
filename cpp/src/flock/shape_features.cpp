@@ -83,6 +83,14 @@ static inline vector<len_t> defaultLengths(len_t Lmax) {
 // feature mat
 // ------------------------------------------------
 
+// assumes mat stored in row-major order
+template<class data_t>
+static data_t* rowStartPtr(length_t row, data_t* T, length_t nrows,
+						   length_t ncols)
+{
+	return T + (row * ncols);
+}
+
 template<class data_t, class dist_t, class DenseT>
 static vector<length_t> selectShapeIdxs(const data_t* seq, length_t seqLen,
 	length_t subseqLen, length_t howMany, const DenseT& walks, dist_t* scores)
@@ -103,40 +111,42 @@ static void neighborSims1D(const data_t1* seq, length_t seqLen,
 	// if neighbor (shape) is completely flat, no similarity to anything
 	double neighborVariance = variance(neighbor, neighborLen);
 	if (neighborVariance < DEFAULT_NONZERO_THRESH) {
+		print("skipping flat neighbor");
 		constant_inplace(out, seqLen, 0);
 		return;
 	}
 
 	// write 0s before similarity is well-defined
+	auto numSubseqs = seqLen - neighborLen + 1;
 	auto prePadLen = neighborLen / 2;
-	auto postPadLen = seqLen - prePadLen;
+	auto postPadLen = seqLen - (prePadLen + numSubseqs);
 	constant_inplace(out, prePadLen, 0);
 
 	// compute similarity between neighbor and all subseqs
 	normalize_mean_inplace(neighbor, neighborLen);
+
+	// TODO remove
+	// auto avg = mean(neighbor, neighborLen);
+	// assert(abs(avg) < .0001);
+
 	mapSubseqs([neighbor, neighborLen, neighborVariance](const data_t1* subseq) {
-		double mean, variance;
-		mean_and_variance(subseq, neighborLen, mean, variance);
+		// double mean, variance;
+		// mean_and_variance(subseq, neighborLen, mean, variance);
+		double subseqMean = ar::mean(subseq, neighborLen);
 		double dist = 0;
 		for (length_t i = 0; i < neighborLen; i++) {
-			dist += dist_sq(neighbor[i], subseq[i] - mean);
+			dist += dist_sq(neighbor[i], subseq[i] - subseqMean);
 		}
 		dist /= (neighborVariance * neighborLen);
-		return (1. - dist) * (dist < kDistThresh);
+		// return (1.0 - dist) * (dist < kDistThresh);
+//		return (1.0 - dist); // TODO uncomment above
+		// return dist < 1.0 ? (1.0 - dist) : 0.0; // TODO uncomment above
+		return dist < kDistThresh ? (1.0 - dist) : 0.0;
 
 	}, neighborLen, seq, seqLen, out + prePadLen);
 
 	// write 0s after similarity is well-defined
-	auto numSubseqs = seqLen - neighborLen + 1;
 	constant_inplace(out + prePadLen + numSubseqs, postPadLen, 0);
-}
-
-// assumes mat stored in row-major order
-template<class data_t>
-static data_t* rowStartPtr(length_t row, data_t* T, length_t nrows,
-						   length_t ncols)
-{
-	return T + (row * ncols);
 }
 
 // out must be storage for a numNeighbors x seqLen array
@@ -165,11 +175,20 @@ static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 		const data_t1* neighbor = seq + idx;
 		copy(neighbor, subseqLen, neighborTmp);
 
+		assert(ar::all_eq(neighbor, neighborTmp, subseqLen)); // TODO remove
+
 		// double* outPtr = ret.row(i).data();
 		// double* outPtr = retPtr + (i * numSubseqs);
 		double* outPtr = rowStartPtr(i, out, numShapes, seqLen);
 
 		neighborSims1D(seq, seqLen, neighborTmp, subseqLen, outPtr);
+
+		// printf("nonzeros for neighbor %lld: ", idx);
+		// auto nonzeroIdxs = ar::nonzeros(outPtr, seqLen);
+		// print(ar::to_string(nonzeroIdxs).c_str());
+
+//		auto selfSimilarity = *(outPtr + idx);
+//		assert(selfSimilarity > 0);
 	}
 }
 
@@ -184,9 +203,9 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 
 	// PRINT_VAR(d);
 	// PRINT_VAR(n);
+	PRINT_VAR(ar::to_string(lengths));
 	// PRINT_VAR(ar::to_string(lengths));
-	// PRINT_VAR(ar::to_string(lengths));
-	// PRINT_VAR(numNeighbors);
+	PRINT_VAR(numNeighbors);
 
 	length_t numLengths = lengths.size();
 	length_t numRows = d * numNeighbors * numLengths;
@@ -197,6 +216,8 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 	CMatrix Phi(numRows, numCols);
 	// Phi.setZero();
 
+	PRINT_VAR(paddedLen);
+
 	// create feature mat for each dimension for each length
 	double signal_tmp[paddedLen];
 	double scores_tmp[paddedLen];
@@ -204,7 +225,7 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 
 	// print("about to enter neighborSims for loop...");
 
-	length_t currentRowOut = 0;
+	int currentRowOut = 0;
 	// double* rowOutPtr = Phi.data();
 	double* rowOutPtr;
 	for (int dim = 0; dim < d; dim++) {
@@ -213,7 +234,7 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 		pad(rowPtr, n, Lmax, Lmax, signal_tmp, PAD_EDGE);
 
 		for (const auto subseqLen : lengths) {
-			DEBUGF("computing neighbor sims for dim %d...", dim);
+			// DEBUGF("computing neighbor sims for dim %d...", dim);
 			neighborSimsOneSignal(signal_tmp, paddedLen, subseqLen,
 								  numNeighbors, scores_tmp, sims_tmp);
 			// DEBUGF("computed neighbor sims for dim %d", dim);
@@ -222,19 +243,36 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 			auto numSubseqs = n - subseqLen + 1;
 			double* simsRowPtr;
 			for (int i = 0; i < numNeighbors; i++) {
-				rowOutPtr = Phi.data() + (i * numCols);
 				simsRowPtr = sims_tmp + (i * paddedLen);
+				rowOutPtr = Phi.row(currentRowOut).data();
 
-#define SKIP_FOR_NOW
+				auto nanIdxs = ar::where([](double x) { return !isfinite(x); },
+										 simsRowPtr, paddedLen);
+				if (nanIdxs.size()) {
+					printf("found nan idxs in dim %d", dim);
+					PRINT_VAR(ar::to_string(nanIdxs));
+				}
+
+				auto minVal = ar::min(simsRowPtr, paddedLen);
+				auto maxVal = ar::max(simsRowPtr, paddedLen);
+				printf("val range for neighbor %d.%d: %g-%g", dim, i,
+					   minVal, maxVal);
+
+// #define SKIP_FOR_NOW
 #ifndef SKIP_FOR_NOW
 				auto rowSum = sum(simsRowPtr + Lmax, numSubseqs);
+//				PRINT_VAR(rowSum);
+				printf( "(sum = %g)\n", rowSum);
 				if (rowSum < 1) {
+					printf("skipping row with tiny sum\n");
 					continue;
-				} else if (rowSum > (numSubseqs / 4)) {
+				} else if (rowSum > (numSubseqs / 2)) {
+					printf("skipping row that's mostly 1s\n");
 					continue;
 				}
 #endif
 
+//				PRINT_VAR(ar::to_string(simsRowPtr, paddedLen));
 				// Phi has numSubseqs cols, but sims in each row
 				// have seqLen + 2*Lmax cols due to padding; thus,
 				// we copy over only the middle portion
@@ -248,7 +286,18 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 		}
 	}
 
-	return Phi.topRows(currentRowOut).eval(); // remove empty rows
+	PRINT_VAR(currentRowOut);
+//	for (int i = 0; i < ar::min(10, currentRowOut); i++) {
+//		printf("%d) ", i);
+//		auto rowString = ar::to_string(Phi.row(i).data(), 5);
+//		PRINT_VAR(rowString);
+//	}
+
+	// TODO we need to propagate this up as an error if everything was
+	// 0...
+
+	int numRowsToCopy = max(currentRowOut, 1); // return at least one row
+	return Phi.topRows(numRowsToCopy).eval(); // remove empty rows
 
 //	PRINT_VAR(Phi.rows());
 //	PRINT_VAR(currentRowOut);
@@ -293,11 +342,19 @@ static CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
 		// convolve with hamming filt (equiv to cross-corr since symmetric)
 		crossCorrs(filt.get(), Lfilt, rowInPtr, n, rowOutPtr);
 		// divide by largest value within Lfilt / 2
-		max_filter(rowInPtr, n, Lfilt/2, max_tmp);
+		max_filter(rowOutPtr, n, Lfilt/2, max_tmp);
 		max_inplace(1.0, max_tmp, n); // divide by at least 1, so no div by 0
 //		max_inplace(max_tmp, n, 1.0); // works; above ordering doesn't, though...
 //		max_inplace(1, max_tmp, n); // also works...
 		div_inplace(rowOutPtr, max_tmp, n);
+
+		auto minVal = ar::min(rowInPtr, n);
+		auto maxVal = ar::max(rowInPtr, n);
+		auto minValOut = ar::min(rowOutPtr, n);
+		auto maxValOut = ar::max(rowOutPtr, n);
+		printf("val range for row %d: %g-%g\t->\t%g-%g\n", i, minVal, maxVal,
+			   minValOut, maxValOut);
+
 	}
 	return Phi_blur;
 }
@@ -305,8 +362,6 @@ static CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
 // ------------------------------------------------
 // Feature Matrix
 // ------------------------------------------------
-
-// SELF: something in here is making eigen completely freak out.
 
 std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 	length_t d, length_t n, length_t Lmin, length_t Lmax, length_t Lfilt)
@@ -317,11 +372,11 @@ std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 //	Phi.setRandom();
 	print("computed neighbor sims mat without asploding");
 
-	CMatrix Phi_blur(blurFeatureMat(Phi, Lfilt));
-	print("blurred neighbor sims mat without asploding");
-
 	PRINT_VAR(Phi.rows());
 	PRINT_VAR(Phi.cols());
+
+	CMatrix Phi_blur(blurFeatureMat(Phi, Lfilt));
+	print("blurred neighbor sims mat without asploding");
 
 	// FMatrix Phi_colmajor(Phi.rows(), n);
 	// FMatrix Phi_blur_colmajor(Phi_blur.rows(), n);
@@ -332,6 +387,19 @@ std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 	FMatrix Phi_colmajor(Phi.middleCols(Lmax, n));
 	FMatrix Phi_blur_colmajor(Phi_blur.middleCols(Lmax, n));
 	print("built col-major mats without asploding");
+
+	print("------------------------ buildShapeFeatureMats() ");
+	for(int i = 0; i < Phi_colmajor.rows(); i++) {
+		// auto rowInPtr = Phi.row(i).data();
+		auto minVal = Phi_colmajor.row(i).minCoeff();
+		auto maxVal = Phi_colmajor.row(i).maxCoeff();
+		printf("val range for Phi row %d:\t%g-%g;\t", i, minVal, maxVal);
+
+		minVal = Phi_blur_colmajor.row(i).minCoeff();
+		maxVal = Phi_blur_colmajor.row(i).maxCoeff();
+		printf("%g-%g\n", minVal, maxVal);
+	}
+
 
 	return std::pair<FMatrix, FMatrix>(Phi_colmajor, Phi_blur_colmajor);
 }

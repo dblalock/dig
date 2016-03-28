@@ -41,6 +41,14 @@ using ar::unique;
 using subs::local_maxima;
 using subs::maximum_subarray;
 
+
+// ================================================================ TEMP DEBUG
+
+CMatrix createRandomWalks(const double* seq, int seqLen,
+	int walkLen, int nwalks) {
+	return createRandWalks(seq, seqLen, walkLen, nwalks);
+}
+
 // ================================================================ Constants
 
 static constexpr double kNegativeInf = -std::numeric_limits<double>::infinity();
@@ -136,7 +144,7 @@ void instancesForSeed(FMatrix Phi, FMatrix Phi_blur,
 	auto windowLen = computeWindowLen(Lmin, Lmax);
 	auto candidates = candidatesForSeed(Phi, Phi_blur, seed, Lmin, Lmax);
 
-	PRINT_VAR(ar::to_string(candidates));
+	// PRINT_VAR(ar::to_string(candidates));
 
 	// initialize set of candidates and counts with best candidate; we add
 	// a tiny constant to the counts to that we don't get -inf logs from zeros
@@ -208,6 +216,21 @@ vector<length_t> findPatternInstances(FMatrix Phi, FMatrix Phi_blur,
 	PRINT_VAR(Phi.sum());
 	PRINT_VAR(Phi_blur.sum());
 	PRINT_VAR(ar::to_string(rowMeans.data(), rowMeans.size()));
+
+	print("------------------------ findPatternInstances() ");
+	for(int i = 0; i < Phi.rows(); i++) {
+		// auto rowInPtr = Phi.row(i).data();
+		auto minVal = Phi.row(i).minCoeff();
+		auto maxVal = Phi.row(i).maxCoeff();
+		printf("val range for Phi row %d:\t%g-%g;\t", i, minVal, maxVal);
+
+		minVal = Phi_blur.row(i).minCoeff();
+		maxVal = Phi_blur.row(i).maxCoeff();
+		printf("%g-%g\n", minVal, maxVal);
+	}
+
+	PRINT_VAR(seeds.size());
+	PRINT_VAR(ar::to_string(seeds));
 
 	double bestScore = kNegativeInf;
 	vector<length_t> bestInstances;
@@ -360,10 +383,11 @@ std::pair<vector<length_t>, vector<length_t> > findPattern(CMatrix T,
 // vector<length_t> FlockLearner::getInstanceStartIdxs() { return _self->_startIdxs; }
 // vector<length_t> FlockLearner::getInstanceEndIdxs() { return _self->_endIdxs; }
 
-FlockLearner::FlockLearner(const double* X, const int d, const int n, double m_min, double m_max,
-	 double m_filt):
-	_T(eigenWrap2D_nocopy_const(X, d, n))
+void FlockLearner::learn(const double* X, const int d, const int n,
+	double m_min, double m_max, double m_filt)
 {
+	_T = eigenWrap2D_nocopy_const(X, d, n);
+
 	if (m_min < 1) {
 		m_min = m_min * n;
 	}

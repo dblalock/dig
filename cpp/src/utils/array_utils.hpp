@@ -425,15 +425,44 @@ static auto reduce(const F&& func, const Container<Args...>& container)
 	return total;
 }
 
-
 // ================================ Where
 
+// ------------------------ raw arrays
+
+template<class F, class data_t>
+static inline vector<length_t> where(const F&& func, const data_t* data,
+	length_t len)
+{
+	vector<length_t> ret;
+	for (length_t i = 0; i < len; i++) {
+		if (func(data[i])) {
+			ret.emplace_back(i);
+		}
+	}
+	return ret;
+}
+template<class F, class data_t>
+static inline vector<length_t> wherei(const F&& func, const data_t* data,
+	length_t len)
+{
+	vector<length_t> ret;
+	for (length_t i = 0; i < len; i++) {
+		if (func(i, data[i])) {
+			ret.emplace_back(i);
+		}
+	}
+	return ret;
+}
+
+// ------------------------ containers
+
+
 template<class F, template <class...> class Container, class... Args>
-static inline Container<size_t> where(const F&& func,
+static inline Container<length_t> where(const F&& func,
 	const Container<Args...>& container)
 {
-	Container<size_t> ret;
-	size_t i = 0;
+	Container<length_t> ret;
+	length_t i = 0;
 	for (const auto& el : container) {
 		if (func(el)) {
 			ret.emplace_back(i);
@@ -446,11 +475,11 @@ static inline Container<size_t> where(const F&& func,
 /** Like where(), but also passes the index within the container to func() as
  * a first argument */
 template<class F, template <class...> class Container, class... Args>
-static inline Container<size_t> wherei(const F&& func,
+static inline Container<length_t> wherei(const F&& func,
 	const Container<Args...>& container)
 {
-	Container<size_t> ret;
-	size_t i = 0;
+	Container<length_t> ret;
+	length_t i = 0;
 	for (const auto& el : container) {
 		if (func(i, el)) {
 			ret.emplace_back(i);
@@ -458,6 +487,39 @@ static inline Container<size_t> wherei(const F&& func,
 		i++;
 	}
 	return ret;
+}
+
+// ================================ Where for particular properties
+
+#define WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(FUNC, NAME) \
+\
+template<class data_t> \
+static inline vector<length_t> NAME(const data_t* data, length_t len) { \
+	return where([](data_t x) { return FUNC(x); }, data, len); \
+} \
+template<template <class...> class Container, class data_t> \
+static inline Container<bool> NAME(const Container<data_t>& container) { \
+	return where([](data_t x) { return FUNC(x); }, container); \
+} \
+
+// WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(static_cast<bool>, nonzeros);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isnan, where_nan);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isfinite, where_finite);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!isfinite, where_inf);
+
+// ================================ Nonzeros (special case of above)
+
+template<class data_t, class float_t=double>
+static inline vector<length_t> nonzeros(const data_t* data, length_t len,
+	float_t thresh=kDefaultNonzeroThresh)
+{
+	return where([thresh](data_t x) { return abs(x) > thresh; }, data, len);
+}
+template<template <class...> class Container, class data_t>
+static inline Container<bool> nonzeros(const Container<data_t>& container,
+	float_t thresh=kDefaultNonzeroThresh)
+{
+	return where([thresh](data_t x) { return abs(x) > thresh; }, container);
 }
 
 // ================================ Find (All)
@@ -478,9 +540,9 @@ static inline int32_t find(const Container<Args...>& container,
 
 template<template <class...> class Container, class... Args,
 class data_t>
-static inline int32_t rfind(const Container<Args...>& container,
+static inline length_t rfind(const Container<Args...>& container,
 	data_t val) {
-	int32_t i = container.size() - 1;
+	length_t i = container.size() - 1;
 	for (auto it = std::end(container)-1; it >= std::begin(container); --it) {
 		if ((*it) == val) {
 			return i;
@@ -492,7 +554,7 @@ static inline int32_t rfind(const Container<Args...>& container,
 
 template<template <class...> class Container, class... Args,
 class data_t>
-static inline Container<size_t> findall(const Container<Args...>& container,
+static inline Container<length_t> findall(const Container<Args...>& container,
 	data_t val) {
 	return where([&val](data_t a) {return a == val;} );
 }
@@ -1580,6 +1642,11 @@ WRAP_UNARY_STD_FUNC(ceil);
 WRAP_UNARY_STD_FUNC(floor);
 WRAP_UNARY_STD_FUNC(round);
 
+// boolean
+WRAP_UNARY_STD_FUNC(isnan);
+WRAP_UNARY_STD_FUNC(isinf);
+WRAP_UNARY_STD_FUNC(isfinite);
+
 // ================================ Reverse
 
 template <class data_t, class len_t, REQUIRE_INT(len_t)> // TODO test this
@@ -1773,6 +1840,17 @@ static inline bool all(const data_t1 *x, len_t len) {
 	}
 	return true;
 }
+
+template<class F, template <class...> class Container1, class data_t1>
+static inline bool all(const F&& func, const Container1<data_t1>& x) {
+	return all(std::forward<F>(func), x.data(), x.size());
+}
+
+template<class F, template <class...> class Container1, class data_t1>
+static inline bool alli(const F&& func, const Container1<data_t1>& x) {
+	return alli(std::forward<F>(func), x.data(), x.size());
+}
+
 /** Returns true iff x[i] is true for all i */
 template<template <class...> class Container1, class data_t1>
 static inline bool all(const Container1<data_t1>& x) {
@@ -1805,6 +1883,15 @@ static inline bool any(const data_t1 *x, len_t len) {
 	}
 	return false;
 }
+
+template<class F, template <class...> class Container1, class data_t1>
+static inline bool any(const F&& func, const Container1<data_t1>& x) {
+	return any(std::forward<F>(func), x.data(), x.size());
+}
+template<class F, template <class...> class Container1, class data_t1>
+static inline bool anyi(const F&& func, const Container1<data_t1>& x) {
+	return anyi(std::forward<F>(func), x.data(), x.size());
+}
 /** Returns true iff x[i] is true for any i */
 template<template <class...> class Container1, class data_t1>
 static inline bool any(const Container1<data_t1>& x) {
@@ -1813,31 +1900,47 @@ static inline bool any(const Container1<data_t1>& x) {
 
 // ================================ Nonnegativity
 /** Returns true if elements 0..(len-1) of x are >= 0, else false */
-template <class data_t1, class len_t, REQUIRE_INT(len_t)>
-static inline bool all_nonnegative(const data_t1 *x, len_t len) {
-	for (len_t i = 0; i < len; i++) {
-		if (x[i] < 0) return false;
-	}
-	return true;
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline bool all_nonnegative(const data_t* data, len_t len) {
+	return all([](data_t x){ return x >= 0; }, data, len);
 }
-template<template <class...> class Container1, class data_t1>
-static inline bool all_nonnegative(const Container1<data_t1>& x) {
-	return all_nonnegative(x.data(), x.size());
+template<template <class...> class Container, class data_t>
+static inline bool all_nonnegative(const Container<data_t>& data) {
+	return all([](data_t x){ return x >= 0; }, data);
 }
 
 // ================================ Positivity
 /** Returns true if elements 0..(len-1) of x are > 0, else false */
 template <class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline bool all_positive(const data_t *x, len_t len) {
-	for (len_t i = 0; i < len; i++) {
-		if (x[i] <= 0) return false;
-	}
-	return true;
+static inline bool all_positive(const data_t *data, len_t len) {
+	return all([](data_t x){ return x >= 0; }, data, len);
 }
 template<template <class...> class Container1, class data_t>
-static inline bool all_positive(const Container1<data_t>& x) {
-	return all_positive(x.data(), x.size());
+static inline bool all_positive(const Container1<data_t>& data) {
+	return all([](data_t x){ return x > 0; }, data);
 }
+
+// ================================ Finite
+// ------------------------ actually compute truth for float arrays
+template <class data_t, REQUIRE_FLOAT(data_t), class len_t, REQUIRE_INT(len_t)>
+static inline bool all_finite(const data_t *data, len_t len) {
+	return all([](data_t x){ return isfinite(x); }, data, len);
+}
+template<template <class...> class Container1, class data_t,
+	REQUIRE_FLOAT(data_t)>
+static inline bool all_finite(const Container1<data_t>& data) {
+	return all([](data_t x){ return isfinite(x); }, data);
+}
+// // ------------------------ ints are always finite
+// template <class data_t, REQUIRE_INT(data_t), class len_t, REQUIRE_INT(len_t)>
+// static inline bool all_finite(const data_t *data, len_t len) {
+// 	return true;
+// }
+// template<template <class...> class Container1, class data_t,
+// 	REQUIRE_INT(data_t)>
+// static inline bool all_finite(const Container1<data_t>& data) {
+// 	return true;
+// }
 
 // ================================ Unique
 template<template <class...> class Container, class data_t>
@@ -1862,7 +1965,7 @@ static inline unique_ptr<data_t[]> FUNC(const data_t* data, len_t len, \
 	float_t nonzeroThresh=kDefaultNonzeroThresh) \
 { \
 	unique_ptr<data_t[]> ret(new data_t[len]); \
-	FUNC(data, len, ret, nonzeroThresh); \
+	FUNC(data, len, ret.get(), nonzeroThresh); \
 	return ret; \
 } \
 template <template <class...> class Container, class data_t, \
@@ -1926,7 +2029,7 @@ static inline bool normalize_mean_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
 	auto avg = mean(data, len);
-	sub(data, len, avg);
+	sub_inplace(data, len, avg);
 	return true;
 }
 WRAP_NORMALIZE_FUNC(normalize_mean)
@@ -2151,8 +2254,9 @@ inline V map_get(Container<K, V> map, K key, V defaultVal) {
 
 // ------------------------ rand_ints
 
-static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t howMany,
-						 bool replace=false) {
+static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
+	uint64_t howMany, bool replace=false)
+{
 	vector<int64_t> ret;
 	int64_t numPossibleVals = maxVal - minVal + 1;
 
@@ -2168,6 +2272,15 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal, uint64_t
 			int64_t val = (rand() % numPossibleVals) + minVal;
 			ret.push_back(val);
 		}
+		return ret;
+	}
+
+	// if returning all possible values, or within a constant factor thereof,
+	// just shuffle the set of possible values and take the first howMany
+	if (howMany >  numPossibleVals / 2) {
+		ret = range(minVal, maxVal + 1);
+		std::random_shuffle(std::begin(ret), std::end(ret));
+		ret.resize(howMany);
 		return ret;
 	}
 
@@ -2197,13 +2310,13 @@ template<class float_t>
 static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 	uint64_t howMany, bool replace=false, const float_t* probs=nullptr)
 {
-	if (! probs) {
-		return rand_ints(minVal, maxVal, howMany, replace);
-	}
-
 	vector<int64_t> ret;
 	int64_t numPossibleVals = maxVal - minVal + 1;
 
+	bool willReturnEverything = (numPossibleVals == howMany) && !replace;
+	if ( (!probs) || willReturnEverything) {
+		return rand_ints(minVal, maxVal, howMany, replace);
+	}
 	assertf(numPossibleVals >= 1, "No values between min %lld and max %lld",
 			minVal, maxVal);
 

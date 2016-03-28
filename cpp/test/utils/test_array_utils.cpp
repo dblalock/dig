@@ -825,3 +825,29 @@ TEST_CASE("pad", "array_utils") {
 	}
 }
 
+TEST_CASE("normalize_mean", "array_utils") {
+	SECTION("vector") {
+		vector<float> x {0, 1, 2, 3};
+		vector<float> ans {-1.5, -.5, .5, 1.5};
+		auto out = normalize_mean(x);
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("array") {
+		int x[] {0, 1, 2, 3};
+		// double ans[] {-1.5, -.5, .5, 1.5};
+		int ans[] {-1, 0, 0, 1}; // int truncates towards 0
+		auto out = normalize_mean(x, 4);
+		INFO(to_string(out.get(), 4));
+		REQUIRE(all_eq(out.get(), ans, 4));
+	}
+	SECTION("array_inplace") {
+		int x[] {0, 1, 2, 3};
+		// double ans[] {-1.5, -.5, .5, 1.5};
+		int ans[] {-1, 0, 0, 1}; // int truncates towards 0
+		normalize_mean_inplace(x, 4);
+		INFO(to_string(x, 4));
+		REQUIRE(all_eq(x, ans, 4));
+	}
+
+}
+

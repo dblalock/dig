@@ -52,6 +52,7 @@ public:
 	FlockLearner(const FlockLearner& other) = delete;
 	FlockLearner& operator=(const FlockLearner&) = delete;
 
+	FlockLearner() {}; // can't do = default or SWIG gets confused
 
 	// ------------------------ pimpl version
 	// forward ctor args to pimpl -- all we need if only calling from cpp
@@ -70,12 +71,10 @@ public:
 
 	// ------------------------ not-so pimpl version
 
-//	FlockLearner(const double* X, int d, int n, int m_min, int m_max,
-//		int m_filt=-1);
-	FlockLearner(const double* X, int d, int n, double m_min, double m_max,
+	void learn(const double* X, int d, int n, double m_min, double m_max,
 		double m_filt=-1);
-//	FlockLearner(const double* X, int d, int n);
 
+	CMatrix getTimeSeries() { return _T; }
 	FMatrix getFeatureMat() { return _Phi; }
 	FMatrix getBlurredFeatureMat() { return _Phi_blur; }
 	FMatrix getPattern() { return _pattern.matrix(); }
@@ -83,6 +82,18 @@ public:
 	vector<length_t> getInstanceStartIdxs() { return _startIdxs; }
 	vector<length_t> getInstanceEndIdxs() { return _endIdxs; }
 };
+
+// TODO remove after debug
+CMatrix createRandomWalks(const double* seq, int seqLen,
+	int walkLen, int nwalks=100);
+
+// // explicit instantiation for SWIG // TODO remove after debug
+// using Eigen::Matrix;
+// using Eigen::Dynamic;
+// using Eigen::RowMajor;
+// template Matrix<data_t, Dynamic, Dynamic, RowMajor>
+// createRandWalks<double>(const double* seq, length_t seqLen, length_t walkLen,
+// 	length_t nwalks);
 
 
 #endif
