@@ -395,7 +395,7 @@ static inline std::pair<length_t, length_t> maximum_subarray(
 }
 
 // ================================ Relative extrema
-// i.e., the set of indices i such that |i - j| < m -> (x[i] > x[j]) for some m.
+// i.e., the set of indices i such that |i - j| <= m -> (x[i] > x[j]) for some m.
 
 // generic func for relative maxima or minima; pass in lambda to get
 // relative extrema
@@ -409,23 +409,47 @@ static vector<length_t> local_optima(const F&& func, const data_t* data,
 	}
 
 	length_t candidateIdx = 0;
-	length_t candidateVal = data[0];
+	data_t candidateVal = data[0];
 
 	for(length_t idx = 1; idx < len; idx++) {
-		auto val = data[idx];
-		if ((idx - candidateIdx) <= minSpacing) { // within minSpacing
+		data_t val = data[idx];
+		// if no candidate
+		if (candidateIdx == -1) {
+			// check if this point is eligible and make it
+			// the candidate if so
+			if (func(val, data[idx-1])) {
+			// if (val >= data[idx-1]) { // TODO remove
+				// printf("val %g at idx %lld > prev val %g \n", val, idx, data[idx-1]);
+				candidateIdx = idx;
+				candidateVal = val;
+			}
+		// there's a candidate, and this idx is within minSpacing of it
+		} else if ((idx - candidateIdx) <= minSpacing) {
 			if (func(val, candidateVal)) {
+			// if (val >= candidateVal) {
+				// printf("%lld) setting candidate val to %g cuz > prev val %g \n", idx, val, data[idx-1]);
 				candidateIdx = idx;
 				candidateVal = val;
 			}
 		} else { // no overlap, so flush candidate
+			// printf("outputting candidate %lld", candidateIdx);
 			idxs.push_back(candidateIdx);
 			// set current point as new candidate
-			candidateIdx = idx;
-			candidateVal = val;
+			bool isLocalOptimum = func(val, data[idx-1]);
+			if (isLocalOptimum) {
+				// printf("and setting new candidate %lld\n", idx);
+				candidateIdx = idx;
+				candidateVal = val;
+			} else {
+				// printf("and resetting\n");
+				candidateIdx = -1;
+				candidateVal = 0; // arbitrary value
+			}
 		}
 	}
-	idxs.push_back(candidateIdx); // add final candidate idx
+	if (candidateIdx >= 0) { // add final candidate idx, if there's a candidate
+		idxs.push_back(candidateIdx);
+	}
 	return idxs;
 }
 
@@ -437,7 +461,7 @@ static vector<length_t> local_maxima(const data_t* data, length_t len,
 		length_t minSpacing=1)
 {
 	return local_optima([](data_t val, data_t candidateVal) {
-		return val > candidateVal;
+		return val >= candidateVal; // bool for when new candidate is better
 	}, data, len, minSpacing);
 }
 template<class data_t>
@@ -445,7 +469,7 @@ static vector<length_t> local_minima(const data_t* data, length_t len,
 		length_t minSpacing=1)
 {
 	return local_optima([](data_t val, data_t candidateVal) {
-		return val < candidateVal;
+		return val <= candidateVal; // bool for when new candidate is better
 	}, data, len, minSpacing);
 }
 
