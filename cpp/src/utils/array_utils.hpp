@@ -499,7 +499,7 @@ static inline Container<length_t> wherei(const F&& func,
 	}
 	return ret;
 }
-	
+
 // ================================ Where for particular properties
 
 #define WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(FUNC, NAME) \
@@ -1616,7 +1616,7 @@ static inline void copy(const data_t* src, len_t len, data_t* dest) {
 template <class data_t, class len_t, REQUIRE_INT(len_t)>
 static inline unique_ptr<data_t[]> copy(const data_t* data, len_t len) {
 	unique_ptr<data_t[]> ret(new data_t[len]);
-	std::copy(data, data+len, ret);
+	std::copy(data, data+len, ret.get());
 	return ret;
 }
 /** Returns a copy of the provided array */
@@ -1737,32 +1737,31 @@ static inline Container<data_t> reverse(const Container<data_t>& data) {
 /** Writes the elements of src to dest such that
  * dest[i] = src[ floor(i*srcLen/destLen) ]; note that this function does no
  * filtering of any kind */
-template <class data_t, class len_t, REQUIRE_INT(len_t)>
+template <class data_t>
 static inline void resample(const data_t *src, data_t *dest,
-	len_t srcLen, len_t destLen)
+	length_t srcLen, length_t destLen)
 {
-	len_t srcIdx;
+	length_t srcIdx;
 	data_t scaleFactor = ((double)srcLen) / destLen;
-	for(len_t i = 0; i < destLen; i++) {
+	for(length_t i = 0; i < destLen; i++) {
 		srcIdx = i * scaleFactor;
 		dest[i] = src[srcIdx];
 	}
 }
-template <class data_t, class len_t, REQUIRE_INT(len_t)>
+template <class data_t>
 static inline unique_ptr<data_t[]> resample(const data_t* data,
-	len_t currentLen, len_t newLen)
+	length_t currentLen, length_t newLen)
 {
 	unique_ptr<data_t[]> ret(new data_t[newLen]);
-	array_resample(data, ret, currentLen, newLen);
+	resample(data, ret.get(), currentLen, newLen);
 	return ret;
 }
-template<template <class...> class Container, class data_t, class len_t,
-	REQUIRE_INT(len_t)>
+template<template <class...> class Container, class data_t>
 static inline Container<data_t> resample(const Container<data_t>& data,
-	len_t newLen)
+	length_t newLen)
 {
 	Container<data_t> ret(newLen);
-	array_resample(data.data(), ret.data(), data.size(), newLen);
+	resample(data.data(), ret.data(), data.size(), newLen);
 	return ret;
 }
 
@@ -2025,6 +2024,11 @@ static inline Container<data_t> unique(const Container<data_t>& data) {
 	Container<data_t> ret;
 	std::unique_copy(begin, end, std::back_inserter(ret));
 	return ret;
+}
+template<class data_t>
+static inline vector<data_t> unique(const data_t *data, length_t len) {
+	vector<data_t> tmp(data, data + len);
+	return unique(tmp);
 }
 
 // ================================================================

@@ -33,10 +33,10 @@ import_array();
 %np_vector_typemaps(uint16_t, NPY_UINT)
 %np_vector_typemaps(uint32_t, NPY_UINT)
 %np_vector_typemaps(uint64_t, NPY_ULONGLONG)
-%np_vector_typemaps(int, NPY_INT)
-%np_vector_typemaps(long, NPY_LONG)
-%np_vector_typemaps(float, NPY_FLOAT)
-%np_vector_typemaps(double, NPY_DOUBLE)
+// %np_vector_typemaps(int, NPY_INT)
+// %np_vector_typemaps(long, NPY_LONG)
+// %np_vector_typemaps(float, NPY_FLOAT)
+// %np_vector_typemaps(double, NPY_DOUBLE)
 // %np_vector_typemaps(SimpleStruct*, NPY_OBJECT) // breaks
 
 %np_vector_typemaps(length_t, NPY_LONGLONG)

@@ -31,6 +31,12 @@ def main():
 		Lmin_int = int(Lmin * len(ts.data))
 		Lmax_int = int(Lmax * len(ts.data))
 
+		# ts.data = ts.data[:, ::5] # downsample by factor of 5
+
+		# plt.plot(ts.data)
+		# plt.show()
+		# return
+
 		ff = dig.FlockLearner()
 		ff.learn(ts.data.T, Lmin, Lmax)
 
@@ -55,9 +61,8 @@ def main():
 
 		# ts.plot()
 
-		# FPhi = np.asfortranarray(Phi)
-		# FPhiBlur = np.asfortranarray(PhiBlur)
-		if False:
+		printCandidates = False
+		if printCandidates:
 			FPhi = Phi
 			FPhiBlur = PhiBlur
 			for FPhi, FPhiBlur in [(Phi, PhiBlur), (X, Xblur)]:
@@ -72,7 +77,6 @@ def main():
 					# plt.plot(dotProds)
 					# plt.plot(dotProds2)
 
-
 					candidates = dig.candidatesFromDotProds(dotProds, Lmin_int)
 					candidates2 = flock.candidatesFromDotProds(dotProds, Lmin_int)
 
@@ -81,14 +85,15 @@ def main():
 					print "{}) {} vs {}".format(seed, candidates, candidates2)
 
 					assert np.allclose(dotProds, dotProds2)
-					assert len(candidates) == len(candidates2)
-					# assert np.all(np.abs(candidates - candidates2) <= 1)
-					# if not sameCandidates:
-					# 	assert sameCandidates
 
-		# TODO program segfaults at end of func when starts and ends are
-		# released; probably a bug in my np_vector typemaps that's
-		# double-freeing memory
+					# cpp impl seems to be much more accurate than python
+					# version, which has a known bug in the func that
+					# finds spaced relative maxima
+					# if len(candidates) != len(candidates2):
+					# 	plt.plot(dotProds)
+					# 	plt.plot(dotProds2)
+					# 	plt.show()
+					# 	assert(False)
 
 		# okay, so it's receiving, storing, and returning mats correctly
 		# print "T shape", T.shape
@@ -153,13 +158,15 @@ def main():
 		# for row in Phi[:20]:
 		# 	print row
 
-		# yep, phi and phi_blur look right
-		# well, sort of...phi consistently has fewer 1s...
-		# _, axes = plt.subplots(2,2)
-		# viz.imshowBetter(Phi, ax=axes[0,0])
-		# viz.imshowBetter(PhiBlur, ax=axes[1,0])
-		# viz.imshowBetter(X, ax=axes[0,1])
-		# viz.imshowBetter(Xblur, ax=axes[1,1])
+		ploFeatureMats = 0
+		if ploFeatureMats:
+			# yep, phi and phi_blur look right
+			# well, sort of...phi consistently has fewer 1s...
+			_, axes = plt.subplots(2,2)
+			viz.imshowBetter(Phi, ax=axes[0,0])
+			viz.imshowBetter(PhiBlur, ax=axes[1,0])
+			viz.imshowBetter(X, ax=axes[0,1])
+			viz.imshowBetter(Xblur, ax=axes[1,1])
 
 		# ya, phi_blur and blurring of phi using python code are identical
 		# Lfilt = int(Lmin * len(ts.data))
@@ -185,9 +192,12 @@ def main():
 		print "python Phi shape, Phi sum, PhiBlur sum", X.shape, np.sum(X), np.sum(Xblur)
 		print "cpp    Phi shape, Phi sum, PhiBlur sum", Phi.shape, np.sum(Phi), np.sum(PhiBlur)
 
-		# flockviz.plotFFOutput(ts, starts, ends, Phi, W)
-		# flockviz.plotFFOutput(ts, starts, ends, PhiBlur, W)
-		# plt.title("cpp output")
+		# plotOutput = False
+		plotOutput = True
+		if plotOutput:
+			flockviz.plotFFOutput(ts, starts, ends, Phi, W)
+			# flockviz.plotFFOutput(ts, starts, ends, PhiBlur, W)
+			plt.title("cpp output")
 
 		# flockviz.plotFFOutput(ts, startIdxs, endIdxs, X, W)
 		# plt.title("python output")

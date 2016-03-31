@@ -131,7 +131,7 @@ def _findAllInstancesFromSeedLoc(X, Xblur, seedStartIdx, seedEndIdx,
 	sortIdxs = np.argsort(dotProds[bestIdxs])[::-1]
 	idxs = bestIdxs[sortIdxs]
 
-	print("{} idxs: {}".format(seedStartIdx, idxs)) # TODO remove
+	# print("{} idxs: {}".format(seedStartIdx, idxs)) # TODO remove
 	# print "dotProds", dotProds[::5]
 	# print "sum of dotProds", np.sum(dotProds)
 

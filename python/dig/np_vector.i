@@ -1,3 +1,6 @@
+
+// #include "../../cpp/src/utils/plot.hpp"
+
 %define %np_vector_typemaps(DTYPE, NPY_DTYPE)
 
 // %fragment("NP_VECTOR_Fragments", "header",  fragment="NumPy_Fragments")
@@ -25,11 +28,16 @@ namespace std {
 		    return NULL;
 		}
 
+		// ar::plot_array($1.data(), $1.size());
+
 		// copy data from vect into numpy array
 		DTYPE* out_data = (DTYPE*) array_data(out_array);
 		for (size_t i = 0; i < sz; i++) {
 			out_data[i] = static_cast<DTYPE>($1[i]);
+			// printf("%.3g -> %.3g\n", (double)$1[i], (double)out_data[i] );
 		}
+
+		// ar::plot_array(out_array, sz);
 
 		$result = out_array;
 	}

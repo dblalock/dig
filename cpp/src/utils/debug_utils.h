@@ -16,10 +16,22 @@
 
 #ifdef __cplusplus
 	#include <iostream>
+	#include <cstdarg>
+	#include <string>
+
 	#define PRINT_VAR(VAR) \
 		std::cout << __func__ << "(): " #VAR << ": " << VAR << "\n";
-	// #define PRINT_VAR(VAR) \
-	// 	std::cout << #VAR << ": " << VAR << "\n";
+
+	template<int MAX_LEN=512>
+	inline std::string string_with_format(const char* fmt, ...) {
+		va_list args;
+		va_start(args, fmt);
+		char buff[MAX_LEN];
+		vsnprintf(buff, MAX_LEN-1, fmt, args);
+		return std::string(buff);
+		va_end(args);
+	}
+
 #endif
 
 #ifdef __cplusplus

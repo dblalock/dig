@@ -13,9 +13,11 @@
 #include "catch.hpp"
 
 //#include <map> // TODO remove
-#include <memory>
+//#include <memory>
 
-#include "intmap.hpp"
+//#include "debug_utils.hpp" // TODO remove
+
+//#include "intmap.hpp"
 
 int main(int argc, char *const argv[]) {
 	printf("running tests...\n");
@@ -33,8 +35,14 @@ int main(int argc, char *const argv[]) {
 //	printf("after reserve vect size, capacity = %ld, %ld\n", v.size(), v.capacity());
 //	// ^ excellent; this only allocates how much resize asked for
 	
-	printf("size of unique_ptr: %ld\n", sizeof(std::unique_ptr<double*>));
-	printf("size of raw ptr: %ld\n", sizeof(double*));
+//	printf("size of unique_ptr: %ld\n", sizeof(std::unique_ptr<double*>));
+//	printf("size of raw ptr: %ld\n", sizeof(double*));
+	
+	// okay, so chars past 127 don't actually print symbols (just, eg, "\176")
+//	uint8_t chars[] = {176, 177, 178, 219, 254};
+//	for (int i = 0; i < 5; i++) {
+//		printf("%d: %c\n", chars[i], (char)chars[i]);
+//	}
 	
 	return Catch::Session().run(argc, argv);
 //
