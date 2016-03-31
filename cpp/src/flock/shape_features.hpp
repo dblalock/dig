@@ -29,6 +29,7 @@ using ar::randwalks;
 using ar::stdev;
 
 using subs::first_derivs;
+using subs::mapSubseqs;
 
 typedef double data_t;
 
@@ -94,15 +95,40 @@ static void structureScores1D(const data_t1* seq, length_t seqLen,
 		constant_inplace(out, seqLen, 0); // scores of 0
 	}
 
-	for (length_t i = 0; i < numSubseqs; i++) {
-		const data_t1* subseq = seq + i;
-		// NOTE: it is *really* important that this be a const matrix or
-		// Eigen will spew a wall of inscrutable errors about ambiguous
-		// function overloads and return types
-		Map<const Matrix<data_t1, Dynamic, 1> > seqVect(subseq, subseqLen);
+	double normalized[subseqLen];
+	mapSubseqs([subseqLen, &walks, &normalized](const data_t1* subseq) {
+		ar::normalize_mean(subseq, subseqLen, normalized);
+		Map<const Matrix<data_t1, Dynamic, 1> > seqVect(normalized, subseqLen);
 		double min = minDistSqToVector(walks, seqVect);
-		out[i] = static_cast<data_t2>(min);
-	}
+		return min;
+		// double minDist = 1e20; // huge number TODO std::huge_val or whatever
+		// for (int w = 0; w < walks.rows(); w++) {
+		// 	// double dist = 0;
+		// 	// const double* walkRowPtr = walks.row(w).data();
+		// 	// for (int i = 0; i < subseqLen; i++) {
+		// 	// 	// double diff = (normalized[i] - walkRowPtr[i]);
+		// 	// 	double diff = (normalized[i] - walks(w, i));
+		// 	// 	dist += diff * diff;
+		// 	// }
+		// 	double dist = ar::dist_sq(normalized, walks.row(w).data(), subseqLen);
+		// 	if (dist < minDist) {
+		// 		minDist = dist;
+		// 	}
+		// }
+		// return minDist;
+	}, subseqLen, seq, seqLen, out);
+
+	// for (length_t i = 0; i < numSubseqs; i++) {
+	// 	const data_t1* subseq = seq + i;
+	// 	// NOTE: it is *really* important that this be a const matrix or
+	// 	// Eigen will spew a wall of inscrutable errors about ambiguous
+	// 	// function overloads and return types
+	// 	Map<const Matrix<data_t1, Dynamic, 1> > seqVect(subseq, subseqLen);
+	// 	double min = minDistSqToVector(walks, seqVect);
+	// 	out[i] = static_cast<data_t2>(min);
+	// }
+
+
 	// write 0s past end of valid range
 	constant_inplace(out + numSubseqs, seqLen - numSubseqs, 0);
 }

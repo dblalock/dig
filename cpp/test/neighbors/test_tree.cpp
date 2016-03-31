@@ -8,18 +8,18 @@
 
 #define SKIP_TESTS
 
+#include "tree.hpp"
+
 #include <algorithm>
-#include <chrono>
 #include <math.h>
 
 #include "Dense"
-
 #include "catch.hpp"
+
 #include "testing_utils.hpp"
 #include "array_utils.hpp"
 #include "debug_utils.hpp"
-
-#include "tree.hpp"
+#include "timing_utils.hpp"
 
 //using namespace std::chrono;
 using std::vector;
@@ -28,16 +28,16 @@ using Eigen::MatrixXd;
 using Eigen::ArrayXd;
 using Eigen::VectorXd;
 
-using cputime_t = std::chrono::high_resolution_clock::time_point;
-//#define clock std::chrono::high_resolution_clock // because so much typing
+// using cputime_t = std::chrono::high_resolution_clock::time_point;
+// //#define clock std::chrono::high_resolution_clock // because so much typing
 
-cputime_t timeNow() {
-	return std::chrono::high_resolution_clock::now();
-}
+// cputime_t timeNow() {
+// 	return std::chrono::high_resolution_clock::now();
+// }
 
-double durationMs(cputime_t t1, cputime_t t0) {
-	return std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-}
+// double durationMs(cputime_t t1, cputime_t t0) {
+// 	return std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+// }
 
 void runRangeTest(int N, int D, double r, depth_t P=16, double binWidth=-1,
 				  bool printNeighbors=false, bool printCount=true) {

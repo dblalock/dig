@@ -43,6 +43,7 @@ static inline void mapSubseqs(const F&& func, length_t m, const data_t2* x,
 	assert(n >= m);
 	for (length_t i = 0; i < n - m; i += inStride) {
 		out[i * outStride] = func(x+i);
+//		out[i * outStride] = static_cast<data_t3>(func(x+i));
 	}
 }
 

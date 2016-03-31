@@ -34,6 +34,8 @@ TEST_CASE("canCreateObj", "flock") {
 	FlockLearner ff;
 	ff.learn(X.data(), D, N, Lmin, Lmax);
 
+	REQUIRE(ff.getPattern().sum() == ff.getPatternSum());
+//	printf((ff.getPattern().sum());
 
 	// REQUIRE(ff.getInstanceStartIdxs());
 	// REQUIRE(false);

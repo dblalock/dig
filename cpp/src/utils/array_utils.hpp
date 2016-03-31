@@ -239,6 +239,17 @@ static inline auto map(const F&& func, const data_t1* x, const data_t2* y,
 	}
 	return ret;
 }
+template <class F, class data_t1, class data_t2, class len_t,
+	REQUIRE_INT(len_t)>
+static inline void map_inplace(const F&& func, data_t1* x, const data_t2* y,
+					   len_t len, length_t xStride=1, length_t yStride=1)
+{
+	for (len_t i = 0; i < len; i++) {
+		x[i * xStride] = static_cast<data_t1>(func(x[i * xStride],
+												   y[i * yStride]));
+	}
+}
+
 template<class F, template <class...> class Container1, class... Args1,
 	template <class...> class Container2, class... Args2>
 static inline auto map(const F&& func, const Container1<Args1...>& x,
@@ -488,7 +499,7 @@ static inline Container<length_t> wherei(const F&& func,
 	}
 	return ret;
 }
-
+	
 // ================================ Where for particular properties
 
 #define WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(FUNC, NAME) \
@@ -502,7 +513,8 @@ static inline Container<bool> NAME(const Container<data_t>& container) { \
 	return where([](data_t x) { return FUNC(x); }, container); \
 } \
 
-// WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(static_cast<bool>, nonzeros);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(static_cast<bool>, where);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!static_cast<bool>, where_false);
 WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isnan, where_nan);
 WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isfinite, where_finite);
 WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!isfinite, where_inf);
@@ -853,6 +865,44 @@ static inline data_t min(const Container<data_t>& data) {
 	return min(data.data(), data.size());
 }
 
+// ================================ Argmax
+
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline len_t argmax(const data_t *data, len_t len) {
+	data_t max = std::numeric_limits<data_t>::min();
+	len_t bestIdx = 0;
+	for (len_t i = 0; i < len; i++) {
+		if (data[i] > max) {
+			max = data[i];
+			bestIdx = i;
+		}
+	}
+	return bestIdx;
+}
+template<template <class...> class Container, class data_t>
+static inline size_t argmax(const Container<data_t>& data) {
+	return argmax(data.data(), data.size());
+}
+
+// ================================ Argmin
+
+template <class data_t, class len_t, REQUIRE_INT(len_t)>
+static inline len_t argmin(const data_t *data, len_t len) {
+	data_t min = std::numeric_limits<data_t>::max();
+	len_t bestIdx = 0;
+	for (len_t i = 0; i < len; i++) {
+		if (data[i] < min) {
+			min = data[i];
+			bestIdx = i;
+		}
+	}
+	return bestIdx;
+}
+template<template <class...> class Container, class data_t>
+static inline size_t argmin(const Container<data_t>& data) {
+	return argmin(data.data(), data.size());
+}
+
 // ================================ Sum
 
 /** Computes the sum of data[0..len-1] */
@@ -1183,6 +1233,13 @@ static inline Container<data_t> cumsxx(const Container<data_t>& data) {
 // V x V -> V
 // ================================================================
 
+	// for (len_t i = 0; i < len; i++) { \
+	// 	x[i] = static_cast<data_t1>(x[i] OP y[i]); \
+	// } \
+
+// TODO cleaner impl is to wrap arithmetic ops in binary funcs and then
+// just use binary func wrapping code
+
 #define WRAP_VECTOR_VECTOR_OP_WITH_NAME(OP, NAME) \
 template <class data_t1, class data_t2, class len_t, class data_t3, \
 	REQUIRE_INT(len_t)> \
@@ -1196,9 +1253,7 @@ template <class data_t1, class data_t2, class len_t, \
 static inline void NAME ## _inplace(data_t1 *RESTRICT x, \
 	const data_t2 *RESTRICT y, len_t len) \
 { \
-	for (len_t i = 0; i < len; i++) { \
-		x[i] = static_cast<data_t1>(x[i] OP y[i]); \
-	} \
+	map_inplace([](data_t1 a, data_t2 b) { return a OP b; }, x, y, len); \
 } \
 template <class data_t1, class data_t2, class len_t, REQUIRE_INT(len_t)> \
 static inline auto NAME(const data_t1* x, const data_t2* y, len_t len) \
@@ -1488,14 +1543,12 @@ WRAP_BINARY_FUNC(logical_or);
 WRAP_BINARY_FUNC(logical_nor);
 WRAP_BINARY_FUNC(logical_xor);
 WRAP_BINARY_FUNC(logical_xnor);
-WRAP_BINARY_FUNC(logical_not);
 WRAP_BINARY_FUNC(bitwise_and);
 WRAP_BINARY_FUNC(bitwise_nand);
 WRAP_BINARY_FUNC(bitwise_or);
 WRAP_BINARY_FUNC(bitwise_nor);
 WRAP_BINARY_FUNC(bitwise_xor);
 WRAP_BINARY_FUNC(bitwise_xnor);
-WRAP_BINARY_FUNC(bitwise_not);
 WRAP_BINARY_STD_FUNC(pow);
 
 // ================================ Pow
@@ -1591,7 +1644,7 @@ static inline void NAME ## _inplace (data_t* data, len_t len) { \
 } \
 template <class data_t, class len_t, REQUIRE_INT(len_t)> \
 static inline auto NAME(const data_t* data, len_t len) \
-	-> unique_ptr<decltype(FUNC(*std::begin(data)))[]> \
+	-> unique_ptr<decltype(FUNC(data[0]))[]> \
 { \
 	return map([](data_t x) {return FUNC(x);}, data, len); \
 } \
@@ -1643,6 +1696,8 @@ WRAP_UNARY_STD_FUNC(floor);
 WRAP_UNARY_STD_FUNC(round);
 
 // boolean
+WRAP_UNARY_FUNC(logical_not);
+WRAP_UNARY_FUNC(bitwise_not);
 WRAP_UNARY_STD_FUNC(isnan);
 WRAP_UNARY_STD_FUNC(isinf);
 WRAP_UNARY_STD_FUNC(isfinite);
@@ -1843,12 +1898,21 @@ static inline bool all(const data_t1 *x, len_t len) {
 
 template<class F, template <class...> class Container1, class data_t1>
 static inline bool all(const F&& func, const Container1<data_t1>& x) {
-	return all(std::forward<F>(func), x.data(), x.size());
+//	return all(std::forward<F>(func), x.data(), x.size());
+	for (auto it = begin(x); it < end(x); it++) {
+		if (!func(*it)) return false;
+	}
+	return true;
 }
 
 template<class F, template <class...> class Container1, class data_t1>
 static inline bool alli(const F&& func, const Container1<data_t1>& x) {
-	return alli(std::forward<F>(func), x.data(), x.size());
+	length_t i = 0;
+	for (auto it = begin(x); it < end(x); it++) {
+		if (!func(i, *it)) return false;
+		i++;
+	}
+	return true;
 }
 
 /** Returns true iff x[i] is true for all i */
@@ -1886,11 +1950,19 @@ static inline bool any(const data_t1 *x, len_t len) {
 
 template<class F, template <class...> class Container1, class data_t1>
 static inline bool any(const F&& func, const Container1<data_t1>& x) {
-	return any(std::forward<F>(func), x.data(), x.size());
+	for (auto it = begin(x); it < end(x); it++) {
+		if (func(*it)) return true;
+	}
+	return false;
 }
 template<class F, template <class...> class Container1, class data_t1>
 static inline bool anyi(const F&& func, const Container1<data_t1>& x) {
-	return anyi(std::forward<F>(func), x.data(), x.size());
+	length_t i = 0;
+	for (auto it = begin(x); it < end(x); it++) {
+		if (func(i, *it)) return true;
+		i++;
+	}
+	return false;
 }
 /** Returns true iff x[i] is true for any i */
 template<template <class...> class Container1, class data_t1>
@@ -1960,7 +2032,8 @@ static inline Container<data_t> unique(const Container<data_t>& data) {
 // ================================================================
 
 #define WRAP_NORMALIZE_FUNC(FUNC) \
-template <class data_t, class len_t, class float_t=double, REQUIRE_INT(len_t)> \
+template <class data_t, class len_t, class float_t=double, REQUIRE_INT(len_t), \
+	REQUIRE_NUM(float_t)> \
 static inline unique_ptr<data_t[]> FUNC(const data_t* data, len_t len, \
 	float_t nonzeroThresh=kDefaultNonzeroThresh) \
 { \
@@ -1969,7 +2042,7 @@ static inline unique_ptr<data_t[]> FUNC(const data_t* data, len_t len, \
 	return ret; \
 } \
 template <template <class...> class Container, class data_t, \
-	class float_t=double> \
+	class float_t=double, REQUIRE_NUM(float_t)> \
 static inline Container<data_t> FUNC(Container<data_t> data, \
 	float_t nonzeroThresh=kDefaultNonzeroThresh) \
 { \
@@ -1981,7 +2054,7 @@ static inline Container<data_t> FUNC(Container<data_t> data, \
 // ------------------------ znormalize
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool znormalize(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -1996,7 +2069,8 @@ static inline bool znormalize(data_t1 *RESTRICT data, len_t len,
 	}
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool znormalize_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2016,7 +2090,7 @@ WRAP_NORMALIZE_FUNC(znormalize)
 // ------------------------ mean normalize
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_mean(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2024,7 +2098,8 @@ static inline bool normalize_mean(data_t1 *RESTRICT data, len_t len,
 	sub(data, len, avg, out);
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_mean_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2037,7 +2112,7 @@ WRAP_NORMALIZE_FUNC(normalize_mean)
 // ------------------------ std normalize
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_stdev(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2048,7 +2123,8 @@ static inline bool normalize_stdev(data_t1 *RESTRICT data, len_t len,
 	div(data, len, std, out);
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_stdev_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2064,7 +2140,7 @@ WRAP_NORMALIZE_FUNC(normalize_stdev)
 // ------------------------ L1 normalize
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_L1(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2075,7 +2151,8 @@ static inline bool normalize_L1(data_t1 *RESTRICT data, len_t len,
 	div(data, len, norm, out);
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_L1_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2091,7 +2168,7 @@ WRAP_NORMALIZE_FUNC(normalize_L1)
 // ------------------------ L2 normalize
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_L2(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2102,7 +2179,8 @@ static inline bool normalize_L2(data_t1 *RESTRICT data, len_t len,
 	div(data, len, norm, out);
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_L2_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2118,7 +2196,7 @@ WRAP_NORMALIZE_FUNC(normalize_L2)
 // ------------------------ Linf norm (max norm)
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_max(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2129,7 +2207,8 @@ static inline bool normalize_max(data_t1 *RESTRICT data, len_t len,
 	div(data, len, norm, out);
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_max_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2145,7 +2224,7 @@ WRAP_NORMALIZE_FUNC(normalize_max)
 // ------------------------ 0-1 normalize
 
 template<class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_zero_one(data_t1 *RESTRICT data, len_t len,
 	data_t2 *RESTRICT out, float_t nonzeroThresh=kDefaultNonzeroThresh)
 {
@@ -2160,7 +2239,8 @@ static inline bool normalize_zero_one(data_t1 *RESTRICT data, len_t len,
 	}
 	return true;
 }
-template<class data_t1, class len_t, class float_t=double, REQUIRE_INT(len_t)>
+template<class data_t1, class len_t, class float_t=double,
+	REQUIRE_INT(len_t), REQUIRE_NUM(float_t)>
 static inline bool normalize_zero_one_inplace(data_t1* data, len_t len,
 	float_t nonzeroThresh=kDefaultNonzeroThresh)
 {

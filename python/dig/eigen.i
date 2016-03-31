@@ -59,7 +59,7 @@
   template <typename T> int NumPyType() {return -1;};
 
   template <class Derived>
-  bool ConvertFromNumpyToEigenMatrix(Eigen::MatrixBase<Derived>* out, PyObject* in)
+  bool ConvertFromNumpyToEigenMatrix(Eigen::DenseBase<Derived>* out, PyObject* in)
   {
     int rows = 0;
     int cols = 0;
@@ -121,17 +121,26 @@
     }
     out->derived().setZero(rows, cols);
     typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(temp));
-    for (int i = 0; i != rows; ++i) {
+    if (array_is_fortran(temp)) { // column-major
       for (int j = 0; j != cols; ++j) {
-        out->coeffRef(i,j) = data[i*cols+j];
+        for (int i = 0; i != rows; ++i) {
+          out->coeffRef(i,j) = data[j*rows + i];
+        }
+      }
+    } else { // row-major
+      for (int i = 0; i != rows; ++i) {
+        for (int j = 0; j != cols; ++j) {
+          out->coeffRef(i,j) = data[i*cols + j];
+        }
       }
     }
+
     return true;
   };
 
   // Copies values from Eigen type into an existing NumPy type
   template <class Derived>
-  bool CopyFromEigenToNumPyMatrix(PyObject* out, Eigen::MatrixBase<Derived>* in)
+  bool CopyFromEigenToNumPyMatrix(PyObject* out, Eigen::DenseBase<Derived>* in)
   {
     int rows = 0;
     int cols = 0;
@@ -190,16 +199,24 @@
     }
 
     typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(out));
-    for (int i = 0; i != in->rows(); ++i) {
+    if (array_is_fortran(out)) { // column-major
       for (int j = 0; j != in->cols(); ++j) {
-        data[i*in->cols()+j] = in->coeff(i,j);
+        for (int i = 0; i != in->rows(); ++i) {
+          data[j*in->rows() + i] = in->coeff(i,j);
+        }
+      }
+    } else { // row-major
+      for (int i = 0; i != in->rows(); ++i) {
+        for (int j = 0; j != in->cols(); ++j) {
+          data[i*in->cols() + j] = in->coeff(i,j);
+        }
       }
     }
     return true;
   };
 
   template <class Derived>
-  bool ConvertFromEigenToNumPyMatrix(PyObject** out, Eigen::MatrixBase<Derived>* in)
+  bool ConvertFromEigenToNumPyMatrix(PyObject** out, Eigen::DenseBase<Derived>* in)
   {
     // vector (1D)
     if (in->cols() == 1) {
@@ -221,9 +238,19 @@
       return false;
     }
     typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(*out));
-    for (int i = 0; i != dims[0]; ++i) {
-      for (int j = 0; j != dims[1]; ++j) {
-        data[i*dims[1]+j] = in->coeff(i,j);
+    npy_intp rows = dims[0];
+    npy_intp cols = dims[1];
+    if (array_is_fortran(out)) { // column-major
+      for (int j = 0; j < cols; ++j) {
+        for (int i = 0; i < rows; ++i) {
+          data[j*rows + i] = in->coeff(i,j);
+        }
+      }
+    } else { // row-major
+      for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+          data[i*cols + j] = in->coeff(i,j);
+        }
       }
     }
     return true;
@@ -356,8 +383,8 @@
 //     CLASS,
 //     const CLASS &,
 //     CLASS const &,
-//     Eigen::MatrixBase< CLASS >,
-//     const Eigen::MatrixBase< CLASS > &,
+//     Eigen::DenseBase< CLASS >,
+//     const Eigen::DenseBase< CLASS > &,
 //     CLASS &
 //   {
 //     $1 = is_array($input);

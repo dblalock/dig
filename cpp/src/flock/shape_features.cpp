@@ -141,7 +141,9 @@ static void neighborSims1D(const data_t1* seq, length_t seqLen,
 		// return (1.0 - dist) * (dist < kDistThresh);
 //		return (1.0 - dist); // TODO uncomment above
 		// return dist < 1.0 ? (1.0 - dist) : 0.0; // TODO uncomment above
-		return dist < kDistThresh ? (1.0 - dist) : 0.0;
+		// return dist < kDistThresh ? (1.0 - dist) : 0.0;
+		// return static_cast<sim_t>(dist < kDistThresh);
+		return dist < kDistThresh ? 1.0 : 0.0;
 
 	}, neighborLen, seq, seqLen, out + prePadLen);
 
@@ -175,7 +177,7 @@ static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 		const data_t1* neighbor = seq + idx;
 		copy(neighbor, subseqLen, neighborTmp);
 
-		assert(ar::all_eq(neighbor, neighborTmp, subseqLen)); // TODO remove
+		// assert(ar::all_eq(neighbor, neighborTmp, subseqLen)); // TODO remove
 
 		// double* outPtr = ret.row(i).data();
 		// double* outPtr = retPtr + (i * numSubseqs);
@@ -246,28 +248,30 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 				simsRowPtr = sims_tmp + (i * paddedLen);
 				rowOutPtr = Phi.row(currentRowOut).data();
 
+				// TODO remove
 				auto nanIdxs = ar::where([](double x) { return !isfinite(x); },
 										 simsRowPtr, paddedLen);
 				if (nanIdxs.size()) {
-					printf("found nan idxs in dim %d", dim);
+					printf("----> ERR!!! found nan idxs in dim %d <----", dim);
 					PRINT_VAR(ar::to_string(nanIdxs));
+					exit(1);
 				}
 
-				auto minVal = ar::min(simsRowPtr, paddedLen);
-				auto maxVal = ar::max(simsRowPtr, paddedLen);
-				printf("val range for neighbor %d.%d: %g-%g", dim, i,
-					   minVal, maxVal);
+				// auto minVal = ar::min(simsRowPtr, paddedLen);
+				// auto maxVal = ar::max(simsRowPtr, paddedLen);
+				// printf("val range for neighbor %d.%d: %g-%g", dim, i,
+				// 	   minVal, maxVal);
 
 // #define SKIP_FOR_NOW
 #ifndef SKIP_FOR_NOW
 				auto rowSum = sum(simsRowPtr + Lmax, numSubseqs);
 //				PRINT_VAR(rowSum);
-				printf( "(sum = %g)\n", rowSum);
+				// printf( "(sum = %g)\n", rowSum);
 				if (rowSum < 1) {
-					printf("skipping row with tiny sum\n");
+					// printf("skipping row with tiny sum\n");
 					continue;
 				} else if (rowSum > (numSubseqs / 2)) {
-					printf("skipping row that's mostly 1s\n");
+					// printf("skipping row that's mostly 1s\n");
 					continue;
 				}
 #endif
@@ -328,7 +332,7 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 // blurred feature mat
 // ------------------------------------------------
 
-static CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
+CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
 	auto d = Phi.rows();
 	auto n = Phi.cols(); // note that this is with padding at this point
 	CMatrix Phi_blur(d, n);
@@ -338,9 +342,11 @@ static CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
 	for (int i = 0; i < d; i++) {
 		const double* rowInPtr = Phi.data() + (i * n);
 		double* rowOutPtr = Phi_blur.data() + (i * n);
+		double* filtOutPtr = rowOutPtr + Lfilt / 2; // center hamming window
+		length_t filtOutLen = n - Lfilt / 2;
 
 		// convolve with hamming filt (equiv to cross-corr since symmetric)
-		crossCorrs(filt.get(), Lfilt, rowInPtr, n, rowOutPtr);
+		crossCorrs(filt.get(), Lfilt, rowInPtr, filtOutLen, filtOutPtr);
 		// divide by largest value within Lfilt / 2
 		max_filter(rowOutPtr, n, Lfilt/2, max_tmp);
 		max_inplace(1.0, max_tmp, n); // divide by at least 1, so no div by 0
@@ -348,12 +354,12 @@ static CMatrix blurFeatureMat(const CMatrix& Phi, length_t Lfilt) {
 //		max_inplace(1, max_tmp, n); // also works...
 		div_inplace(rowOutPtr, max_tmp, n);
 
-		auto minVal = ar::min(rowInPtr, n);
-		auto maxVal = ar::max(rowInPtr, n);
-		auto minValOut = ar::min(rowOutPtr, n);
-		auto maxValOut = ar::max(rowOutPtr, n);
-		printf("val range for row %d: %g-%g\t->\t%g-%g\n", i, minVal, maxVal,
-			   minValOut, maxValOut);
+		// auto minVal = ar::min(rowInPtr, n);
+		// auto maxVal = ar::max(rowInPtr, n);
+		// auto minValOut = ar::min(rowOutPtr, n);
+		// auto maxValOut = ar::max(rowOutPtr, n);
+		// printf("val range for row %d: %g-%g\t->\t%g-%g\n", i, minVal, maxVal,
+		// 	   minValOut, maxValOut);
 
 	}
 	return Phi_blur;
@@ -370,13 +376,13 @@ std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 	CMatrix Phi(neighborSimsMat(T, d, n, Lmin, Lmax));
 //	CMatrix Phi(3, 4);
 //	Phi.setRandom();
-	print("computed neighbor sims mat without asploding");
+	// print("computed neighbor sims mat without asploding");
 
 	PRINT_VAR(Phi.rows());
 	PRINT_VAR(Phi.cols());
 
 	CMatrix Phi_blur(blurFeatureMat(Phi, Lfilt));
-	print("blurred neighbor sims mat without asploding");
+	// print("blurred neighbor sims mat without asploding");
 
 	// FMatrix Phi_colmajor(Phi.rows(), n);
 	// FMatrix Phi_blur_colmajor(Phi_blur.rows(), n);
@@ -386,20 +392,34 @@ std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 
 	FMatrix Phi_colmajor(Phi.middleCols(Lmax, n));
 	FMatrix Phi_blur_colmajor(Phi_blur.middleCols(Lmax, n));
-	print("built col-major mats without asploding");
+	// print("built col-major mats without asploding");
 
-	print("------------------------ buildShapeFeatureMats() ");
-	for(int i = 0; i < Phi_colmajor.rows(); i++) {
-		// auto rowInPtr = Phi.row(i).data();
-		auto minVal = Phi_colmajor.row(i).minCoeff();
-		auto maxVal = Phi_colmajor.row(i).maxCoeff();
-		printf("val range for Phi row %d:\t%g-%g;\t", i, minVal, maxVal);
+	// print("------------------------ buildShapeFeatureMats() ");
+	// for(int i = 0; i < Phi_colmajor.rows(); i++) {
+	// 	// auto rowInPtr = Phi.row(i).data();
+	// 	auto minVal = Phi_colmajor.row(i).minCoeff();
+	// 	auto maxVal = Phi_colmajor.row(i).maxCoeff();
+	// 	printf("val range for Phi row %d:\t%g-%g;\t", i, minVal, maxVal);
 
-		minVal = Phi_blur_colmajor.row(i).minCoeff();
-		maxVal = Phi_blur_colmajor.row(i).maxCoeff();
-		printf("%g-%g\n", minVal, maxVal);
-	}
+	// 	minVal = Phi_blur_colmajor.row(i).minCoeff();
+	// 	maxVal = Phi_blur_colmajor.row(i).maxCoeff();
+	// 	printf("%g-%g\n", minVal, maxVal);
+	// }
 
 
 	return std::pair<FMatrix, FMatrix>(Phi_colmajor, Phi_blur_colmajor);
 }
+
+// ================================================================
+// Debug // TODO remove
+// ================================================================
+
+vector<double> structureScores1D(const double* seq, int seqLen,
+							  int subseqLen, const CMatrix& walks) {
+	vector<double> ret(seqLen);
+	structureScores1D(seq, seqLen, subseqLen, walks, ret.data());
+	return ret;
+}
+
+
+

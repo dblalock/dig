@@ -851,3 +851,39 @@ TEST_CASE("normalize_mean", "array_utils") {
 
 }
 
+TEST_CASE("argsort", "array_utils") {
+	SECTION("already sorted, ascending") {
+		vector<float> x {0, 11, 22, 33};
+		vector<length_t> ans {0, 1, 2, 3};
+		auto out = argsort(x);
+		CAPTURE(to_string(out));
+		CAPTURE(to_string(ans));
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("descending to ascending") {
+		vector<float> x {33, 2, -1, -10};
+		vector<length_t> ans {3, 2, 1, 0};
+		auto out = argsort(x);
+		CAPTURE(to_string(out));
+		CAPTURE(to_string(ans));
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("mixed to ascending") {
+		vector<float> x {5, -3, 1, -2, 7};
+		vector<length_t> ans {1, 3, 2, 0, 4};
+		auto out = argsort(x);
+		CAPTURE(to_string(out));
+		CAPTURE(to_string(ans));
+		REQUIRE(all_eq(out, ans));
+	}
+	SECTION("mixed to descending") {
+		vector<float> x {5, -3, 1, -2, 7};
+		vector<length_t> ans {4, 0, 2, 3, 1};
+		auto out = argsort(x, false);
+		CAPTURE(to_string(out));
+		CAPTURE(to_string(ans));
+		REQUIRE(all_eq(out, ans));
+	}
+
+
+}

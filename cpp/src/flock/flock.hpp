@@ -18,8 +18,13 @@
 
 #include "shape_features.hpp"
 
+
 // using Eigen::MatrixXd;
-using Eigen::ArrayXXd;
+// using Eigen::ArrayXXd;
+using Eigen::Dynamic;
+using Eigen::ColMajor;
+
+typedef Eigen::Array<double, Dynamic, Dynamic, ColMajor> FArray;
 
 // duplicate typedefs here (not just in shape_features) to make SWIG happy
 // #include <vector>
@@ -33,17 +38,30 @@ using Eigen::ArrayXXd;
 // // typedef Matrix<double, Dynamic, Dynamic> FMatrix;
 // typedef MatrixXd FMatrix;
 
+vector<double> dotProdsForSeed(const FMatrix& Phi, const FMatrix& Phi_blur,
+	int seed, int windowLen);
+vector<length_t> candidatesFromDotProds(const vector<double>& dotProds,
+	int Lmin);
+vector<length_t> selectFromCandidates(const FMatrix& Phi,
+	const FMatrix& Phi_blur, const vector<int>& candidates, int windowLen,
+	const FMatrix& logs_0, double p0_blur, double bestScore=-9999);
+
 class FlockLearner {
 private:
 	CMatrix _T;
 	FMatrix _Phi;
 	FMatrix _Phi_blur;
-	ArrayXXd _pattern;
+//	ArrayXXd _pattern;
+	FArray _pattern;
 	vector<length_t> _startIdxs;
 	vector<length_t> _endIdxs;
 	length_t _Lmin;
 	length_t _Lmax;
 	length_t _Lfilt;
+	length_t _windowLen;
+
+	vector<double> _seedScores; //TODO remove
+	vector<length_t> _seeds; //TODO remove
 
 	// class Impl;
 	// pimpl<Impl> _self;
@@ -74,18 +92,31 @@ public:
 	void learn(const double* X, int d, int n, double m_min, double m_max,
 		double m_filt=-1);
 
-	CMatrix getTimeSeries() { return _T; }
-	FMatrix getFeatureMat() { return _Phi; }
-	FMatrix getBlurredFeatureMat() { return _Phi_blur; }
-	FMatrix getPattern() { return _pattern.matrix(); }
+	CMatrix getTimeSeries() const { return _T; }
+	FMatrix getFeatureMat() const { return _Phi; }
+	FMatrix getBlurredFeatureMat() const { return _Phi_blur; }
+	FMatrix getPattern() const { return _pattern.matrix(); }
 	// ArrayXXd& getPattern() { return _pattern; }
-	vector<length_t> getInstanceStartIdxs() { return _startIdxs; }
-	vector<length_t> getInstanceEndIdxs() { return _endIdxs; }
+	vector<length_t> getInstanceStartIdxs() const;
+	vector<length_t> getInstanceEndIdxs() const;
+
+
+
+	// TODO remove
+	int getWindowLen() const { return (int)_windowLen; }
+	double getPatternSum();
+	vector<double> getSeedScores();
+	vector<length_t> getSeeds();
+
+	vector<length_t> getCandidatesForSeed(FMatrix Phi, FMatrix Phi_blur,
+		int seed);
 };
 
 // TODO remove after debug
 CMatrix createRandomWalks(const double* seq, int seqLen,
 	int walkLen, int nwalks=100);
+vector<double> structureScores1D(const double* seq, int seqLen,
+							  int subseqLen, const CMatrix& walks);
 
 // // explicit instantiation for SWIG // TODO remove after debug
 // using Eigen::Matrix;

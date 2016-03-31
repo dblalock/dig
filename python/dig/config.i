@@ -12,6 +12,21 @@ import_array();
 // stl vector typemaps
 // ================================================================
 
+// pairings taken from the bottom of numpy.i
+%np_vector_typemaps(signed char       , NPY_BYTE     )
+%np_vector_typemaps(unsigned char     , NPY_UBYTE    )
+%np_vector_typemaps(short             , NPY_SHORT    )
+%np_vector_typemaps(unsigned short    , NPY_USHORT   )
+%np_vector_typemaps(int               , NPY_INT      )
+%np_vector_typemaps(unsigned int      , NPY_UINT     )
+%np_vector_typemaps(long              , NPY_LONG     )
+%np_vector_typemaps(unsigned long     , NPY_ULONG    )
+%np_vector_typemaps(long long         , NPY_LONGLONG )
+%np_vector_typemaps(unsigned long long, NPY_ULONGLONG)
+%np_vector_typemaps(float             , NPY_FLOAT    )
+%np_vector_typemaps(double            , NPY_DOUBLE   )
+
+// apparently these are also necessary...
 %np_vector_typemaps(int16_t, NPY_INT)
 %np_vector_typemaps(int32_t, NPY_INT)
 %np_vector_typemaps(int64_t, NPY_LONGLONG)
@@ -24,7 +39,7 @@ import_array();
 %np_vector_typemaps(double, NPY_DOUBLE)
 // %np_vector_typemaps(SimpleStruct*, NPY_OBJECT) // breaks
 
-%np_vector_typemaps(length_t, NPY_INT)
+%np_vector_typemaps(length_t, NPY_LONGLONG)
 
 // ================================================================
 // eigen typemaps
