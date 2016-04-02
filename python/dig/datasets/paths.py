@@ -18,8 +18,8 @@ WARD = pathTo('WARD1.0')
 DISHWASHER = pathTo(j('AMPds', 'dishwasher_nohead.csv'))
 DISHWASHER_SHORT = pathTo(j('AMPds', 'dishwasher_nohead_short.csv'))
 DISHWASHER_20K = pathTo(j('AMPds', 'dishwasher_nohead_20k.csv'))
-DISHWASHER_LABELS = 'python/datasets/dishwasher-labels.txt' # in project dir
-DISHWASHER_LABELS_ALT = 'ts/python/datasets/dishwasher-labels.txt' # in project dir
+DISHWASHER_LABELS = 'python/dig/datasets/dishwasher-labels.txt' # in project dir
+DISHWASHER_LABELS_ALT = './dishwasher-labels.txt' # in project dir
 
 # TIDIGITS; the executable can be compiled from the source code here:
 # https://www.ldc.upenn.edu/language-resources/tools/sphere-conversion-tools

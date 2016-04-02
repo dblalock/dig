@@ -59,6 +59,8 @@ def learnFFfromSeq(seq, Lmin, Lmax, Lfilt=0):
 	if not Lfilt or Lfilt < 0:
 		Lfilt = Lmin
 
+	t0 = time.clock()
+
 	# extend the first and last values out so that features using
 	# longer windows are present for more locations
 	padLen = Lmax
@@ -78,6 +80,8 @@ def learnFFfromSeq(seq, Lmin, Lmax, Lfilt=0):
 	X = X[keepRowIdxs]
 	Xblur = Xblur[keepRowIdxs]
 
+	t1 = time.clock()
+
 	# feature matrices must satisfy these (if you plan on using your own)
 	assert(np.min(X) >= 0.)
 	assert(np.max(X) <= 1.)
@@ -85,6 +89,8 @@ def learnFFfromSeq(seq, Lmin, Lmax, Lfilt=0):
 	assert(np.max(Xblur) <= 1.)
 	assert(np.all(np.sum(X, axis=1) > 0))
 	assert(np.all(np.sum(Xblur, axis=1) > 0))
+
+	print("learnFFfromSeq(): feature construction time:\n\t{}".format(t1 - t0))
 
 	startIdxs, endIdxs, bsfFilt = _learnFF(seq, X, Xblur, Lmin, Lmax, Lfilt)
 	return startIdxs, endIdxs, bsfFilt, X, Xblur

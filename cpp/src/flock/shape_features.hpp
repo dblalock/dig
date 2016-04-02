@@ -98,6 +98,9 @@ static void structureScores1D(const data_t1* seq, length_t seqLen,
 	double normalized[subseqLen];
 	mapSubseqs([subseqLen, &walks, &normalized](const data_t1* subseq) {
 		ar::normalize_mean(subseq, subseqLen, normalized);
+		// NOTE: it is *really* important that this be a const matrix or
+		// Eigen will spew a wall of inscrutable errors about ambiguous
+		// function overloads and return types
 		Map<const Matrix<data_t1, Dynamic, 1> > seqVect(normalized, subseqLen);
 		double min = minDistSqToVector(walks, seqVect);
 		return min;
@@ -117,17 +120,6 @@ static void structureScores1D(const data_t1* seq, length_t seqLen,
 		// }
 		// return minDist;
 	}, subseqLen, seq, seqLen, out);
-
-	// for (length_t i = 0; i < numSubseqs; i++) {
-	// 	const data_t1* subseq = seq + i;
-	// 	// NOTE: it is *really* important that this be a const matrix or
-	// 	// Eigen will spew a wall of inscrutable errors about ambiguous
-	// 	// function overloads and return types
-	// 	Map<const Matrix<data_t1, Dynamic, 1> > seqVect(subseq, subseqLen);
-	// 	double min = minDistSqToVector(walks, seqVect);
-	// 	out[i] = static_cast<data_t2>(min);
-	// }
-
 
 	// write 0s past end of valid range
 	constant_inplace(out + numSubseqs, seqLen - numSubseqs, 0);

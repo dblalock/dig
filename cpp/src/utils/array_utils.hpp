@@ -2344,12 +2344,12 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 	vector<int64_t> ret;
 	int64_t numPossibleVals = maxVal - minVal + 1;
 
-	assertf(numPossibleVals >= 1, "No values between min %lld and max %lld",
-			minVal, maxVal);
+	assertf(numPossibleVals >= 1, "rand_ints(): no values between"
+			"min %lld and max %lld", minVal, maxVal);
 
 	assertf(replace || (numPossibleVals >= howMany),
-		"Can't sample %llu values without replacement between min %lld and max %lld",
-		howMany, minVal, maxVal);
+		"rand_ints(): can't sample %llu values without replacement between "
+		"min %lld and max %lld", howMany, minVal, maxVal);
 
 	if (replace) {
 		for (size_t i = 0; i < howMany; i++) {
@@ -2401,17 +2401,17 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 	if ( (!probs) || willReturnEverything) {
 		return rand_ints(minVal, maxVal, howMany, replace);
 	}
-	assertf(numPossibleVals >= 1, "No values between min %lld and max %lld",
-			minVal, maxVal);
+	assertf(numPossibleVals >= 1, "rand_ints(): no values between"
+			"min %lld and max %lld", minVal, maxVal);
 
 	assertf(replace || (numPossibleVals >= howMany),
-			"Can't sample %llu values without replacement between min %lld and max %lld",
-			howMany, minVal, maxVal);
+			"rand_ints(): can't sample %llu values without replacement"
+			"between min %lld and max %lld", howMany, minVal, maxVal);
 
 	assertf(all_nonnegative(probs, numPossibleVals),
 		"Probabilities must be nonnegative!");
 	auto totalProb = sum(probs, numPossibleVals);
-	assertf(totalProb > 0, "Probabilities sum to a value <= 0");
+	assertf(totalProb > 0, "rand_ints(): probabilities sum to a value <= 0");
 
     // init random distro object
 	std::random_device rd;
@@ -2450,15 +2450,32 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 		return ret;
 	}
 
+	auto howManyPossible = nonzeros(probs, maxVal - minVal + 1).size();
+	if (howManyPossible < howMany) {
+		printf("WARNING: rand_ints(): only %lu ints have nonzero probability,"
+			"but %lld were requested; returning the smaller value\n",
+			howManyPossible, howMany);
+	}
+	howMany = min(howMany, howManyPossible);
+
+
 	// sample without replacement; each returned int is unique
 	unordered_set<int64_t> usedIdxs;
 	usedIdxs.reserve(howMany);
-	while(usedIdxs.size() < howMany) {
+	int64_t abandonAfter = howMany * howMany * howMany;
+	int watchdog = 0;
+	while(usedIdxs.size() < howMany && watchdog < abandonAfter) {
 		int64_t idx = static_cast<int64_t>(distro(gen));
 		if (! usedIdxs.count(idx)) { // if new idx
 			usedIdxs.insert(idx);
 			ret.push_back(idx);
 		}
+		watchdog++;
+	}
+	if (watchdog == abandonAfter) {
+		printf("WARNING: rand_ints(): only sampled %lu ints"
+			"without replacement; check for very small probabilities\n",
+			ret.size());
 	}
 
 	return ret;

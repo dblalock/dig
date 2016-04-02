@@ -97,6 +97,10 @@ static vector<length_t> selectShapeIdxs(const data_t* seq, length_t seqLen,
 {
 	// compute scores for each subsequence and store them in scores
 	structureScores1D(seq, seqLen, subseqLen, walks, scores);
+	if (sum(scores, seqLen) <= 0) {
+		vector<length_t> ret;
+		return ret;
+	}
 	// select idxs with probability proportional to their scores
 	return rand_idxs(seqLen, howMany, false, scores);
 }
@@ -111,7 +115,7 @@ static void neighborSims1D(const data_t1* seq, length_t seqLen,
 	// if neighbor (shape) is completely flat, no similarity to anything
 	double neighborVariance = variance(neighbor, neighborLen);
 	if (neighborVariance < DEFAULT_NONZERO_THRESH) {
-		print("skipping flat neighbor");
+		// print("skipping flat neighbor");
 		constant_inplace(out, seqLen, 0);
 		return;
 	}
@@ -153,7 +157,7 @@ static void neighborSims1D(const data_t1* seq, length_t seqLen,
 
 // out must be storage for a numNeighbors x seqLen array
 template<class data_t1, class dist_t, class sim_t>
-static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
+static size_t neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 	length_t subseqLen, length_t numNeighbors, dist_t* scores_tmp, sim_t* out)
 {
 	MatrixXd walks = createRandWalks(seq, seqLen, subseqLen);
@@ -168,7 +172,7 @@ static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 	//	auto numSubseqs = seqLen - subseqLen + 1;
 	auto numShapes = idxs.size();
 
-	DEBUGF("using %lu neighbors", numShapes);
+	// DEBUGF("using %lu neighbors", numShapes);
 
 	// CMatrix ret(numShapes, numSubseqs);
 	//	double* retPtr = ret.data();
@@ -192,6 +196,7 @@ static void neighborSimsOneSignal(const data_t1* seq, length_t seqLen,
 //		auto selfSimilarity = *(outPtr + idx);
 //		assert(selfSimilarity > 0);
 	}
+	return idxs.size();
 }
 
 // NOTE: assumes each signal is a row in the matrix, not a column
@@ -205,9 +210,8 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 
 	// PRINT_VAR(d);
 	// PRINT_VAR(n);
-	PRINT_VAR(ar::to_string(lengths));
 	// PRINT_VAR(ar::to_string(lengths));
-	PRINT_VAR(numNeighbors);
+	// PRINT_VAR(numNeighbors);
 
 	length_t numLengths = lengths.size();
 	length_t numRows = d * numNeighbors * numLengths;
@@ -218,7 +222,7 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 	CMatrix Phi(numRows, numCols);
 	// Phi.setZero();
 
-	PRINT_VAR(paddedLen);
+	// PRINT_VAR(paddedLen);
 
 	// create feature mat for each dimension for each length
 	double signal_tmp[paddedLen];
@@ -237,25 +241,29 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 
 		for (const auto subseqLen : lengths) {
 			// DEBUGF("computing neighbor sims for dim %d...", dim);
-			neighborSimsOneSignal(signal_tmp, paddedLen, subseqLen,
-								  numNeighbors, scores_tmp, sims_tmp);
+			// sample numNeighbors shapes from the data and store the
+			// similarity of the whole signal to each in a row of sims_tmp;
+			// if the signal is flat, we may find fewer than numNeighbors
+			// unique shapes
+			auto numNeighborsFound = neighborSimsOneSignal(signal_tmp, paddedLen,
+				subseqLen, numNeighbors, scores_tmp, sims_tmp);
 			// DEBUGF("computed neighbor sims for dim %d", dim);
 
 			// copy similarities for each feature into output matrix
 			auto numSubseqs = n - subseqLen + 1;
 			double* simsRowPtr;
-			for (int i = 0; i < numNeighbors; i++) {
+			for (int i = 0; i < numNeighborsFound; i++) {
 				simsRowPtr = sims_tmp + (i * paddedLen);
 				rowOutPtr = Phi.row(currentRowOut).data();
 
 				// TODO remove
-				auto nanIdxs = ar::where([](double x) { return !isfinite(x); },
-										 simsRowPtr, paddedLen);
-				if (nanIdxs.size()) {
-					printf("----> ERR!!! found nan idxs in dim %d <----", dim);
-					PRINT_VAR(ar::to_string(nanIdxs));
-					exit(1);
-				}
+				// auto nanIdxs = ar::where([](double x) { return !isfinite(x); },
+				// 						 simsRowPtr, paddedLen);
+				// if (nanIdxs.size()) {
+				// 	printf("----> ERR!!! found nan idxs in dim %d <----", dim);
+				// 	PRINT_VAR(ar::to_string(nanIdxs));
+				// 	exit(1);
+				// }
 
 				// auto minVal = ar::min(simsRowPtr, paddedLen);
 				// auto maxVal = ar::max(simsRowPtr, paddedLen);
@@ -290,7 +298,7 @@ CMatrix neighborSimsMat(const data_t* T, length_t d, length_t n,
 		}
 	}
 
-	PRINT_VAR(currentRowOut);
+	// PRINT_VAR(currentRowOut);
 //	for (int i = 0; i < ar::min(10, currentRowOut); i++) {
 //		printf("%d) ", i);
 //		auto rowString = ar::to_string(Phi.row(i).data(), 5);
@@ -378,8 +386,8 @@ std::pair<FMatrix, FMatrix> buildShapeFeatureMats(const double* T,
 //	Phi.setRandom();
 	// print("computed neighbor sims mat without asploding");
 
-	PRINT_VAR(Phi.rows());
-	PRINT_VAR(Phi.cols());
+	// PRINT_VAR(Phi.rows());
+	// PRINT_VAR(Phi.cols());
 
 	CMatrix Phi_blur(blurFeatureMat(Phi, Lfilt));
 	// print("blurred neighbor sims mat without asploding");

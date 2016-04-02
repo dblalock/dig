@@ -23,7 +23,7 @@
 		std::cout << __func__ << "(): " #VAR << ": " << VAR << "\n";
 
 	template<int MAX_LEN=512>
-	inline std::string string_with_format(const char* fmt, ...) {
+	static inline std::string string_with_format(const char* fmt, ...) {
 		va_list args;
 		va_start(args, fmt);
 		char buff[MAX_LEN];
@@ -46,11 +46,11 @@ extern "C" {
 // 	#define assertf(A, M, ...)
 // #endif
 
-inline void print_var(const char* name, double val) {
+static inline void print_var(const char* name, double val) {
 	printf("%s=%g\n", name, val);
 }
 
-inline void print(const char* str) {
+static inline void print(const char* str) {
 	printf("%s\n", str);
 }
 

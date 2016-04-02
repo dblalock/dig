@@ -148,6 +148,8 @@ def plotFFOutput(ts, startIdxs, endIdxs, featureMat, model,
 
 	plt.tight_layout()
 
+	return axSeq, axSim, axPattern
+
 
 def main():
 	return

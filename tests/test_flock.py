@@ -18,22 +18,41 @@ import viz_flock as flockviz
 # np.random.seed(123)
 
 def main():
-	tsList = ds.loadDataset(ds.SINES)
+	# tsList = ds.loadDataset(ds.SINES)
+	# tsList = ds.loadDataset(ds.MSRC, whichExamples=range(1))
+	# tsList = ds.loadDataset(ds.MSRC, whichExamples=range(2))
+	# tsList = ds.loadDataset(ds.DISHWASHER, whichExamples=range(1))
+	tsList = ds.loadDataset(ds.DISHWASHER, whichExamples=range(5))
+	# tsList = ds.loadDataset(ds.TIDIGITS, whichExamples=range(2))
+	# tsList = ds.loadDataset(ds.TIDIGITS, whichExamples=range(10))
 
 	for ts in tsList:
-		seq = ts.data.ravel().reshape((-1, 1))
-		print seq.shape
 
-		print ts.data.shape
+		# ts.data = ts.data[:, :5]
+		# ts.data = ts.data[::2, :]
 
-		Lmin = .1
-		Lmax = .2
+		# make it have 3 signals with increasing amounts of noise
+		# n = ts.data.shape[0]
+		# noiseDim1 = ts.data + np.random.randn(n, 1) * .25
+		# noiseDim2 = np.random.randn(n).reshape((-1, 1))
+		# ts.data = np.hstack((ts.data, noiseDim1, noiseDim2))
+
+		# seq = ts.data.ravel().reshape((-1, 1))
+		# print seq.shape
+
+		# print ts.data.shape
+		# return
+
+		# Lmin = .1
+		# Lmax = .2
+		Lmin = .05
+		Lmax = .1
 		Lmin_int = int(Lmin * len(ts.data))
 		Lmax_int = int(Lmax * len(ts.data))
 
 		# ts.data = ts.data[:, ::5] # downsample by factor of 5
 
-		# plt.plot(ts.data)
+		# plt.plot(ts.data[:, :5])
 		# plt.show()
 		# return
 
@@ -55,8 +74,8 @@ def main():
 		seeds = ff.getSeeds()
 
 
-		startIdxs, endIdxs, model, X, Xblur = flock.learnFFfromSeq(ts.data, Lmin,
-			Lmax)
+		# startIdxs, endIdxs, model, X, Xblur = flock.learnFFfromSeq(ts.data, Lmin,
+		# 	Lmax)
 
 
 		# ts.plot()
@@ -139,8 +158,8 @@ def main():
 
 		print "cpp startIdxs:", starts
 		print "cpp endIdxs:", ends
-		print "python startIdxs:", startIdxs
-		print "python endIdxs:", endIdxs
+		# print "python startIdxs:", startIdxs
+		# print "python endIdxs:", endIdxs
 
 		# random walks seem to be good
 		# walks = dig.createRandomWalks(ts.data.ravel(), 80, 100)
@@ -189,18 +208,18 @@ def main():
 		# viz.imshowBetter(W)
 		# plt.colorbar()
 
-		print "python Phi shape, Phi sum, PhiBlur sum", X.shape, np.sum(X), np.sum(Xblur)
+		# print "python Phi shape, Phi sum, PhiBlur sum", X.shape, np.sum(X), np.sum(Xblur)
 		print "cpp    Phi shape, Phi sum, PhiBlur sum", Phi.shape, np.sum(Phi), np.sum(PhiBlur)
 
 		# plotOutput = False
 		plotOutput = True
 		if plotOutput:
-			flockviz.plotFFOutput(ts, starts, ends, Phi, W)
+			axSeq, axSim, axPattern = flockviz.plotFFOutput(ts, starts, ends, Phi, W)
 			# flockviz.plotFFOutput(ts, starts, ends, PhiBlur, W)
-			plt.title("cpp output")
+			axSeq.set_title("cpp output")
 
-		# flockviz.plotFFOutput(ts, startIdxs, endIdxs, X, W)
-		# plt.title("python output")
+			# axes = flockviz.plotFFOutput(ts, startIdxs, endIdxs, X, W)
+			# axes[0].set_title("python output")
 
 	plt.show()
 

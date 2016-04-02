@@ -42,9 +42,9 @@ vector<double> dotProdsForSeed(const FMatrix& Phi, const FMatrix& Phi_blur,
 	int seed, int windowLen);
 vector<length_t> candidatesFromDotProds(const vector<double>& dotProds,
 	int Lmin);
-vector<length_t> selectFromCandidates(const FMatrix& Phi,
-	const FMatrix& Phi_blur, const vector<int>& candidates, int windowLen,
-	const FMatrix& logs_0, double p0_blur, double bestScore=-9999);
+// vector<length_t> selectFromCandidates(const FMatrix& Phi,
+// 	const FMatrix& Phi_blur, const vector<int>& candidates, int windowLen,
+// 	const FMatrix& logs_0, double p0_blur, double bestScore=-9999);
 
 class FlockLearner {
 private:

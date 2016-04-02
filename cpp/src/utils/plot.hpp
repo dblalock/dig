@@ -23,7 +23,7 @@ using ar::unique;
 
 namespace ar {
 
-static void _print_title(string title, length_t ncols) {
+static inline void _print_title(string title, length_t ncols) {
 	if (title.size()) {
 		int totalLen = static_cast<int>(5 + ncols);
 		string pad((totalLen - title.size()) / 2, ' ');
