@@ -29,6 +29,7 @@
 		72C81BE81C90B6EE00639302 /* flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE61C90B6EE00639302 /* flock.cpp */; };
 		72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE91C90DC0100639302 /* shape_features.cpp */; };
 		72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BF01C93629D00639302 /* test_subseq.cpp */; };
+		72CFE90C1CD464890085FB1B /* test_bit_ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */; };
 		72F66F441CA4B0F900EDB8E7 /* test_flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */; };
 /* End PBXBuildFile section */
 
@@ -52,6 +53,8 @@
 		72247DB01C87A5F600B74A64 /* neighbors.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = neighbors.hpp; sourceTree = "<group>"; };
 		72247DB11C87A5F600B74A64 /* dist.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = dist.hpp; sourceTree = "<group>"; };
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
+		727A342F1CB35D0B009A54CE /* circular.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = circular.hpp; sourceTree = "<group>"; };
+		727A34301CB35D26009A54CE /* flock_batch.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = flock_batch.hpp; sourceTree = "<group>"; };
 		728F85DE1C55B565004E4AA0 /* tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tree.cpp; sourceTree = "<group>"; };
 		728F85DF1C55B565004E4AA0 /* tree.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = tree.hpp; sourceTree = "<group>"; };
 		728F85E41C55DE9B004E4AA0 /* Cholesky */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Cholesky; sourceTree = "<group>"; };
@@ -426,6 +429,7 @@
 		72C81BEE1C93621300639302 /* pimpl_impl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = pimpl_impl.hpp; sourceTree = "<group>"; };
 		72C81BEF1C93621300639302 /* pimpl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = pimpl.hpp; sourceTree = "<group>"; };
 		72C81BF01C93629D00639302 /* test_subseq.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_subseq.cpp; sourceTree = "<group>"; };
+		72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_bit_ops.cpp; sourceTree = "<group>"; };
 		72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_flock.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -445,6 +449,7 @@
 			children = (
 				72247DAD1C71087F00B74A64 /* test_intmap.cpp */,
 				72247DAA1C600AA300B74A64 /* test_tree.cpp */,
+				72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */,
 			);
 			path = neighbors;
 			sourceTree = "<group>";
@@ -472,6 +477,14 @@
 				72C4194C1C5337AD004689A2 /* test */,
 			);
 			path = Dig;
+			sourceTree = "<group>";
+		};
+		727A342E1CB35D0B009A54CE /* online */ = {
+			isa = PBXGroup;
+			children = (
+				727A342F1CB35D0B009A54CE /* circular.hpp */,
+			);
+			path = online;
 			sourceTree = "<group>";
 		};
 		728F85E11C55DD50004E4AA0 /* external */ = {
@@ -1129,6 +1142,7 @@
 			children = (
 				728F85E11C55DD50004E4AA0 /* external */,
 				72C4192B1C5337AD004689A2 /* distance */,
+				727A342E1CB35D0B009A54CE /* online */,
 				72C419361C5337AD004689A2 /* global */,
 				72C4193C1C5337AD004689A2 /* include */,
 				72C419401C5337AD004689A2 /* neighbors */,
@@ -1270,6 +1284,7 @@
 		72C81BE51C90B6EE00639302 /* flock */ = {
 			isa = PBXGroup;
 			children = (
+				727A34301CB35D26009A54CE /* flock_batch.hpp */,
 				72C81BE61C90B6EE00639302 /* flock.cpp */,
 				72C81BE71C90B6EE00639302 /* flock.hpp */,
 				72C81BE91C90DC0100639302 /* shape_features.cpp */,
@@ -1342,6 +1357,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				72CFE90C1CD464890085FB1B /* test_bit_ops.cpp in Sources */,
 				72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */,
 				72C419641C5337AD004689A2 /* math_utils.c in Sources */,
 				72C81BE81C90B6EE00639302 /* flock.cpp in Sources */,

@@ -41,7 +41,7 @@ static inline void mapSubseqs(const F&& func, length_t m, const data_t2* x,
 	length_t n, data_t3* out, length_t inStride=1, length_t outStride=1)
 {
 	assert(n >= m);
-	for (length_t i = 0; i < n - m; i += inStride) {
+	for (length_t i = 0; i < n - m + 1; i += inStride) {
 		out[i * outStride] = func(x+i);
 //		out[i * outStride] = static_cast<data_t3>(func(x+i));
 	}
@@ -52,7 +52,7 @@ static inline void mapiSubseqs(const F&& func, length_t m, const data_t2* x,
 	length_t n, data_t3* out, length_t inStride=1, length_t outStride=1)
 {
 	assert(n >= m);
-	for (length_t i = 0; i < n - m; i += inStride) {
+	for (length_t i = 0; i < n - m + 1; i += inStride) {
 		out[i * outStride] = func(i, x+i);
 	}
 }
@@ -64,7 +64,7 @@ static inline void mapSubseqs(const F&& func, const data_t1* q, length_t m,
 	const data_t2* x, length_t n, data_t3* out, length_t stride=1)
 {
 	assert(n >= m);
-	for (length_t i = 0; i < n - m; i += stride) {
+	for (length_t i = 0; i < n - m + 1; i += stride) {
 		out[i] = func(q, x+i);
 	}
 }
@@ -74,7 +74,7 @@ static inline void mapiSubseqs(const F&& func, const data_t1* q, length_t m,
 	const data_t2* x, length_t n, data_t3* out, length_t stride=1)
 {
 	assert(n >= m);
-	for (length_t i = 0; i < n - m; i += stride) {
+	for (length_t i = 0; i < n - m + 1; i += stride) {
 		out[i] = func(i, q, x+i);
 	}
 }

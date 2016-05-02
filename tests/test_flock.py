@@ -211,8 +211,8 @@ def main():
 		# print "python Phi shape, Phi sum, PhiBlur sum", X.shape, np.sum(X), np.sum(Xblur)
 		print "cpp    Phi shape, Phi sum, PhiBlur sum", Phi.shape, np.sum(Phi), np.sum(PhiBlur)
 
-		# plotOutput = False
-		plotOutput = True
+		plotOutput = False
+		# plotOutput = True
 		if plotOutput:
 			axSeq, axSim, axPattern = flockviz.plotFFOutput(ts, starts, ends, Phi, W)
 			# flockviz.plotFFOutput(ts, starts, ends, PhiBlur, W)

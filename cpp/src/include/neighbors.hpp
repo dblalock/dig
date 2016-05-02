@@ -46,7 +46,7 @@ typedef int16_t depth_t;
 class BinTree {
 private:
 	class Impl;
-	std::unique_ptr<Impl> _ths; // pimpl idiom--uniq ptr better, but can't SWIG it
+	std::unique_ptr<Impl> _ths; // pimpl idiom
 	// Impl* _ths; // pimpl idiom--no uniq ptr since SWIG can't handle it
 	// EDIT: nvm, new SWIG seems to be good with it
 
@@ -62,10 +62,14 @@ public:
 	BinTree(const MatrixXd& X, depth_t numProjections=16);
 
 	vector<int32_t> rangeQuery(const VectorXd& q, double radiusL2);
-	vector<Neighbor> knnQuery(const VectorXd& q, int k);
+	vector<int32_t> knnQuery(const VectorXd& q, int k);
 
 	// ------------------------ versions for numpy typemaps
 	BinTree(double* X, int m, int n, int numProjections=16);
+
+	double getIndexConstructionTimeMs();
+	// double getIndexConstructionTimeMs() { return 8.8; }; // TODO remove
+	double getQueryTimeMs();
 
 	// vector<length_t> rangeQuery(const double* q, int len, double radiusL2);
 	// vector<Neighbor> knnQuery(const double* q, int len, int k);

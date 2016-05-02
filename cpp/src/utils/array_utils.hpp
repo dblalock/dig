@@ -36,7 +36,7 @@ namespace ar {
 
 typedef int64_t length_t;
 
-static const double kDefaultNonzeroThresh = .001;
+static const double kDefaultNonzeroThresh = .00001;
 
 // TODO support for negative strides / asserts where they can't be negative
 
@@ -509,7 +509,7 @@ static inline vector<length_t> NAME(const data_t* data, length_t len) { \
 	return where([](data_t x) { return FUNC(x); }, data, len); \
 } \
 template<template <class...> class Container, class data_t> \
-static inline Container<bool> NAME(const Container<data_t>& container) { \
+static inline Container<length_t> NAME(const Container<data_t>& container) { \
 	return where([](data_t x) { return FUNC(x); }, container); \
 } \
 
@@ -518,6 +518,17 @@ WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!static_cast<bool>, where_false);
 WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isnan, where_nan);
 WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isfinite, where_finite);
 WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!isfinite, where_inf);
+
+template<class data_t> static inline bool isnegative(data_t x) { return x < 0; }
+//template<class data_t> static inline bool isnonnegative(data_t x) { return x >= 0; }
+template<class data_t> static inline bool ispositive(data_t x) { return x > 0; }
+//template<class data_t> static inline bool isnonpositive(data_t x) { return x <= 0; }
+
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(isnegative, where_negative);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!isnegative, where_nonnegative);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(ispositive, where_positive);
+WRAP_WHERE_UNARY_BOOLEAN_FUNC_WITH_NAME(!ispositive, where_nonpositive);
+
 
 // ================================ Nonzeros (special case of above)
 
@@ -2407,6 +2418,9 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 	assertf(replace || (numPossibleVals >= howMany),
 			"rand_ints(): can't sample %llu values without replacement"
 			"between min %lld and max %lld", howMany, minVal, maxVal);
+
+	assertf(all_finite(probs, numPossibleVals),
+			"Probabilities must be finite!");
 
 	assertf(all_nonnegative(probs, numPossibleVals),
 		"Probabilities must be nonnegative!");

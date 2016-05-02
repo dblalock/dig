@@ -95,7 +95,7 @@ vector<double> seedScores(CMatrix T, length_t Lmin, length_t Lmax) {
 //			PRINT_VAR(n);
 //			PRINT_VAR(subseqLen);
 			// assert(ar::all(scores_tmp, n - subseqLen));
-			assert(ar::all(scores_tmp, n - subseqLen - 1));
+			assert(ar::all_nonnegative(scores_tmp, n - subseqLen - 1));
 
 			// scale scores to max of 1 in place, then add to combined scores
 			normalize_max_inplace(scores_tmp, n);
@@ -116,7 +116,7 @@ vector<double> seedScores(CMatrix T, length_t Lmin, length_t Lmax) {
 //			PRINT_VAR(ar::to_string(scores_tmp, n));
 //			PRINT_VAR(ar::to_string(out, n));
 
-			assert(ar::all(scores_tmp, n - subseqLen - 1));
+			assert(ar::all_nonnegative(scores_tmp, n - subseqLen - 1));
 			assert(max(scores_tmp, n) == 1.0);
 			assert(min(scores_tmp, n) >= 0);
 			assert(ar::all_positive(scores_tmp, n));
@@ -133,25 +133,8 @@ vector<double> seedScores(CMatrix T, length_t Lmin, length_t Lmax) {
 vector<length_t> selectSeeds(const double* scores, length_t n,
 	length_t Lmin, length_t Lmax, length_t windowLen)
 {
-	int numValidScores = n - windowLen + 1;
+	length_t numValidScores = n - windowLen + 1;
 	auto _scores = ar::copy(scores, n); // mutable copy
-
-
-
-
-
-
-	// TODO why is it just selecting the same seed twice?
-
-
-
-
-
-
-	// PRINT_VAR(ar::to_string(scores, numValidScores));
-
-	// assert(all_nonnegative(scores, numValidScores));
-	// print(to_string(ar::where()))
 
 	length_t seed1 = argmax(_scores.get(), numValidScores);
 

@@ -5,8 +5,8 @@
 //  Copyright (c) 2016 Davis Blalock. All rights reserved.
 //
 
-#ifndef __SLICE_HPP
-#define __SLICE_HPP
+#ifndef __PLOT_HPP
+#define __PLOT_HPP
 
 #include <string>
 #include <iostream>
@@ -19,8 +19,6 @@ using ar::min;
 using ar::max;
 using ar::unique;
 
-#include "debug_utils.hpp"
-
 namespace ar {
 
 static inline void _print_title(string title, length_t ncols) {
@@ -32,8 +30,8 @@ static inline void _print_title(string title, length_t ncols) {
 }
 
 template<class data_t>
-static void plot_array(data_t* data, length_t length, int nlevels=8, double yBin=0,
-				string title=string(), char marker='x') {
+static void plot_array(data_t* data, length_t length, int nlevels=8,
+	double yBin=0, string title=string(), char marker='x') {
 	// compute vertical bin size and number of bins
 	auto minVal = min(data, length);
 	auto maxVal = max(data, length);
@@ -78,7 +76,7 @@ template<typename data_t>
 static void imshow(data_t* data, length_t nrows, length_t ncols, string title=string(),
 	bool rowmajor=true, bool twoEnded=false, int downsample_ncols=90) {
 
-	downsample_ncols = min(ncols, downsample_ncols);
+	downsample_ncols = static_cast<int>(min(ncols, downsample_ncols));
 
 	static const char symbols2[2] = {' ', '+'};
 	static const char symbols3[3] = {'.', ' ', '+'};
@@ -168,4 +166,4 @@ static void imshow(data_t* data, length_t nrows, length_t ncols, string title=st
 
 } // namespace ar
 
-#endif
+#endif // __PLOT_HPP
