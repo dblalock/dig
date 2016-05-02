@@ -22,7 +22,7 @@ typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> CMatrix;
 
 using ar::randwalks;
 
-//#define SKIP_TESTS_FLOCK
+#define SKIP_TESTS_FLOCK
 #ifndef SKIP_TESTS_FLOCK
 
 //TEST_CASE("rand walks", "flock") {

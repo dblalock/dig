@@ -18,6 +18,7 @@
 #include "redsvd.hpp"
 #include "array_utils.hpp" // for rand_ints
 #include "eigen_utils.hpp"
+#include "timing_utils.hpp"
 
 //#define DEBUG_POINT 2997
 
@@ -102,6 +103,8 @@ public:
 	depth_t _numProjections;
 	node_ptr_t _root;
 	double _binWidth;
+	double _indexTimeMs;
+	double _queryTimeMs;
 
 	//ctors
 	Impl(const MatrixXd& X, depth_t numProjections):
@@ -118,8 +121,10 @@ public:
 };
 
 void BinTree::Impl::initAfterX(depth_t numProjections) {
+	auto t0 = timeNow();
 	_projectionVects = computeProjectionVects(_X, numProjections);
 	_root = constructIndex(_X, _projectionVects, _binWidth); // sets _binWidth
+	_indexTimeMs = durationMs(t0, timeNow());
 }
 
 // ------------------------------------------------ BinTree
@@ -135,11 +140,29 @@ BinTree::BinTree(const MatrixXd& X, depth_t numProjections):
 {}
 
 vector<length_t> BinTree::rangeQuery(const VectorXd& q, double radiusL2) {
-	return findNeighbors(q, _ths->_X, *(_ths->_root), _ths->_projectionVects,
+	auto t0 = timeNow();
+	auto neighbors = findNeighbors(q, _ths->_X, *(_ths->_root), _ths->_projectionVects,
 						 radiusL2, _ths->_binWidth);
+	_ths->_queryTimeMs = durationMs(t0, timeNow());
+	return neighbors;
 }
-vector<Neighbor> BinTree::knnQuery(const VectorXd& q, int k) {
-	return findKnn(q, _ths->_X, k, *(_ths->_root), _ths->_projectionVects, _ths->_binWidth);
+vector<int32_t> BinTree::knnQuery(const VectorXd& q, int k) {
+	auto t0 = timeNow();
+
+	auto neighbors = findKnn(q, _ths->_X, k, *(_ths->_root),
+		_ths->_projectionVects, _ths->_binWidth);
+	auto neighborIdxs = ar::map([](Neighbor n) { return n.idx; }, neighbors);
+
+	_ths->_queryTimeMs = durationMs(t0, timeNow());
+	return neighborIdxs;
+}
+
+double BinTree::getIndexConstructionTimeMs() {
+	return _ths->_indexTimeMs;
+	// return 7.7;
+}
+double BinTree::getQueryTimeMs() {
+	return _ths->_queryTimeMs;
 }
 
 // ------------------------ versions for numpy typemaps
@@ -788,9 +811,7 @@ vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 
 	if (k == 1) { // knn query code assumes k > 1
 		Neighbor n = find1nn(q, X, root, projectionVects, binWidth);
-		vector<Neighbor> ret;
-		ret.push_back(n);
-		printf("just returning 1nn\n");
+		vector<Neighbor> ret {n};
 		return ret;
 	}
 
@@ -818,11 +839,11 @@ vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 	auto begin = std::begin(sampleNeighbors);
 	std::copy(begin + k, begin + 2*k, std::back_inserter(trueNeighbors));
 
-	printf("knn initial neighbors (%ld): \n\t{", trueNeighbors.size());
-	for (int i = 0; i < trueNeighbors.size(); i++) {
-		printf("%d: %g, ", trueNeighbors[i].idx, trueNeighbors[i].dist);
-	}
-	printf("}\n");
+	// printf("knn initial neighbors (%ld): \n\t{", trueNeighbors.size());
+	// for (int i = 0; i < trueNeighbors.size(); i++) {
+	// 	printf("%d: %g, ", trueNeighbors[i].idx, trueNeighbors[i].dist);
+	// }
+	// printf("}\n");
 
 	// find the true k nearest neighbors using this initial guess
 	double binDists[q.size()];
