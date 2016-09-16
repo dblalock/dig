@@ -173,12 +173,12 @@ void run1nnTest(int N, int D, depth_t P=16, double binWidth=-1) {
 	auto queryDuration = durationMs(t2, t1);
 	auto bruteDuration = durationMs(t3, t2);
 
-	printf("%dx%d, %d: %d vs %d (%g vs %g)\t\t%g vs %g ms (index %gms)\n",
+	printf("%dx%d, %d: %lld vs %lld (%g vs %g)\t\t%g vs %g ms (index %gms)\n",
 		   N, D, P, nn.idx, trueNN.idx, nn.dist, trueNN.dist,
 		   queryDuration, bruteDuration, indexDuration);
 
 	REQUIRE(nn.idx == trueNN.idx);
-	REQUIRE(std::abs(nn.idx - trueNN.idx) < .001);
+	REQUIRE(std::abs(nn.dist - trueNN.dist) < .0001);
 //	REQUIRE(nn.dist == trueNN.dist);
 }
 
@@ -254,10 +254,10 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 	auto bruteDuration = durationMs(t3, t2);
 
 	vector<length_t> neighborIdxs = ar::map([](const Neighbor& n) {
-		return n.idx;
+		return (length_t)n.idx;
 	}, neighbors);
 	vector<length_t> trueNeighborIdxs = ar::map([](const Neighbor& n) {
-		return n.idx;
+		return (length_t)n.idx;
 	}, trueNeighbors);
 	vector<double> neighborDists = ar::map([](const Neighbor& n) {
 		return n.dist;

@@ -151,7 +151,7 @@ vector<int32_t> BinTree::knnQuery(const VectorXd& q, int k) {
 
 	auto neighbors = findKnn(q, _ths->_X, k, *(_ths->_root),
 		_ths->_projectionVects, _ths->_binWidth);
-	auto neighborIdxs = ar::map([](Neighbor n) { return n.idx; }, neighbors);
+	auto neighborIdxs = ar::map([](Neighbor n) { return (int32_t)n.idx; }, neighbors);
 
 	_ths->_queryTimeMs = durationMs(t0, timeNow());
 	return neighborIdxs;
@@ -553,7 +553,7 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 	const hash_t bins[], const double binDists[], double binWidth,
 	double d_lb, double d_bsf) {
 
-	length_t nn = -1;
+	Neighbor::idx_t nn = -1;
 
 	// printf("%d: bin = %d\n", prettyPtr(node), bins[0]);
 

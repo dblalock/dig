@@ -1860,6 +1860,8 @@ static Container1<data_t1> pad(const Container1<data_t1>& data,
 
 // ================================ Equality
 
+// TODO binary scalar op eq(a, b[, thresh])
+
 /** Returns true if elements 0..(len-1) of x and y are equal, else false */
 template <class data_t1, class data_t2, class len_t, class float_t=double,
 	REQUIRE_INT(len_t)>

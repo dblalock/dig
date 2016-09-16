@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		721403B61D8B535100F8658F /* test_nn_index.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 721403B51D8B535100F8658F /* test_nn_index.cpp */; };
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
@@ -46,6 +47,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		721403B41D8B49DD00F8658F /* neighbor_testing_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = neighbor_testing_utils.hpp; sourceTree = "<group>"; };
+		721403B51D8B535100F8658F /* test_nn_index.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_nn_index.cpp; sourceTree = "<group>"; };
+		721403B71D8B5A4E00F8658F /* euclidean.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = euclidean.hpp; sourceTree = "<group>"; };
+		721403B81D8B5AD800F8658F /* nn_index.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_index.hpp; sourceTree = "<group>"; };
+		721403B91D8B5AD800F8658F /* nn_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_utils.hpp; sourceTree = "<group>"; };
+		721403BA1D8B5AF000F8658F /* nn_search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_search.hpp; sourceTree = "<group>"; };
 		72247DAA1C600AA300B74A64 /* test_tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_tree.cpp; sourceTree = "<group>"; };
 		72247DAC1C6FE64F00B74A64 /* intmap.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = intmap.hpp; sourceTree = "<group>"; };
 		72247DAD1C71087F00B74A64 /* test_intmap.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_intmap.cpp; sourceTree = "<group>"; };
@@ -380,6 +387,7 @@
 		728F874A1C55DE9C004E4AA0 /* SVD */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SVD; sourceTree = "<group>"; };
 		728F874B1C55DE9C004E4AA0 /* UmfPackSupport */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = UmfPackSupport; sourceTree = "<group>"; };
 		728F874E1C55DE9C004E4AA0 /* redsvd.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = redsvd.hpp; sourceTree = "<group>"; };
+		729A0CE71D8609FA00E2E294 /* macros.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = macros.hpp; sourceTree = "<group>"; };
 		72B610E81CA5B3E1008B50D3 /* test_filter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_filter.cpp; sourceTree = "<group>"; };
 		72C4192C1C5337AD004689A2 /* deque.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = deque.c; sourceTree = "<group>"; };
 		72C4192D1C5337AD004689A2 /* deque.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = deque.h; sourceTree = "<group>"; };
@@ -447,6 +455,7 @@
 		72247DA91C600AA300B74A64 /* neighbors */ = {
 			isa = PBXGroup;
 			children = (
+				721403B51D8B535100F8658F /* test_nn_index.cpp */,
 				72247DAD1C71087F00B74A64 /* test_intmap.cpp */,
 				72247DAA1C600AA300B74A64 /* test_tree.cpp */,
 				72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */,
@@ -1157,6 +1166,7 @@
 		72C4192B1C5337AD004689A2 /* distance */ = {
 			isa = PBXGroup;
 			children = (
+				721403B71D8B5A4E00F8658F /* euclidean.hpp */,
 				72C4192C1C5337AD004689A2 /* deque.c */,
 				72C4192D1C5337AD004689A2 /* deque.h */,
 				72C4192E1C5337AD004689A2 /* distance_utils.cpp */,
@@ -1198,6 +1208,9 @@
 		72C419401C5337AD004689A2 /* neighbors */ = {
 			isa = PBXGroup;
 			children = (
+				721403BA1D8B5AF000F8658F /* nn_search.hpp */,
+				721403B81D8B5AD800F8658F /* nn_index.hpp */,
+				721403B91D8B5AD800F8658F /* nn_utils.hpp */,
 				72247DAC1C6FE64F00B74A64 /* intmap.hpp */,
 				72C419411C5337AD004689A2 /* nearest_neighbor.cpp */,
 				72C419421C5337AD004689A2 /* nearest_neighbor.hpp */,
@@ -1210,6 +1223,7 @@
 		72C419441C5337AD004689A2 /* utils */ = {
 			isa = PBXGroup;
 			children = (
+				729A0CE71D8609FA00E2E294 /* macros.hpp */,
 				72C81BEC1C93621300639302 /* subseq.hpp */,
 				72C81BED1C93621300639302 /* array_utils_eigen.hpp */,
 				72C81BEE1C93621300639302 /* pimpl_impl.hpp */,
@@ -1264,6 +1278,7 @@
 		72C419561C5337AD004689A2 /* testing_utils */ = {
 			isa = PBXGroup;
 			children = (
+				721403B41D8B49DD00F8658F /* neighbor_testing_utils.hpp */,
 				72C419571C5337AD004689A2 /* testing_utils.cpp */,
 				72C419581C5337AD004689A2 /* testing_utils.hpp */,
 			);
@@ -1361,6 +1376,7 @@
 				72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */,
 				72C419641C5337AD004689A2 /* math_utils.c in Sources */,
 				72C81BE81C90B6EE00639302 /* flock.cpp in Sources */,
+				721403B61D8B535100F8658F /* test_nn_index.cpp in Sources */,
 				72C419611C5337AD004689A2 /* dig.cpp in Sources */,
 				72C4195F1C5337AD004689A2 /* global_test_vals.c in Sources */,
 				72C4196A1C5337AD004689A2 /* test_array_utils.cpp in Sources */,

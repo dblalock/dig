@@ -1,5 +1,5 @@
 //
-//  Tree.hpp
+//  neighbors.hpp
 //  Dig
 //
 //  Created by DB on 10/2/14.
@@ -22,12 +22,18 @@ using std::vector;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
+static constexpr double kMaxDist = std::numeric_limits<double>::max();
+
+
 double swigEigenTest(double* X, int m, int n);
 
 // ------------------------------------------------ Neighbor
 typedef struct Neighbor {
+	typedef double dist_t;
+	typedef int64_t idx_t;
+	
 	double dist;
-	int32_t idx;
+	int64_t idx;
 } Neighbor;
 
 // ================================================================
