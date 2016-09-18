@@ -37,7 +37,6 @@ using Eigen::ColMajor;
 
 using ar::argsort;
 using ar::map;
-using ar::mapi;
 
 typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 

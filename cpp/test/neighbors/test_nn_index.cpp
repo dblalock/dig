@@ -20,12 +20,14 @@ using Eigen::RowMajor;
 using Eigen::MatrixXd;
 using Eigen::ArrayXd;
 using Eigen::VectorXd;
+using Eigen::RowVectorXd;
 
 //using ar::dist_sq;
 
 
 
 typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+typedef Eigen::Matrix<float, Dynamic, Dynamic, RowMajor> RowMatrixXf;
 
 template<class MatrixT, class VectorT>
 void _test_squared_dists_to_vector(const MatrixT& X, const VectorT& q) {
@@ -55,7 +57,7 @@ TEST_CASE("squared_dists_to_vector(s)", "distance") {
 				RowMatrixXd X(n, d);
 				X.setRandom();
 
-				VectorXd q(d);
+				RowVectorXd q(d);
 				q.setRandom();
 				_test_squared_dists_to_vector(X, q);
 
@@ -107,34 +109,49 @@ vector<Neighbor> knn_simple(const MatrixT& X, const VectorT& q, int k) {
 }
 
 
-TEST_CASE("L2Index", "distance") {
+template<class IndexT>
+void _test_index() {
 	int64_t N = 100;
 	int64_t D = 16;
 
-	RowMatrixXd X(N, D);
+	Eigen::Matrix<typename IndexT::Scalar, Dynamic, Dynamic, RowMajor> X(N, D);
 	X.setRandom();
 
-	nn::L2IndexBrute<RowMatrixXd> index(X);
+	IndexT index(X);
 
-	RowVectorXd q(D);
-//	VectorXd q(D);
+	Eigen::Matrix<typename IndexT::Scalar, 1, Dynamic, RowMajor> q(D);
 	for (int i = 0; i < 1000; i++) {
 		q.setRandom();
 		auto nn = index.onenn(q);
 		auto trueNN = onenn_simple(X, q);
 		CAPTURE(nn.dist);
 		CAPTURE(trueNN.dist);
-//		require_neighbors_same(nn, trueNN);
 		REQUIRE_NEIGHBORS_SAME(nn, trueNN);
 
 		for (int k = 1; k < 10; k += 2) {
 			auto knn = index.knn(q, k);
 			auto trueKnn = knn_simple(X, q, k);
-//			require_neighbors_same(nn, trueNN);
 			REQUIRE_NEIGHBORS_SAME(nn, trueNN);
 		}
 	}
 }
 
+TEST_CASE("print sizes", "tmp") {
+	printf("sizeof(float vector) = %ld\n", sizeof(std::vector<float>));
+	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
+	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
+	printf("sizeof(eigen ArrayXXd) = %ld\n", sizeof(Eigen::ArrayXXd));
+	printf("sizeof(RowStore<float>) = %ld\n", sizeof(nn::RowStore<float>));
+	printf("sizeof(RowStore<double>) = %ld\n", sizeof(nn::RowStore<double>));
+}
+
+TEST_CASE("L2IndexBrute", "distance") {
+//	_test_index<nn::L2IndexBrute<RowMatrixXd> >();
+	_test_index<nn::L2IndexBrute<RowMatrixXf> >();
+}
+TEST_CASE("L2IndexAbandon", "distance") {
+//	_test_index<nn::L2IndexAbandon<RowMatrixXd> >();
+//	_test_index<nn::L2IndexAbandon<RowMatrixXf> >();
+}
 
 

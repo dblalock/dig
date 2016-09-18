@@ -9,12 +9,174 @@
 #ifndef __NN_INDEX_HPP
 #define __NN_INDEX_HPP
 
+#include <memory>
 #include "assert.h"
+
+#include "Dense"
 
 #include "nn_search.hpp"
 #include "array_utils.hpp"
 
 namespace nn {
+
+// ================================================================
+// RowStore
+// ================================================================
+
+template<int AlignBytes, class IntT>
+inline IntT aligned_length(IntT ncols) {
+    int16_t align_elements = AlignBytes / sizeof(IntT);
+    int16_t remainder = ncols % align_elements;
+    if (remainder > 0) {
+        ncols += align_elements - remainder;
+    }
+    return ncols;
+}
+
+
+
+// helper struct to get Map<> MapOptions based on alignment in bytes
+template<int AlignBytes>
+struct _AlignHelper { enum { AlignmentType = Eigen::Unaligned }; };
+template<> struct _AlignHelper<16> { enum { AlignmentType = Eigen::Aligned }; };
+template<> struct _AlignHelper<32> { enum { AlignmentType = Eigen::Aligned }; };
+
+// stores vectors as (optionally) aligned rows in a matrix; lets us access a
+// vector and know that it's 32-byte aligned, which enables using
+// 32-byte SIMD instructions (as found in 256-bit align for AVX 2)
+template<class T, int AlignBytes=32, class IdT=int64_t>
+class RowStore {
+public:
+	typedef typename Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>::Index Index;
+    typedef T Scalar;
+    typedef IdT Id;
+    typedef int8_t PadLengthT;
+    // typedef Eigen::Map<Eigen::Matrix<Scalar, 1, -1>, Eigen::Aligned> RowT;
+    typedef Eigen::Map<const Eigen::Matrix<Scalar, 1, Eigen::Dynamic>,
+        _AlignHelper<AlignBytes>::AlignmentType> RowT;
+        // Eigen::Stride<Eigen::Dynamic, 1> > RowT;
+	typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> RowMatrixT;
+    // typedef Eigen::Map<RowMatrixT> DataMatrixT;
+
+    static const bool IsRowMajor = true;
+
+    // ------------------------ ctors
+
+    RowStore(Index capacity, Index ncols):
+        _pad_width(static_cast<PadLengthT>(aligned_length<AlignBytes>(ncols) - ncols)),
+        _data(capacity, aligned_length<AlignBytes>(ncols))
+//        _ncols(aligned_length<AlignBytes>(ncols)),
+        // _capacity(capacity),
+//        _data(new Scalar[capacity * _ncols]())
+	{
+		assert(capacity > 0);
+		if (_pad_width > 0) {
+			_data.topRightCorner(_data.rows(), _pad_width).setZero();
+		}
+	}
+
+	RowStore(const RowMatrixT& X):
+		RowStore(X.rows(), X.cols())
+	{
+		_data.topLeftCorner(X.rows(), X.cols()) = X;
+		_ids = ar::range(static_cast<Id>(0), static_cast<Id>(X.rows()));
+	}
+
+    // template<class RowMatrixT>
+    // RowStore(const RowMatrixT&& X) noexcept : _data(X) {}
+        // _ncols(aligned_length<AlignBytes>(X.cols())),
+        // _capacity(X.rows()),
+        // _data(new Scalar[_capacity * _ncols]())
+    // {
+        // assert(_capacity > 0);
+        // for (size_t i = 0; i < X.rows(); i++) {
+        //     insert(X.row(i).data(), i);
+        // }
+    // }
+
+    // ------------------------ accessors
+    Index rows() const { return _ids.size(); }
+    Index cols() const { return _data.cols(); }
+    Index size() const { return rows() * cols(); }
+	Index capacity_rows() const { return _data.rows(); }
+	Index capacity() const { return capacity_rows() * cols(); }
+	Index padding() const { return _pad_width; }
+
+    const std::vector<Id>& row_ids() const { return _ids; }
+
+    Scalar* row_ptr(Index i) { return _data.row(i).data(); }
+    const Scalar* row_ptr(Index i) const { return _data.row(i).data(); }
+
+    // aligned Eigen::Map to get explicit vectorization; this should
+    // be const, but const and maps are tricky to use together
+    RowT row(Index i) const {
+		RowT r(row_ptr(i), cols());
+		return r;
+//		return Eigen::Map<Eigen::Matrix<Scalar, 1, -1, Eigen::RowMajor>, Eigen::Aligned>(row_ptr(i));
+    }
+
+    auto matrix() -> decltype(std::declval<RowMatrixT>().topLeftCorner(2, 2)) {
+        return _data.topLeftCorner(rows(), cols());
+    }
+	auto inner_matrix() -> decltype(std::declval<RowMatrixT>().topLeftCorner(2, 2)) {
+        return _data.topLeftCorner(rows(), cols() - _pad_width);
+    }
+
+
+    // ------------------------ insert and delete
+    void insert(const Scalar* row_start, Id id) {
+        _ids.push_back(id);
+		auto cap = capacity_rows();
+        if (rows() > cap) { // resize if needed
+            // Index new_size = std::max(capacity + 1, _capacity * 1.5) * _ncols;
+            // std::unique_ptr<Scalar[]> new_data(new Scalar[new_capacity]);
+            // std::copy(_data, _data + size(), new_data.get());
+            // _capacity = new_capacity;
+            // _data.swap(new_data);
+            Index new_capacity = std::max(cap + 1, cap * 1.5);
+            _data.conservativeResize(new_capacity, Eigen::NoChange);
+        }
+//		_data.row(rows()) =
+//        Scalar* row_start_ptr = _data + (_ncols * rows());
+		Scalar* row_start_ptr = row_ptr(rows());
+        std::copy(row_start, row_start + (cols() - _pad_width), row_start_ptr);
+		if (AlignBytes > 0 && _pad_width > 0) { // check alignbytes to short-circuit
+			for (Index i = 0; i < _pad_width; i++) {
+				*(row_start_ptr + cols() + i) = 0;
+			}
+		}
+    }
+
+    bool erase(Id id) {
+        auto idx = ar::find(_ids, id);
+        if (idx < 0) {
+            return false;
+        }
+        // move data at the end to overwrite the removed row so that
+        // everything remains contiguous
+        // auto last_idx = _ids.size() - 1;
+        // _ids[idx] = _ids[last_idx];
+        // auto last_row_start = row_ptr(last_idx);
+        // Scalar* replace_row_ptr = row_ptr(idx);
+        // std::copy(last_row_start, last_row_start + _ncols, replace_row_ptr);
+
+        _ids[idx] = _ids.back();
+        _ids.pop_back(); // reduce size
+        return true;
+    }
+
+private:
+    // int32_t _ncols; // 4B
+    // int32_t _capacity; // 4B
+    std::vector<Id> _ids; // 24B; size() = number of entries
+    RowMatrixT _data; // 24B; rows, cols = capacity, vector length
+    PadLengthT _pad_width; // 1B
+    // std::unique_ptr<Scalar[]> _data; // 8B
+};
+
+// ================================================================
+// IndexBase
+// ================================================================
 
 // superclass using Curiously Recurring Template Pattern to get compile-time
 // polymorphism; i.e., we can call arbitrary child class functions without
@@ -23,6 +185,45 @@ namespace nn {
 template<class Derived, class RowMatrixT, class dist_t=float>
 class IndexBase {
 public:
+
+    // ------------------------------------------------ insert and erase
+
+	template<class Id>
+	void insert(const typename RowMatrixT::Scalar* row_start, Id id) {
+		Derived::_data.insert(row_start, id);
+    }
+
+	template<class Id>
+	bool erase(Id id) { return Derived::_data.erase(id); }
+
+    // ------------------------------------------------ batch of queries
+
+    vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
+                                           dist_t radius_sq)
+    {
+        vector<vector<Neighbor> > ret;
+        for (idx_t j = 0; j < queries.rows(); j++) {
+            ret.emplace_back(radius(queries.row(j).eval(), radius_sq));
+        }
+        return ret;
+    }
+
+    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, size_t k) {
+        vector<vector<Neighbor> > ret;
+        for (idx_t j = 0; j < queries.rows(); j++) {
+            ret.emplace_back(knn(queries.row(j).eval(), k));
+        }
+        return ret;
+    }
+
+    vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
+        vector<Neighbor> ret;
+        for (idx_t j = 0; j < queries.rows(); j++) {
+            ret.emplace_back(onenn(queries.row(j).eval()));
+        }
+        return ret;
+    }
+
     // ------------------------------------------------ return only idxs
 
     template<class VectorT>
@@ -70,119 +271,106 @@ public:
     }
 };
 
-// ------------------------------------------------ L2IndexBrute
+// ================================================================
+// L2IndexBrute
+// ================================================================
 
+// answers neighbor queries using matmuls
 template<class RowMatrixT, class dist_t=float>
 class L2IndexBrute: public IndexBase<L2IndexBrute<RowMatrixT, dist_t>, RowMatrixT, dist_t> {
 public:
-
-    typedef Matrix<typename RowMatrixT::Scalar, Dynamic, 1> ColVectorT;
+    typedef typename RowMatrixT::Scalar Scalar;
+    typedef Matrix<Scalar, Dynamic, 1> ColVectorT;
+//	typedef Eigen::Map<Matrix<typename RowMatrixT::Scalar, Dynamic, Dynamic, RowMajor> > DataMatrixT;
 
     explicit L2IndexBrute(const RowMatrixT& data):
         _data(data)
     {
-		assert(_data.IsRowMajor);
+		assert(data.IsRowMajor);
         _rowNorms = data.rowwise().squaredNorm();
     }
+
+//    DataMatrixT data const {
+//        return Map<Matrix<typename RowMatrixT::Scalar, Dynamic, Dynamic, RowMajor> >(_data)
+//    }
 
     // ------------------------------------------------ single query
 
     template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query, float radius_sq) {
-        return nn::radius(_data, query, radius_sq);
+    vector<Neighbor> radius(const VectorT& query, dist_t radius_sq) {
+        return brute::radius(_data.matrix(), query, radius_sq);
     }
 
     template<class VectorT>
     Neighbor onenn(const VectorT& query) {
-        return nn::onenn(_data, query);
+        return brute::onenn(_data.matrix(), query);
     }
 
     template<class VectorT>
     vector<Neighbor> knn(const VectorT& query, int k) {
-        return nn::knn(_data, query, k);
+        return brute::knn(_data.matrix(), query, k);
     }
 
     // ------------------------------------------------ batch of queries
 
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
-        float radius_sq)
+        dist_t radius_sq)
     {
-        return radius_batch(_data, queries, radius_sq, _rowNorms);
+        return brute::radius_batch(_data.matrix(), queries, radius_sq, _rowNorms);
     }
 
     vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
-        return knn_batch(_data, queries, k, _rowNorms);
+        return brute::knn_batch(_data.matrix(), queries, k, _rowNorms);
     }
 
     vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
-        return onenn_batch(_data, queries, _rowNorms);
+        return brute::onenn_batch(_data.matrix(), queries, _rowNorms);
     }
 
 private:
-    RowMatrixT _data;
+    // RowMatrixT _data;
+    RowStore<typename RowMatrixT::Scalar, 0> _data;
     ColVectorT _rowNorms;
 };
 
+// ================================================================
+// L2IndexAbandon
+// ================================================================
 
 template<class RowMatrixT, class dist_t=float>
 class L2IndexAbandon: public IndexBase<L2IndexAbandon<RowMatrixT>, RowMatrixT> {
 public:
-
-    typedef Matrix<typename RowMatrixT::Scalar, 1, Dynamic, RowMajor> RowVectT;
+    typedef typename RowMatrixT::Scalar Scalar;
+    typedef Matrix<Scalar, 1, Dynamic, RowMajor> RowVectT;
     typedef Matrix<int32_t, 1, Dynamic, RowMajor> RowVectIdxsT;
 
     explicit L2IndexAbandon(const RowMatrixT& data):
         _data(data)
     {
+        assert(_data.IsRowMajor);
         _colMeans = data.colwise().mean();
-        _orderIdxs = RowVectIdxsT(data.cols());
+        // _orderIdxs = RowVectIdxsT(data.cols());
+    }
+
+    template<class VectorT>
+    vector<Neighbor> radius(const VectorT& query, dist_t radius_sq) {
+        return abandon::radius(_data, query, radius_sq);
     }
 
     template<class VectorT>
     Neighbor onenn(const VectorT& query) {
-//      typename RowMatrixT::Index idx;
-//      double dist = (_data.rowwise() - query.transpose()).rowwise().squaredNorm().minCoeff(&idx);
-//      return {.dist = dist, .idx = static_cast<int32_t>(idx)}; // TODO fix length_t
+        return abandon::onenn(_data, query);
     }
 
     template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, size_t k) {
-//      VectorT dists = squaredDistsToVector(_data, query);
-//      return knn_from_dists(dists.data(), dists.size(), k);
-    }
-
-    // ------------------------------------------------ batch of queries
-
-    vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
-                                           dist_t radius_sq)
-    {
-        vector<vector<Neighbor> > ret;
-        for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(radius(queries.row(j).eval(), radius_sq));
-        }
-        return ret;
-    }
-
-    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, size_t k) {
-        vector<vector<Neighbor> > ret;
-        for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(knn(queries.row(j).eval(), k));
-        }
-        return ret;
-    }
-
-    vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
-        vector<Neighbor> ret;
-        for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(onenn(queries.row(j).eval()));
-        }
-        return ret;
+    vector<Neighbor> knn(const VectorT& query, int k) {
+        return abandon::knn(_data, query, k);
     }
 
 private:
-    RowMatrixT _data;
+    RowStore<typename RowMatrixT::Scalar> _data;
     RowVectT _colMeans;
-    RowVectIdxsT _orderIdxs;
+    // RowVectIdxsT _orderIdxs;
 };
 
 

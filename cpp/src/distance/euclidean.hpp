@@ -21,7 +21,7 @@ typedef int64_t idx_t;
 
 template<class MatrixT, class VectorT>
 VectorT squared_dists_to_vector(const MatrixT& X, const VectorT& v) {
-    return (X.rowwise() - v.transpose()).rowwise().squaredNorm();
+    return (X.rowwise() - v).rowwise().squaredNorm();
 }
 template<class MatrixT, class VectorT>
 VectorT dists_to_vector(const MatrixT& X, const VectorT& v) {
@@ -182,6 +182,12 @@ dist_t dist_sq_order_presorted(const VectorT1& x_sorted, const VectorT2& y,
 }
 
 // ================================ query preprocessing
+
+
+// TODO funcs here to pad query + data to multiple of BlockSize
+//     just need L2IndexAbandon to work, cuz thats what Ill actually use
+//         -actually, prolly wrap in L2IndexCascaded
+
 
 // NOTE: query_out and query must be padded to multiple of block size
 template<int BlockSize=8, class VectorT, class IdxT>

@@ -14,11 +14,90 @@
 
 namespace nn {
 
-// typedef float typename Neighbor::dist_t;
+// ------------------------------------------------ brute force search
+
+namespace brute {
+
+    // ------------------------ single query
+
+    template<class RowMatrixT, class VectorT>
+    inline vector<Neighbor> radius(const RowMatrixT& X, const VectorT& query,
+                                         float radius_sq)
+    {
+        VectorT dists = dist::squared_dists_to_vector(X, query);
+        return neighbors_in_radius(dists.data(), dists.size(), radius_sq);
+    }
+
+    template<class RowMatrixT, class VectorT>
+    inline Neighbor onenn(const RowMatrixT& X, const VectorT& query) {
+        typename RowMatrixT::Index idx;
+		auto diffs = X.rowwise() - query;
+		auto norms = diffs.rowwise().squaredNorm();
+//		PRINT_STATIC_TYPE(norms);
+		auto dist = norms.minCoeff(&idx);
+		
+//        double dist = (X.rowwise() - query).rowwise().squaredNorm().minCoeff(&idx);
+        return {.dist = dist, .idx = static_cast<int32_t>(idx)}; // TODO fix length_t
+    }
+
+    template<class RowMatrixT, class VectorT>
+    vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query,
+                               size_t k)
+    {
+		VectorT dists = dist::squared_dists_to_vector(X, query);
+        return knn_from_dists(dists.data(), dists.size(), k);
+    }
+
+    // ------------------------ batch of queries
+
+    template<class RowMatrixT, class ColVectorT>
+    inline vector<vector<Neighbor> > radius_batch(const RowMatrixT& X,
+        const RowMatrixT& queries, float radius_sq, const ColVectorT& rowNorms)
+    {
+        auto dists = dist::squared_dists_to_vectors(X, queries, rowNorms);
+        assert(queries.rows() == dists.cols());
+        auto num_queries = queries.rows();
+
+        vector<vector<Neighbor> > ret;
+        for (idx_t j = 0; j < num_queries; j++) {
+            ret.emplace_back(neighbors_in_radius(dists.data(),
+                                                 dists.size(), radius_sq));
+        }
+        return ret;
+    }
+
+    template<class RowMatrixT, class ColVectorT>
+    inline vector<vector<Neighbor> > knn_batch(const RowMatrixT& X,
+        const RowMatrixT& queries, size_t k, const ColVectorT& rowNorms)
+    {
+        auto dists = dist::squared_dists_to_vectors(X, queries, rowNorms);
+        assert(queries.rows() == dists.cols());
+        auto num_queries = queries.rows();
+        vector<vector<Neighbor> > ret;
+        for (idx_t j = 0; j < num_queries; j++) {
+            ret.emplace_back(knn_from_dists(dists.col(j).data(),
+                                            dists.rows(), k));
+        }
+        return ret;
+    }
+
+    template<class RowMatrixT, class ColVectorT>
+    inline vector<Neighbor> onenn_batch(const RowMatrixT& X,
+        const RowMatrixT& queries, const ColVectorT& rowNorms)
+    {
+        auto wrapped_neighbors = knn_batch(X, queries, 1, rowNorms);
+        return ar::map([](const vector<Neighbor> el) {
+            return el[0];
+        }, wrapped_neighbors);
+    }
+
+} // namespace brute
 
 // ------------------------------------------------ early abandoning search
 
-// ================================ early-abandoning search
+namespace abandon {
+
+// ================================ single query
 
 // ------------------------ radius
 
@@ -29,13 +108,23 @@ vector<Neighbor> radius(const RowMatrixT& X,
 {
     vector<Neighbor> ret;
     for (idx_t i = 0; i < X.rows(); i++) {
-        auto dist = dist_sq(X.row(i).eval(), query, radius_sq);
+        auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, radius_sq);
         if (dist <= radius_sq) {
             ret.emplace_back(dist, i);
         }
     }
     return ret;
 }
+// template<class RowMatrixT, class VectorT, class DistT>
+// vector<vector<Neighbor> > radius_batch(const RowMatrixT& X,
+//     const RowMatrixT& queries, dist_t radius_sq)
+// {
+//     vector<vector<Neighbor> > ret;
+//     for (idx_t j = 0; j < queries.rows(); j++) {
+//         ret.emplace_back(radius(X, queries.row(j).eval(), radius_sq));
+//     }
+//     return ret;
+// }
 
 template<class RowMatrixT, class VectorT, class IdxVectorT, class DistT>
 vector<Neighbor> radius_order(const RowMatrixT& X,
@@ -45,7 +134,7 @@ vector<Neighbor> radius_order(const RowMatrixT& X,
 {
     vector<Neighbor> ret;
     for (idx_t i = 0; i < X.rows(); i++) {
-        auto dist = dist_sq_order_presorted(query_sorted, X.row(i).eval(),
+        auto dist = dist::abandon::dist_sq_order_presorted(query_sorted, X.row(i).eval(),
             order, radius_sq);
         if (dist <= radius_sq) {
             ret.emplace_back(dist, i);
@@ -54,20 +143,22 @@ vector<Neighbor> radius_order(const RowMatrixT& X,
     return ret;
 }
 
+
 template<class RowMatrixT, class VectorT1, class VectorT2, class IdxVectorT,
     class DistT>
 vector<Neighbor> radius_adaptive(const RowMatrixT& X, const VectorT1& query,
     const VectorT2& means, VectorT1& query_tmp, IdxVectorT& order_tmp,
     idx_t num_rows_thresh, DistT radius_sq)
-    // idx_t num_rows, idx_t num_rows_thresh, DistT radius_sq)
 {
     if (X.rows() >= num_rows_thresh) {
-        create_ordered_query(query, means, query_tmp.data(), order_tmp.data());
+        dist::abandon::create_ordered_query(query, means, query_tmp.data(), order_tmp.data());
         return radius_order(X, query_tmp, order_tmp, radius_sq);
     } else {
         return radius(X, query, radius_sq);
     }
 }
+
+
 
 // ------------------------ 1nn
 
@@ -77,12 +168,12 @@ Neighbor onenn(const RowMatrixT& X, const VectorT& query,
 {
     Neighbor ret{.dist = d_bsf, .idx = kInvalidIdx };
     for (idx_t i = 0; i < X.rows(); i++) {
-        // auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, d_bsf);
-		auto d = dist::dist_sq(X.row(i).eval(), query);
-        assert(d >= 0);
-        if (d < d_bsf) {
-            d_bsf = d;
-            ret = {.dist = d, .idx = i};
+        auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, d_bsf);
+		// auto d = dist::dist_sq(X.row(i).eval(), query);
+        assert(dist >= 0);
+        if (dist < d_bsf) {
+            d_bsf = dist;
+            ret = {.dist = dist, .idx = i};
         }
     }
     return ret;
@@ -160,7 +251,6 @@ template<class RowMatrixT, class VectorT1, class VectorT2, class IdxVectorT,
 vector<Neighbor> knn_adaptive(const RowMatrixT& X, const VectorT1& query,
     const VectorT2& means, VectorT1& query_tmp, IdxVectorT& order_tmp,
     idx_t num_rows_thresh, int k, DistT d_bsf=kMaxDist)
-    // idx_t num_rows, idx_t num_rows_thresh, int k, DistT d_bsf=kMaxDist)
 {
     assert(k > 0);
     if (X.rows() >= num_rows_thresh) {
@@ -170,6 +260,8 @@ vector<Neighbor> knn_adaptive(const RowMatrixT& X, const VectorT1& query,
         return knn(X, query, d_bsf);
     }
 }
+
+} // namespace abandon
 
 } // namespace nn
 #endif // __NN_SEARCH_HPP
