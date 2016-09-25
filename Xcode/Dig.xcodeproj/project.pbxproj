@@ -53,6 +53,7 @@
 		721403B81D8B5AD800F8658F /* nn_index.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_index.hpp; sourceTree = "<group>"; };
 		721403B91D8B5AD800F8658F /* nn_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_utils.hpp; sourceTree = "<group>"; };
 		721403BA1D8B5AF000F8658F /* nn_search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_search.hpp; sourceTree = "<group>"; };
+		721403BB1D90642900F8658F /* flat_store.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = flat_store.hpp; sourceTree = "<group>"; };
 		72247DAA1C600AA300B74A64 /* test_tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_tree.cpp; sourceTree = "<group>"; };
 		72247DAC1C6FE64F00B74A64 /* intmap.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = intmap.hpp; sourceTree = "<group>"; };
 		72247DAD1C71087F00B74A64 /* test_intmap.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_intmap.cpp; sourceTree = "<group>"; };
@@ -1209,6 +1210,7 @@
 			isa = PBXGroup;
 			children = (
 				721403BA1D8B5AF000F8658F /* nn_search.hpp */,
+				721403BB1D90642900F8658F /* flat_store.hpp */,
 				721403B81D8B5AD800F8658F /* nn_index.hpp */,
 				721403B91D8B5AD800F8658F /* nn_utils.hpp */,
 				72247DAC1C6FE64F00B74A64 /* intmap.hpp */,

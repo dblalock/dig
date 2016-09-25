@@ -146,12 +146,12 @@ TEST_CASE("print sizes", "tmp") {
 }
 
 TEST_CASE("L2IndexBrute", "distance") {
-//	_test_index<nn::L2IndexBrute<RowMatrixXd> >();
-	_test_index<nn::L2IndexBrute<RowMatrixXf> >();
+//	_test_index<nn::L2IndexBrute<double> >();
+	_test_index<nn::L2IndexBrute<float> >();
 }
 TEST_CASE("L2IndexAbandon", "distance") {
-//	_test_index<nn::L2IndexAbandon<RowMatrixXd> >();
-//	_test_index<nn::L2IndexAbandon<RowMatrixXf> >();
+//	_test_index<nn::L2IndexAbandon<double> >();
+//	_test_index<nn::L2IndexAbandon<float> >();
 }
 
 
