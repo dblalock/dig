@@ -26,6 +26,20 @@ namespace internal {
     idx_t _num_rows(const RowMatrixT& X, int64_t nrows_hint) {
         return nrows_hint;
     }
+
+    // either return vector of neighbors or just indices
+    template<class Ret> struct emplace_neighbor {
+        template<class Dist, class Idx>
+        void operator()(const std::vector<Ret>& vect, Dist d, Idx idx) {
+            vect.emplace_back(static_cast<Ret>(idx));
+        }
+    };
+    template<> struct emplace_neighbor<Neighbor> {
+        template<class Dist, class Idx>
+        void operator()(const std::vector<Neighbor>& vect, Dist d, Idx idx) {
+            vect.emplace_back(d, idx);
+        }
+    };
 }
 
 
@@ -116,20 +130,36 @@ namespace abandon {
 
 // ------------------------ radius
 
-template<class RowMatrixT, class VectorT, class DistT>
-vector<Neighbor> radius(const RowMatrixT& X,
-    const VectorT& query, DistT radius_sq)
+template<class Ret=Neighbor, class RowMatrixT=char, class VectorT=char,
+    class DistT=char>
+vector<Ret> radius(const RowMatrixT& X, const VectorT& query,
+    DistT radius_sq)
     // const VectorT& query, idx_t num_rows, DistT radius_sq)
 {
-    vector<Neighbor> ret;
+    vector<Ret> ret;
     for (idx_t i = 0; i < X.rows(); i++) {
         auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, radius_sq);
         if (dist <= radius_sq) {
-            ret.emplace_back(dist, i);
+            internal::emplace_neighbor<Ret>(ret, dist, i);
         }
     }
     return ret;
 }
+// template<class RowMatrixT, class VectorT, class DistT>
+// vector<Neighbor> radius(const RowMatrixT& X, const VectorT& query,
+//     DistT radius_sq)
+//     // const VectorT& query, idx_t num_rows, DistT radius_sq)
+// {
+//     vector<Neighbor> ret;
+//     for (idx_t i = 0; i < X.rows(); i++) {
+//         auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, radius_sq);
+//         if (dist <= radius_sq) {
+//             ret.emplace_back(dist, i);
+//         }
+//     }
+//     return ret;
+// }
+
 // template<class RowMatrixT, class VectorT, class DistT>
 // vector<vector<Neighbor> > radius_batch(const RowMatrixT& X,
 //     const RowMatrixT& queries, dist_t radius_sq)

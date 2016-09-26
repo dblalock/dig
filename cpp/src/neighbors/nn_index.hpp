@@ -20,6 +20,7 @@
 
 namespace nn {
 
+static const int8_t kAlignBytes = 32;
 
 template<class IdT=idx_t>
 class FlatIndex {
@@ -270,8 +271,6 @@ public:
         _data(data)
     {
         assert(_data.IsRowMajor);
-        // _colMeans = data.colwise().mean();
-        // _orderIdxs = RowVectIdxsT(data.cols());
     }
 
     template<class VectorT>
@@ -293,20 +292,89 @@ public:
 	Index rows() const { return _ids.size(); }
 
 private:
-    DynamicRowArray<Scalar, 32> _data;
+    DynamicRowArray<Scalar, kAlignBytes> _data;
     // RowVectT _colMeans;
 };
 
 // ================================================================
-// CascadeIndex
+// CascadeIdIndex
 // ================================================================
 
-template<class T>
-class CascadeIndex {
-    typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> RowMatrixT;
+// only holds ids of points, not points themselves
+template<class T, int Projections=16, class DistT=float>
+// class CascadeIdIndex: IndexBase<CascadeIdIndex<T, Projections, DistT>, T, DistT> {
+class CascadeIdIndex {
+public:
+    typedef T Scalar;
+    typedef float ProjectionScalar;
+    typedef int32_t Index;
+    typedef idx_t ID;
+    enum { NumProjections = Projections };
 
-// private:
-    // L2IndexAbandon<
+    CascadeIdIndex(Index initial_rows):
+        _ids(initial_rows),
+        _projections(initial_rows),
+        _nrows(0),
+        _capacity(initial_rows)
+    {
+        assert(initial_rows > 0);
+    }
+
+    // ------------------------ single query
+
+    // Note: doesn't return distances; just indices
+    template<class VectorT, class RowMatrixT>
+    vector<Index> radius(const RowMatrixT& data, const VectorT& query,
+        DistT radius_sq)
+    {
+        return abandon::radius<Index>(data, query, radius_sq, rows());
+    }
+
+    // ------------------------ insert and erase
+
+    void insert(ID id, ProjectionScalar* projections) {
+        if (++_nrows > _capacity) {
+            Index new_capacity = std::max(_nrows + 1, _capacity * 1.5);
+            _ids.resize(_capacity, new_capacity);
+            _projections.resize(_capacity, new_capacity);
+            _capacity = new_capacity;
+        }
+        auto at_idx = _nrows - 1;
+        _ids.insert<false>(id, at_idx);
+        _projections.insert<false>(projections, at_idx);
+    }
+
+    bool erase_at(Index at_idx) {
+        assert(at_idx >= 0);
+        assert(_nrows > 0);
+        assert(at_idx < _nrows);
+        _nrows--;
+        if (at_idx == (_nrows + 1)) { return true; } // erase last row
+        // overwrite erased row with last row
+        _ids.copy_row(_nrows, at_idx);
+        _projections.copy_row(_nrows, at_idx);
+    }
+
+    bool erase(ID id) {
+        auto begin = _ids.data();
+        auto it = ar::find(begin, begin + _nrows, id);
+        if (it == end) {
+            return false;
+        }
+        auto idx = static_cast<Index>(it - begin);
+        return erase_at(idx);
+    }
+
+    // ------------------------ accessors
+    Index rows() const { return _nrows; }
+    Index capacity() const { return _capacity; }
+
+private:
+    FixedRowArray<idx_t, 1, 0> _ids; // 1 col, 0 byte align         // 8B
+    FixedRowArray<ProjectionScalar, NumProjections, kAlignBytes> _projections; // 8B
+    // DynamicRowArray<Scalar, kAlignBytes>                         // 16B
+    Index _nrows;                                                 // 4B
+    Index _capacity;                                              // 4B
 };
 
 // template<class T, int dims>

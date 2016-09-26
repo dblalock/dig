@@ -76,6 +76,7 @@ struct row_array_traits {};
 
 template<class T, int NumCols>
 struct row_array_traits<DynamicRowArrayKey, T, NumCols> {
+	typedef idx_t RowIndex;
     typedef int32_t ColIndex;
     typedef Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor> RowT;
     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixT;
@@ -83,6 +84,7 @@ struct row_array_traits<DynamicRowArrayKey, T, NumCols> {
 
 template<class T, int NumCols>
 struct row_array_traits<FixedRowArrayKey, T, NumCols> {
+	typedef idx_t RowIndex;
     typedef int32_t ColIndex;
     typedef Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor> RowT;
     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixT;
@@ -141,9 +143,11 @@ template<class Derived, class T, class DerivedKey, int AlignBytes=32>
 class BaseRowArray {
 public:
 	typedef T Scalar;
+    // typedef idx_t Index;
     typedef row_array_traits<DerivedKey, T> DerivedTraits;
     // typedef typename row_array_traits<DerivedKey, T>::MatrixT MatrixT;
     // typedef typename row_array_traits<DerivedKey, T>::RowT RowT;
+	typedef typename DerivedTraits::RowIndex RowIndex;
     typedef typename DerivedTraits::ColIndex ColIndex;
     typedef typename DerivedTraits::MatrixT MatrixT;
     typedef typename DerivedTraits::RowT RowT;
@@ -172,27 +176,30 @@ public:
     ~BaseRowArray() { aligned_free<Scalar, AlignBytes>(_data); }
 
     // ------------------------ accessors
-    template<class Index>
-    Scalar* row_ptr(const Index i) const {
+
+    Scalar* data() const { return _data; }
+
+    // template<class Index>
+    Scalar* row_ptr(const RowIndex i) const {
         assert(i >= 0);
 		return _data + (i * _cols());
     }
     // template<class Index>
     // const Scalar* row_ptr(const Index i) const { return row_ptr(i); }
 
-    template<class Index>
-    RowMapT row(const Index i) const {
+    // template<class Index>
+    RowMapT row(const RowIndex i) const {
         return RowMapT{row_ptr(i), _cols()};
     }
 
-    template<class Index>
-    MatrixMapT matrix(const Index nrows) const {
+    // template<class Index>
+    MatrixMapT matrix(const RowIndex nrows) const {
         return MatrixMapT{_data, nrows, _cols()};
     }
 
     // ------------------------ resize, insert, delete
-    template<class Index>
-    void resize(Index old_num_rows, Index new_num_rows) {
+    // template<class Index>
+    void resize(RowIndex old_num_rows, RowIndex new_num_rows) {
         auto ncols = _cols();
         assert (_aligned_length(ncols) == ncols);
         assert(new_num_rows > old_num_rows); // for now, should only get bigger
@@ -206,8 +213,9 @@ public:
         _data = new_data;
     }
 
-    template<class Index, bool NeedsZeroing=true>
-    void insert(const Scalar* x, Index len, Index at_idx) {
+    // template<class Index, bool NeedsZeroing=true>
+    template<bool NeedsZeroing=true>
+    void insert(const Scalar* x, ColIndex len, RowIndex at_idx) {
         auto row_start = row_ptr(at_idx);
         // zero past end of inserted data (and possibly a bit before)
         if (AlignBytes > 0 && NeedsZeroing) {
@@ -222,10 +230,10 @@ public:
         std::copy(x, x + len, row_start);
     }
 
-    template<class Index>
-    void copy_row(Index from_idx, Index to_idx) {
+    // template<class Index>
+    void copy_row(RowIndex from_idx, RowIndex to_idx) {
         assert(from_idx != to_idx);
-		insert<Index, false>(row_ptr(from_idx), _cols(), to_idx);
+		insert<false>(row_ptr(from_idx), _cols(), to_idx);
     }
 
 protected:
@@ -286,15 +294,37 @@ private:
 template<class T, int NumCols, int AlignBytes=32>
 class FixedRowArray : public BaseRowArray<FixedRowArray<T, NumCols, AlignBytes>, T, FixedRowArrayKey, AlignBytes> {
 public:
-	typedef typename row_array_traits<FixedRowArrayKey, T>::ColIndex ColIndex;
+	typedef T Scalar;
+	typedef row_array_traits<FixedRowArrayKey, T> Traits;
+	typedef typename Traits::RowIndex RowIndex;
+	typedef typename Traits::ColIndex ColIndex;
     typedef BaseRowArray<FixedRowArray<T, NumCols, AlignBytes>, T, FixedRowArrayKey, AlignBytes> Super;
+    enum { Cols = NumCols };
 
     // ------------------------ ctors
+    FixedRowArray(RowIndex initial_rows):
+        Super(initial_rows, NumCols)
+    {
+        // NOTE: wouldn't need this restriction if we had BaseRowArray
+        // always align what it got from derived()->cols()
+        size_t aligned_ncols = aligned_length<T, AlignBytes>(NumCols);
+        assert(aligned_ncols == NumCols);
+		// constexpr size_t aligned_ncols = aligned_length<T, AlignBytes>(NumCols);
+   //      static_assert(aligned_ncols == NumCols,
+			// "NumCols * sizeof(T) must be a mulitple of AlignBytes");
+    }
+
     FixedRowArray(const FixedRowArray& other) = delete;
     FixedRowArray(const FixedRowArray&& other) = delete;
 
     // ------------------------ accessors
     inline constexpr ColIndex cols() const { return NumCols; }
+
+    // ------------------------ insert
+    template<bool NeedsZeroing=true>
+    void insert(const Scalar* x, RowIndex at_idx) {
+        Super::insert(x, NumCols, at_idx);
+    }
 };
 
 // ================================================================
