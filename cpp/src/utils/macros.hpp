@@ -42,6 +42,12 @@
 	//
 	// template<class T, REQUIRE_INT(T)> T foo(T arg) { return arg + 1; }
 	//
+
+	// have to wrap EXPR in a local template param for enable_if to work on
+	// a class method where EXPR is a class template param
+	#define REQUIRE_TRUE(EXPR) \
+		bool __expr__ = EXPR, typename = typename std::enable_if<__expr__, T>::type
+		// typename = typename std::enable_if<EXPR, T>::type
 	#define REQUIRE_TRAIT(TRAIT, T) \
 		typename = typename std::enable_if<std::TRAIT<T>::value, T>::type
 

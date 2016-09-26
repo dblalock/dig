@@ -20,47 +20,6 @@
 namespace nn {
 
 // ================================================================
-// Utils
-// ================================================================
-
-template<class T, int AlignBytes, class IntT>
-inline IntT aligned_length(IntT ncols) {
-    int16_t align_elements = AlignBytes / sizeof(T);
-    int16_t remainder = ncols % align_elements;
-    if (remainder > 0) {
-        ncols += align_elements - remainder;
-    }
-    return ncols;
-}
-
-// helper struct to get Eigen::Map<> MapOptions based on alignment in bytes
-template<int AlignBytes>
-struct _AlignHelper { enum { AlignmentType = Eigen::Unaligned }; };
-template<> struct _AlignHelper<16> { enum { AlignmentType = Eigen::Aligned }; };
-template<> struct _AlignHelper<32> { enum { AlignmentType = Eigen::Aligned }; };
-
-template<class T, int AlignBytes>
-static inline T* aligned_alloc(size_t n) {
-    static_assert(AlignBytes == 0 || AlignBytes == 32,
-				  "Only AlignBytes values of 0 and 32 are supported!");
-    if (AlignBytes == 32) {
-        return Eigen::aligned_allocator<T>{}.allocate(n);
-    } else {
-        return new T[n];
-    }
-}
-template<class T, int AlignBytes>
-static inline void aligned_free(T* p) {
-    static_assert(AlignBytes == 0 || AlignBytes == 32,
-				  "Only AlignBytes values of 0 and 32 are supported!");
-    if (AlignBytes == 32) {
-        Eigen::aligned_allocator<T>{}.deallocate(p, 0); // 0 unused
-    } else {
-        delete[] p;
-    }
-}
-
-// ================================================================
 // RowArray
 // ================================================================
 
@@ -90,44 +49,6 @@ struct row_array_traits<FixedRowArrayKey, T, NumCols> {
     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixT;
 };
 
-// struct row_array_traits<DynamicRowArray<T, AlignBytes>, T, NumCols, AlignBytes> {
-//     typedef int32_t ColIndex;
-//     typedef Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor> RowT;
-//     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixT;
-// };
-
-// template<template<class..., int...> class Derived, class T=char, int NumCols=-2, int... ints>
-// struct row_array_traits {};
-
-// template<template<class..., int...> class Derived, class T, int NumCols, int... ints>
-// struct row_array_traits<DynamicRowArray, T, NumCols> {
-//     typedef int32_t ColIndex;
-//     typedef Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor> RowT;
-//     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixT;
-// };
-
-// // set default param values here so don't have to pass them in
-// template<class Derived, class T=char, int NumCols=-2, int AlignBytes=-2>
-// struct row_array_traits {};
-
-// // template <class T, int NumCols, int AlignBytes, class... Args>
-// // struct row_array_traits<DynamicRowArray<Args...>, T, NumCols, AlignBytes> {
-// template<class T, int NumCols, int AlignBytes>
-// struct row_array_traits<DynamicRowArray<T, AlignBytes>, T, NumCols, AlignBytes> {
-//     typedef int32_t ColIndex;
-//     typedef Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor> RowT;
-//     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixT;
-// };
-
-// // template <class T, int NumCols, int AlignBytes, class... Args>
-// // struct row_array_traits<FixedRowArray<T, NumCols, AlignBytes>, T, NumCols, AlignBytes, Args...> {
-// template<class T, int NumCols, int AlignBytes>
-// struct row_array_traits<FixedRowArray<T, NumCols, AlignBytes>, T, NumCols, AlignBytes> {
-//     typedef int32_t ColIndex;
-//     typedef Eigen::Matrix<T, 1, NumCols, Eigen::RowMajor> RowT;
-//     typedef Eigen::Matrix<T, Eigen::Dynamic, NumCols, Eigen::RowMajor> MatrixT;
-// };
-
 // ------------------------------------------------ BaseRowArray
 
 // BaseRowArray just has a pointer to its data and knows how wide each row
@@ -139,7 +60,8 @@ struct row_array_traits<FixedRowArrayKey, T, NumCols> {
 // Also aligns each row to AlignBytes boundaries, assuming that Derived::cols()
 // is guaranteed to yield a number of objects that's an even multiple of
 // AlignBytes / sizeof(T)
-template<class Derived, class T, class DerivedKey, int AlignBytes=32>
+template<class Derived, class T, class DerivedKey, int AlignBytes=32,
+    bool OwnPtr=true>
 class BaseRowArray {
 public:
 	typedef T Scalar;
@@ -151,12 +73,16 @@ public:
     typedef typename DerivedTraits::ColIndex ColIndex;
     typedef typename DerivedTraits::MatrixT MatrixT;
     typedef typename DerivedTraits::RowT RowT;
-	typedef Eigen::Map<MatrixT, _AlignHelper<AlignBytes>::AlignmentType> MatrixMapT;
+    // typedef Eigen::Map<MatrixT, _AlignHelper<AlignBytes>::AlignmentType> MatrixMapT;
+	typedef Eigen::Map<MatrixT, Eigen::Aligned> MatrixMapT; // whole mat aligned
     typedef Eigen::Map<RowT, _AlignHelper<AlignBytes>::AlignmentType> RowMapT;
 
     static const bool IsRowMajor = true;
 
     // ------------------------ ctors
+
+    // init data with new pointer that we own
+    template<REQUIRE_TRUE(OwnPtr)>
     BaseRowArray(size_t initial_rows, size_t ncols):
         _data(_aligned_alloc(initial_rows * _aligned_length(ncols)))
     {
@@ -173,7 +99,21 @@ public:
         mat.topLeftCorner(X.rows(), X.cols()) = X;
     }
 
-    ~BaseRowArray() { aligned_free<Scalar, AlignBytes>(_data); }
+    // init data with existing pointer that we don't own
+    template<class RowMatrixT, REQUIRE_TRUE(!OwnPtr)>
+    BaseRowArray(const RowMatrixT& X):
+        _data(X.data())
+    {}
+	template<REQUIRE_TRUE(!OwnPtr)>
+	BaseRowArray(const Scalar* ptr):
+		_data(ptr)
+	{}
+
+    ~BaseRowArray() {
+        if (OwnPtr) {
+            aligned_free<Scalar, AlignBytes>(_data);
+        }
+    }
 
     // ------------------------ accessors
 
@@ -238,7 +178,9 @@ public:
 
 protected:
     Scalar* _aligned_alloc(size_t n) {
-        return aligned_alloc<Scalar, AlignBytes>(n);
+        // note: always use aligned alloc here, even if rows don't need to
+        // be aligned
+        return aligned_alloc<Scalar, 32>(n);
     }
     ColIndex _aligned_length(size_t ncols) {
         return static_cast<ColIndex>(aligned_length<T, AlignBytes>(ncols));
@@ -255,12 +197,14 @@ private:
 // ------------------------------------------------ DynamicRowArray
 
 // BaseRowArray subclass with a width set at construction time
-template<class T, int AlignBytes=32>
-class DynamicRowArray : public BaseRowArray<DynamicRowArray<T, AlignBytes>, T, DynamicRowArrayKey, AlignBytes> {
+template<class T, int AlignBytes=32, bool OwnPtr=true>
+class DynamicRowArray :
+	public BaseRowArray<DynamicRowArray<T, AlignBytes, OwnPtr>,
+		T, DynamicRowArrayKey, AlignBytes, OwnPtr> {
 public:
     // typedef int32_t ColIndex;
     typedef typename row_array_traits<DynamicRowArrayKey, T>::ColIndex ColIndex;
-	typedef BaseRowArray<DynamicRowArray<T, AlignBytes>, T, DynamicRowArrayKey, AlignBytes> Super;
+	typedef BaseRowArray<DynamicRowArray<T, AlignBytes, OwnPtr>, T, DynamicRowArrayKey, AlignBytes, OwnPtr> Super;
 
     // ------------------------ ctors
     DynamicRowArray(size_t initial_rows, size_t ncols):
@@ -291,14 +235,17 @@ private:
 
 // BaseRowArray subclass that has a fixed width, and so doesn't need to
 // store it
-template<class T, int NumCols, int AlignBytes=32>
-class FixedRowArray : public BaseRowArray<FixedRowArray<T, NumCols, AlignBytes>, T, FixedRowArrayKey, AlignBytes> {
+template<class T, int NumCols, int AlignBytes=32, bool OwnPtr=true>
+class FixedRowArray :
+	public BaseRowArray<FixedRowArray<T, NumCols, AlignBytes, OwnPtr>,
+		T, FixedRowArrayKey, AlignBytes, OwnPtr> {
 public:
 	typedef T Scalar;
 	typedef row_array_traits<FixedRowArrayKey, T> Traits;
 	typedef typename Traits::RowIndex RowIndex;
 	typedef typename Traits::ColIndex ColIndex;
-    typedef BaseRowArray<FixedRowArray<T, NumCols, AlignBytes>, T, FixedRowArrayKey, AlignBytes> Super;
+    typedef BaseRowArray<FixedRowArray<T, NumCols, AlignBytes, OwnPtr>,
+		T, FixedRowArrayKey, AlignBytes, OwnPtr> Super;
     enum { Cols = NumCols };
 
     // ------------------------ ctors
@@ -335,8 +282,9 @@ public:
 // vector and know that it's 32-byte aligned, which enables using
 // 32-byte SIMD instructions (as found in 256-bit AVX 2)
 //
-// this code is somewhat redundant with RowArray code, but refactoring
-// to combine them is not a priority atm
+// This code is somewhat redundant with RowArray code, but refactoring
+// to combine them is not a priority atm. Also, I don't think anything is
+// actually using this code anymore.
 template<class T, int AlignBytes=32, class IdT=int64_t>
 class RowStore {
 public:

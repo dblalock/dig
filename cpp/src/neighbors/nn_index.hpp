@@ -50,11 +50,23 @@ protected:
 //     typedef
 // }
 
+// template<class T>
+struct IdentityPreprocessor {
+    template<class RowMatrixT> IdentityPreprocessor() {}
+    template<class VectorT> void preprocess(const VectorT& query) {}
+    template<class RowMatrixT> void preprocess_batch(const RowMatrixT& queries) {}
+};
+
+struct ReorderPreproc {
+
+};
+
 // superclass using Curiously Recurring Template Pattern to get compile-time
 // polymorphism; i.e., we can call arbitrary child class functions without
 // having to declare them anywhere in this class. This is the same pattern
 // used by Eigen.
-template<class Derived, class ScalarT, class DistT=float>
+template<class Derived, class ScalarT, class Preprocessor=IdentityPreprocessor,
+    class DistT=float>
 class IndexBase {
 public:
  //    typedef typename index_traits<Derived>::Distance DistT;
@@ -73,6 +85,8 @@ public:
 //	auto erase(Id id) -> decltype(Derived::_data.erase(id)) {
 //        return Derived::_data.erase(id);
 //    }
+
+    // ------------------------------------------------ single queries
 
     // ------------------------------------------------ batch of queries
 
@@ -182,7 +196,10 @@ public:
         //_ids = ar::range(static_cast<ID>(0), static_cast<ID>(data.rows()));
     }
 
-    // // ------------------------------------------------ insert and erase
+    // ------------------------------------------------ accessors
+    Index rows() const { return _ids.size(); }
+
+    // ------------------------------------------------ insert and erase
 
     // template<class Id>
     // void insert(const ScalarT* row_start, Id id) {
@@ -237,12 +254,14 @@ public:
         return brute::onenn_batch(_matrix(), queries, _rowNorms);
     }
 
-    // ------------------------------------------------ accessors
-	Index rows() const { return _ids.size(); }
-
 private:
     ColVectorT _rowNorms; // TODO raw T[] + map
+    // FixedRowArray<Scalar, 1, 0> _rowNorms;
     DynamicRowArray<Scalar, 0> _data;
+
+    // auto _row_norms() const { // TODO use this once _rowNorms is RowArray
+    //     return _rowNorms.matrix(rows());
+    // }
 
 	auto _matrix() -> decltype(_data.matrix(rows())) {
 		return _data.matrix(rows());
@@ -370,12 +389,49 @@ public:
     Index capacity() const { return _capacity; }
 
 private:
-    FixedRowArray<idx_t, 1, 0> _ids; // 1 col, 0 byte align         // 8B
-    FixedRowArray<ProjectionScalar, NumProjections, kAlignBytes> _projections; // 8B
+    FixedRowArray<idx_t, 1, 0, true> _ids; // 1 col, 0 byte align   // 8B
+    FixedRowArray<ProjectionScalar, NumProjections, kAlignBytes, true> _projections; // 8B
     // DynamicRowArray<Scalar, kAlignBytes>                         // 16B
-    Index _nrows;                                                 // 4B
-    Index _capacity;                                              // 4B
+    Index _nrows;                                                   // 4B
+    Index _capacity;                                                // 4B
 };
+
+// ================================================================
+// NNIndex
+// ================================================================
+
+#define QUERY_METHOD(NAME, INVOCATION) \
+    template<class VectorT, class... Args> \
+    auto NAME(const VectorT& query, Args&&... args) \
+        -> decltype(INVOCATION (query, std::forward<Args>(args)...)) \
+    { \
+        auto use_query = _preproc.preprocess(query); \
+        return INVOCATION(use_query, std::forward<Args...>(args)...); \
+    }
+
+#define QUERY_BATCH_METHOD(NAME, INVOCATION) \
+    template<class RowMatrixT, class... Args> \
+    auto NAME(const RowMatrixT& queries, Args&&... args) \
+        -> decltype(INVOCATION (queries, std::forward<Args>(args)...)) \
+    { \
+        auto use_queries = _preproc.preprocess_batch(queries); \
+        return INVOCATION(use_queries, std::forward<Args...>(args)...); \
+    }
+
+template<class InnerIndex, class Preprocessor=IdentityPreprocessor>
+class NNIndex {
+private:
+    InnerIndex _index;
+    Preprocessor _preproc;
+public:
+    QUERY_METHOD(radius, _index.radius);
+    QUERY_METHOD(onenn, _index.onenn);
+    QUERY_METHOD(knn, _index.knn);
+    QUERY_BATCH_METHOD(radius_batch, _index.radius_batch);
+    QUERY_BATCH_METHOD(onenn_batch, _index.onenn_batch);
+    QUERY_BATCH_METHOD(knn_batch, _index.knn_batch);
+};
+
 
 // template<class T, int dims>
 // class PCABound {

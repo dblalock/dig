@@ -35,8 +35,9 @@ using Eigen::Dynamic;
 using Eigen::RowMajor;
 using Eigen::ColMajor;
 
-using ar::argsort;
+// using ar::argsort;
 using ar::map;
+// using ar::at_idxs;
 
 typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
@@ -52,6 +53,82 @@ typedef int64_t idx_t;
 
 // template<class T, int Dim1=Dynamic, int Dim2=Dynamic>
 // class RowMatrixX: public Matrix<T, Dim1, Dim2, RowMajor> {};
+
+// ------------------------------------------------ Preprocessing
+
+template<class T, class IdxT>
+void preproc_query(const T* RESTRICT q, const IdxT* order, idx_t len,
+	T* RESTRICT out)
+{
+    for(idx_t i = 0; i < len; i++) {
+        out[i] = q[order[i]];
+    }
+}
+template<class VectorT1, class VectorT2>
+void preproc_query(const VectorT1& q, const VectorT2& order_idxs,
+    typename VectorT1::Scalar* out)
+{
+    preproc_query(q, order_idxs.data(), order_idxs.size(), out);
+}
+template<class RowMatrixT, class VectorT, class RowMatrixT2>
+void preproc_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
+    const RowMatrixT2& out)
+{
+    for (idx_t i = 0; i < queries.rows(); i++) {
+        preproc_query(queries.row(i), order_idxs, out.row(i).data());
+    }
+}
+
+template<class MatrixT>
+std::vector<ar::length_t> order_col_variance(const MatrixT& X) {
+    auto means = X.colwise.mean();
+    auto Xnorm = (X.rowwise() - means).eval();
+    Eigen::RowVectorXd variances = Xnorm.colwise().squaredNorm() / X.rows();
+
+    std::vector<ar::length_t> ret(X.cols());
+    ar::argsort(variances.data(), X.cols(), ret.data(), false); // descending
+    return ret;
+}
+
+// ------------------------------------------------ Alignment
+
+template<class T, int AlignBytes, class IntT>
+inline IntT aligned_length(IntT ncols) {
+    int16_t align_elements = AlignBytes / sizeof(T);
+    int16_t remaindr = ncols % align_elements;
+    if (remaindr > 0) {
+        ncols += align_elements - remaindr;
+    }
+    return ncols;
+}
+
+// helper struct to get Eigen::Map<> MapOptions based on alignment in bytes
+template<int AlignBytes> struct _AlignHelper {};
+template<> struct _AlignHelper<0> { enum { AlignmentType = Eigen::Unaligned }; };
+template<> struct _AlignHelper<16> { enum { AlignmentType = Eigen::Aligned }; };
+template<> struct _AlignHelper<32> { enum { AlignmentType = Eigen::Aligned }; };
+
+template<class T, int AlignBytes>
+static inline T* aligned_alloc(size_t n) {
+    static_assert(AlignBytes == 0 || AlignBytes == 32,
+                  "Only AlignBytes values of 0 and 32 are supported!");
+    if (AlignBytes == 32) {
+        return Eigen::aligned_allocator<T>{}.allocate(n);
+    } else {
+        return new T[n];
+    }
+}
+template<class T, int AlignBytes>
+static inline void aligned_free(T* p) {
+    static_assert(AlignBytes == 0 || AlignBytes == 32,
+                  "Only AlignBytes values of 0 and 32 are supported!");
+    if (AlignBytes == 32) {
+        Eigen::aligned_allocator<T>{}.deallocate(p, 0); // 0 unused
+    } else {
+        delete[] p;
+    }
+}
+
 
 // ------------------------------------------------ neighbor munging
 
