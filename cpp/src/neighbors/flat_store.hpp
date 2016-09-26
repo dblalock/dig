@@ -44,7 +44,7 @@ static inline T* aligned_alloc(size_t n) {
     static_assert(AlignBytes == 0 || AlignBytes == 32,
 				  "Only AlignBytes values of 0 and 32 are supported!");
     if (AlignBytes == 32) {
-        Eigen::aligned_allocator<T>{}.allocate(n);
+        return Eigen::aligned_allocator<T>{}.allocate(n);
     } else {
         return new T[n];
     }
@@ -177,8 +177,8 @@ public:
         assert(i >= 0);
 		return _data + (i * _cols());
     }
-    template<class Index>
-    const Scalar* row_ptr(const Index i) const { return row_ptr(i); }
+    // template<class Index>
+    // const Scalar* row_ptr(const Index i) const { return row_ptr(i); }
 
     template<class Index>
     RowMapT row(const Index i) const {

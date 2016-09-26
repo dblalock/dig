@@ -21,10 +21,24 @@
 namespace nn {
 
 
+template<class IdT=idx_t>
+class FlatIndex {
+public:
+    typedef IdT ID;
+
+    FlatIndex(size_t len):
+        _ids(ar::range(static_cast<ID>(0), static_cast<ID>(len)))
+    {}
+
+    idx_t rows() const { return static_cast<idx_t>(_ids.size()); }
+
+protected:
+    std::vector<ID> _ids;
+};
+
 // ================================================================
 // IndexBase
 // ================================================================
-
 
 //template<class IndexT> struct index_traits {
 //    typedef typename IndexT::Scalar Scalar;
@@ -143,24 +157,28 @@ public:
 // ================================================================
 
 // answers neighbor queries using matmuls
-template<class T, class IdT=int64_t, class DistT=float>
-class L2IndexBrute: public IndexBase<L2IndexBrute<T, DistT>, T, DistT> {
+template<class T, class DistT=float>
+class L2IndexBrute:
+    public IndexBase<L2IndexBrute<T, DistT>, T, DistT>,
+    public FlatIndex<> {
 public:
     typedef T Scalar;
-    typedef IdT ID;
+	typedef FlatIndex IDsStore;
+    // typedef typename IDsStore::ID ID;
     typedef DistT Distance;
-    typedef int64_t Index;
-    typedef DynamicRowArray<Scalar, 0> StorageT;
+    typedef idx_t Index;
+    // typedef DynamicRowArray<Scalar, 0> StorageT;
     // typedef typename StorageT::MatrixT::Index Index;
     typedef Matrix<Scalar, Dynamic, 1> ColVectorT;
 
     template<class RowMatrixT>
     explicit L2IndexBrute(const RowMatrixT& data):
+        IDsStore(data.rows()),
         _data(data)
     {
 		assert(data.IsRowMajor);
         _rowNorms = data.rowwise().squaredNorm();
-        _ids = ar::range(static_cast<ID>(0), static_cast<ID>(data.rows()));
+        //_ids = ar::range(static_cast<ID>(0), static_cast<ID>(data.rows()));
     }
 
     // // ------------------------------------------------ insert and erase
@@ -222,10 +240,8 @@ public:
 	Index rows() const { return _ids.size(); }
 
 private:
-    // RowStore<Scalar, 0> _data;
-	std::vector<ID> _ids;
-    StorageT _data;
     ColVectorT _rowNorms; // TODO raw T[] + map
+    DynamicRowArray<Scalar, 0> _data;
 
 	auto _matrix() -> decltype(_data.matrix(rows())) {
 		return _data.matrix(rows());
@@ -238,43 +254,48 @@ private:
 
 // TODO pad query if queryIdPadded == 0; maybe also do this in IndexBase?
 template<class T, class DistT=float, int QueryIsPadded=1>
-class L2IndexAbandon: public IndexBase<L2IndexAbandon<T, DistT, QueryIsPadded>, T, DistT> {
+class L2IndexAbandon:
+    public IndexBase<L2IndexAbandon<T, DistT, QueryIsPadded>, T, DistT>,
+    public FlatIndex<> {
 public:
     typedef T Scalar;
 	typedef DistT Distance;
+	typedef idx_t Index;
     typedef Matrix<Scalar, 1, Dynamic, RowMajor> RowVectT;
     typedef Matrix<int32_t, 1, Dynamic, RowMajor> RowVectIdxsT;
 
     template<class RowMatrixT>
     explicit L2IndexAbandon(const RowMatrixT& data):
+		FlatIndex<>(data.rows()),
         _data(data)
     {
         assert(_data.IsRowMajor);
-        _colMeans = data.colwise().mean();
+        // _colMeans = data.colwise().mean();
         // _orderIdxs = RowVectIdxsT(data.cols());
     }
 
     template<class VectorT>
     vector<Neighbor> radius(const VectorT& query, DistT radius_sq) {
-        return abandon::radius(_data, query, radius_sq);
+        return abandon::radius(_data, query, radius_sq, rows());
     }
 
     template<class VectorT>
     Neighbor onenn(const VectorT& query) {
-        return abandon::onenn(_data, query);
+        return abandon::onenn(_data, query, kMaxDist, rows());
     }
 
     template<class VectorT>
     vector<Neighbor> knn(const VectorT& query, int k) {
-        return abandon::knn(_data, query, k);
+        return abandon::knn(_data, query, k, kMaxDist, rows());
     }
 
-private:
-    RowStore<Scalar> _data;
-    RowVectT _colMeans;
-    // RowVectIdxsT _orderIdxs;
-};
+	// ------------------------------------------------ accessors
+	Index rows() const { return _ids.size(); }
 
+private:
+    DynamicRowArray<Scalar, 32> _data;
+    // RowVectT _colMeans;
+};
 
 // ================================================================
 // CascadeIndex
