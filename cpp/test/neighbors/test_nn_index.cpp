@@ -141,8 +141,11 @@ TEST_CASE("print sizes", "tmp") {
 	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
 	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
 	printf("sizeof(eigen ArrayXXd) = %ld\n", sizeof(Eigen::ArrayXXd));
-	printf("sizeof(RowStore<float>) = %ld\n", sizeof(nn::RowStore<float>));
-	printf("sizeof(RowStore<double>) = %ld\n", sizeof(nn::RowStore<double>));
+	printf("sizeof(DynamicRowArray<float>) = %ld\n", sizeof(nn::DynamicRowArray<float>));
+	printf("sizeof(FixedRowArray<float, 8>) = %ld\n", sizeof(nn::FixedRowArray<float, 8>));
+	printf("sizeof(FixedRowArray<float, 16>) = %ld\n", sizeof(nn::FixedRowArray<float, 16>));
+	printf("sizeof(L2IndexBrute<float>) = %ld\n", sizeof(nn::L2IndexBrute<float>));
+	printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
 }
 
 TEST_CASE("L2IndexBrute", "distance") {

@@ -109,8 +109,6 @@ public:
     template<class VectorT>
     vector<idx_t> knn_idxs(const VectorT& query, size_t k) {
         auto neighbors = Derived::knn(query, k);
-        // TODO have neighbor idx be idx_t; we might overflow 32 bits so
-        // needs to be 64
         return map([](const Neighbor& n) { return static_cast<idx_t>(n.idx); },
                    neighbors);
     }
@@ -145,11 +143,15 @@ public:
 // ================================================================
 
 // answers neighbor queries using matmuls
-template<class T, class DistT=float>
+template<class T, class IdT=int64_t, class DistT=float>
 class L2IndexBrute: public IndexBase<L2IndexBrute<T, DistT>, T, DistT> {
 public:
     typedef T Scalar;
+    typedef IdT ID;
     typedef DistT Distance;
+    typedef int64_t Index;
+    typedef DynamicRowArray<Scalar, 0> StorageT;
+    // typedef typename StorageT::MatrixT::Index Index;
     typedef Matrix<Scalar, Dynamic, 1> ColVectorT;
 
     template<class RowMatrixT>
@@ -158,6 +160,7 @@ public:
     {
 		assert(data.IsRowMajor);
         _rowNorms = data.rowwise().squaredNorm();
+        _ids = ar::range(static_cast<ID>(0), static_cast<ID>(data.rows()));
     }
 
     // // ------------------------------------------------ insert and erase
@@ -183,17 +186,17 @@ public:
 
     template<class VectorT>
     vector<Neighbor> radius(const VectorT& query, DistT radius_sq) {
-        return brute::radius(_data.matrix(), query, radius_sq);
+        return brute::radius(_matrix(), query, radius_sq);
     }
 
     template<class VectorT>
     Neighbor onenn(const VectorT& query) {
-        return brute::onenn(_data.matrix(), query);
+        return brute::onenn(_matrix(), query);
     }
 
     template<class VectorT>
     vector<Neighbor> knn(const VectorT& query, int k) {
-        return brute::knn(_data.matrix(), query, k);
+        return brute::knn(_matrix(), query, k);
     }
 
     // ------------------------------------------------ batch of queries
@@ -202,22 +205,31 @@ public:
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
         DistT radius_sq)
     {
-        return brute::radius_batch(_data.matrix(), queries, radius_sq, _rowNorms);
+        return brute::radius_batch(_matrix(), queries, radius_sq, _rowNorms);
     }
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
-        return brute::knn_batch(_data.matrix(), queries, k, _rowNorms);
+        return brute::knn_batch(_matrix(), queries, k, _rowNorms);
     }
 
     template<class RowMatrixT>
     vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
-        return brute::onenn_batch(_data.matrix(), queries, _rowNorms);
+        return brute::onenn_batch(_matrix(), queries, _rowNorms);
     }
 
+    // ------------------------------------------------ accessors
+	Index rows() const { return _ids.size(); }
+
 private:
-    RowStore<Scalar, 0> _data;
-    ColVectorT _rowNorms;
+    // RowStore<Scalar, 0> _data;
+	std::vector<ID> _ids;
+    StorageT _data;
+    ColVectorT _rowNorms; // TODO raw T[] + map
+
+	auto _matrix() -> decltype(_data.matrix(rows())) {
+		return _data.matrix(rows());
+	}
 };
 
 // ================================================================
