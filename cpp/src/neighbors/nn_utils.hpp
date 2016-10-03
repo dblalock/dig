@@ -57,7 +57,7 @@ typedef int64_t idx_t;
 // ------------------------------------------------ Preprocessing
 
 template<class T, class IdxT>
-void preproc_query(const T* RESTRICT q, const IdxT* order, idx_t len,
+void reorder_query(const T* RESTRICT q, const IdxT* order, idx_t len,
 	T* RESTRICT out)
 {
     for(idx_t i = 0; i < len; i++) {
@@ -65,27 +65,27 @@ void preproc_query(const T* RESTRICT q, const IdxT* order, idx_t len,
     }
 }
 template<class VectorT1, class VectorT2>
-void preproc_query(const VectorT1& q, const VectorT2& order_idxs,
+void reorder_query(const VectorT1& q, const VectorT2& order_idxs,
     typename VectorT1::Scalar* out)
 {
-    preproc_query(q, order_idxs.data(), order_idxs.size(), out);
+    reorder_query(q.data(), order_idxs.data(), order_idxs.size(), out);
 }
 template<class RowMatrixT, class VectorT, class RowMatrixT2>
-void preproc_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
+void reorder_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
     const RowMatrixT2& out)
 {
     for (idx_t i = 0; i < queries.rows(); i++) {
-        preproc_query(queries.row(i), order_idxs, out.row(i).data());
+        reorder_query(queries.row(i), order_idxs, out.row(i).data());
     }
 }
 
-template<class MatrixT>
-std::vector<ar::length_t> order_col_variance(const MatrixT& X) {
+template<class IdxT=int32_t, class MatrixT=char>
+std::vector<IdxT> order_col_variance(const MatrixT& X) {
     auto means = X.colwise.mean();
     auto Xnorm = (X.rowwise() - means).eval();
     Eigen::RowVectorXd variances = Xnorm.colwise().squaredNorm() / X.rows();
 
-    std::vector<ar::length_t> ret(X.cols());
+    std::vector<IdxT> ret(X.cols());
     ar::argsort(variances.data(), X.cols(), ret.data(), false); // descending
     return ret;
 }

@@ -14,6 +14,7 @@
 
 #include "Dense"
 
+#include "cluster.hpp"
 #include "nn_search.hpp"
 #include "array_utils.hpp"
 #include "flat_store.hpp"
@@ -51,22 +52,98 @@ protected:
 // }
 
 // template<class T>
-struct IdentityPreprocessor {
-    template<class RowMatrixT> IdentityPreprocessor() {}
-    template<class VectorT> void preprocess(const VectorT& query) {}
-    template<class RowMatrixT> void preprocess_batch(const RowMatrixT& queries) {}
-	template<class RowMatrixT> void preprocess_data(const RowMatrixT& X) {}
+struct IdentityPreproc {
+    template<class RowMatrixT> IdentityPreproc(const RowMatrixT& X) {}
+
+    template<class VectorT> void preprocess(const VectorT& query,
+        typename VectorT::Scalar* out) {}
+
+    template<class RowMatrixT, class RowMatrixT2>
+    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) {}
+
+	template<class RowMatrixT, class RowMatrixT2>
+    void preprocess_data(const RowMatrixT& X) {}
 };
 
-struct ReorderPreproc {
+// struct required {};
 
+template<class ScalarT, int AlignBytes=kAlignBytes>
+struct ReorderPreproc {
+    using Scalar = ScalarT;
+    using Index = int32_t;
+    enum { max_pad_elements = AlignBytes / sizeof(Scalar) };
+
+    template<class RowMatrixT> ReorderPreproc(const RowMatrixT& X):
+        _order(nn::order_col_variance(X)) {
+            assert(_length() > max_pad_elements);
+        }
+        // _order(_aligned_length(X.cols())) {
+        //     auto col_order = nn::order_col_variance(X);
+        //     assert(col_order.size() <= _order.size());
+
+        //     first X.cols() entries are sorted; zero-padding after that
+        //     just remains ordered at the end
+        //     for (int i = 0; i < col_order.size(); i++) {
+        //         _order[i] = col_order[i];
+        //     }
+        //     for (int i = 0; i < _order.size(); i++) {
+        //         _order[i] = i;
+        //     }
+        // }
+
+    // ------------------------ one query
+    // assumes that out already has appropriate padding at the end
+    template<class VectorT> void preprocess(VectorT& query,
+        typename VectorT::Scalar* out)
+    {
+        assert(_length() == _aligned_length(query.size()));
+        reorder_query(query, _order, out);
+    }
+    template<class VectorT> VectorT preprocess(VectorT& query) {
+        VectorT out(_length());
+        preprocess(query, out.data());
+    }
+
+    // ------------------------ batch of queries
+    template<class RowMatrixT, class RowMatrixT2>
+    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) {
+        assert(queries.rows() <= out.rows());
+        assert(queries.cols() == out.cols());
+        for (Index i = 0; i < queries.rows(); i++) {
+            preprocess(queries.row(i), out.row(i));
+        }
+    }
+    template<class RowMatrixT>
+    RowMatrixT preprocess_batch(const RowMatrixT& queries) {
+        RowMatrixT out(queries.rows(), _length());
+        preprocess_batch(queries, out);
+        return out;
+    }
+
+    // ------------------------ data mat
+    template<class RowMatrixT> void preprocess_data(const RowMatrixT& X) {
+        assert(X.IsRowMajor);
+        // create mat to return and ensure final cols are zeroed
+        RowMatrixT out(X.rows(), _length());
+        out.topRightCorner(X.rows(), max_pad_elements).setZero();
+        // preprocess it the same way as queries
+        preprocess_batch(X, out);
+        return out;
+    }
+private:
+    Index _aligned_length(Index n) const {
+        return aligned_length<Scalar, AlignBytes>(n);
+    }
+    Index _length() const { return _aligned_length(_order.size()); }
+    std::vector<Index> _order;
+//    std::unique_ptr<Scalar[]> ;
 };
 
 // superclass using Curiously Recurring Template Pattern to get compile-time
 // polymorphism; i.e., we can call arbitrary child class functions without
 // having to declare them anywhere in this class. This is the same pattern
 // used by Eigen.
-template<class Derived, class ScalarT, class Preprocessor=IdentityPreprocessor,
+template<class Derived, class ScalarT, class Preprocessor=IdentityPreproc,
     class DistT=float>
 class IndexBase {
 public:
@@ -419,7 +496,7 @@ private:
         return INVOCATION(use_queries, std::forward<Args...>(args)...); \
     }
 
-template<class InnerIndex, class Preprocessor=IdentityPreprocessor>
+template<class InnerIndex, class Preprocessor=IdentityPreproc>
 class NNIndex {
 private:
     InnerIndex _index;
