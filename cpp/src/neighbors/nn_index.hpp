@@ -55,6 +55,7 @@ struct IdentityPreprocessor {
     template<class RowMatrixT> IdentityPreprocessor() {}
     template<class VectorT> void preprocess(const VectorT& query) {}
     template<class RowMatrixT> void preprocess_batch(const RowMatrixT& queries) {}
+	template<class RowMatrixT> void preprocess_data(const RowMatrixT& X) {}
 };
 
 struct ReorderPreproc {
@@ -178,7 +179,7 @@ class L2IndexBrute:
     public FlatIndex<> {
 public:
     typedef T Scalar;
-	typedef FlatIndex IDsStore;
+	// typedef FlatIndex IDsStore;
     // typedef typename IDsStore::ID ID;
     typedef DistT Distance;
     typedef idx_t Index;
@@ -188,7 +189,7 @@ public:
 
     template<class RowMatrixT>
     explicit L2IndexBrute(const RowMatrixT& data):
-        IDsStore(data.rows()),
+        FlatIndex(data.rows()),
         _data(data)
     {
 		assert(data.IsRowMajor);
@@ -196,8 +197,8 @@ public:
         //_ids = ar::range(static_cast<ID>(0), static_cast<ID>(data.rows()));
     }
 
-    // ------------------------------------------------ accessors
-    Index rows() const { return _ids.size(); }
+    // // ------------------------------------------------ accessors
+    // Index rows() const { return _ids.size(); }
 
     // ------------------------------------------------ insert and erase
 
@@ -307,8 +308,8 @@ public:
         return abandon::knn(_data, query, k, kMaxDist, rows());
     }
 
-	// ------------------------------------------------ accessors
-	Index rows() const { return _ids.size(); }
+	// // ------------------------------------------------ accessors
+	// Index rows() const { return _ids.size(); }
 
 private:
     DynamicRowArray<Scalar, kAlignBytes> _data;
@@ -424,6 +425,13 @@ private:
     InnerIndex _index;
     Preprocessor _preproc;
 public:
+
+    template<class RowMatrixT, class... Args>
+    NNIndex(const RowMatrixT& X, Args&&... args):
+        InnerIndex(X, std::forward<Args>(args)...),
+        Preprocessor(X)
+    {}
+
     QUERY_METHOD(radius, _index.radius);
     QUERY_METHOD(onenn, _index.onenn);
     QUERY_METHOD(knn, _index.knn);
@@ -431,40 +439,6 @@ public:
     QUERY_BATCH_METHOD(onenn_batch, _index.onenn_batch);
     QUERY_BATCH_METHOD(knn_batch, _index.knn_batch);
 };
-
-
-// template<class T, int dims>
-// class PCABound {
-// public:
-
-// private:
-//     RowStore<
-
-// };
-
-    // X TODO similar class called L2Index_abandon that does UCR ED
-    // (without znorming)
-    //  -prolly also give it batch funcs, but these just wrap the
-    //  one-at-a-time func
-    //  -also give it ability to store approx top eigenvects for early
-    //  abandoning
-
-    // X TODO all of the above need insert and delete methods
-    //  -alloc a bigger mat than we need and store how many rows are used
-    //  -wrap this up in its own class that's subclass of RowMatrixT
-
-    // X TODO abstract superclass for all the KNN-ish classes
-
-    // X TODO wrapper for eigen mat prolly needs to also pad ends of rows so
-    // that each row is 128-bit aligned for our SIMD instrs
-    //  -will prolly need to wrap rows in a Map to explicitly tell it the
-    //  alignment though, cuz won't know it's safe at compile-time
-    //  -just punt this for now cuz it's really ugly
-
-    // X TODO brute force (not early abandoning) stuff needs num_rows to support
-    // inserts and deletes
-
-    // TODO tests for all of the above
 
     // TODO E2LSH impl
     // TODO Selective Hashing Impl on top of it
