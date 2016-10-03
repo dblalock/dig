@@ -13,35 +13,53 @@
 
 #include "Dense"
 
-namespace dist {
+#include "macros.hpp"
 
-typedef int64_t idx_t;
+namespace dist {
+	
+// TODO only define kMaxDist in one place (also in neighbors.hpp)
+static constexpr float kMaxDist = std::numeric_limits<float>::max();
+using idx_t = int64_t;
+using _infer = char;
+
+// ------------------------------------------------ product_traits
+
+template<class T, class U, REQUIRE_NUM(T), REQUIRE_NUM(U)>
+struct product_traits {
+	using type = decltype(std::declval<T>() + std::declval<U>());
+};
+template<class T, class U, int RetStorageOrder=Eigen::RowMajor, class _T=typename T::Scalar,
+		class _U=typename U::Scalar>
+struct mat_product_traits {
+    using Scalar = typename product_traits<_T, _U>::type;
+    using type = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, RetStorageOrder>;
+};
+
 
 // ------------------------------------------------ brute force distances
 
-template<class MatrixT, class VectorT>
-VectorT squared_dists_to_vector(const MatrixT& X, const VectorT& v) {
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
+    class VectorT=_infer>
+inline VectorT squared_dists_to_vector(const MatrixT& X, const VectorT& v) {
     return (X.rowwise() - v).rowwise().squaredNorm();
 }
-template<class MatrixT, class VectorT>
-VectorT dists_to_vector(const MatrixT& X, const VectorT& v) {
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
+    class VectorT=_infer>
+inline VectorT dists_to_vector(const MatrixT& X, const VectorT& v) {
     return squared_dists_to_vector(X, v).array().sqrt().matrix();
 }
 
-template<int RetStorageOrder=ColMajor, class MatrixT=MatrixXd, class VectorT=VectorXd>
 /** compute distances between rows of X and rows of V */
-auto squared_dists_to_vectors(const MatrixT& X, const MatrixT& V,
-    VectorT rowSquaredNorms) -> Matrix<decltype(
-        std::declval<typename MatrixT::Scalar>() * std::declval<typename VectorT::Scalar>()),
-        Dynamic, Dynamic, RetStorageOrder>
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT1=_infer,
+    class MatrixT2=_infer, class VectorT=_infer>
+inline auto squared_dists_to_vectors(const MatrixT1& X, const MatrixT2& V,
+    VectorT rowSquaredNorms) ->
+        typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
 {
     // create a matrix of appropriate type; this way dists for each vector
     // can be contiguous (if ColumnMajor storage)
-    Matrix<decltype(
-        std::declval<typename MatrixT::Scalar>() * std::declval<typename VectorT::Scalar>()),
-        Dynamic, Dynamic, RetStorageOrder>
+    typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
         dists = -2. * (X * V.transpose());
-    // MatrixT dists = -2. * (X * V.transpose());
     auto colSquaredNorms = V.rowwise().squaredNorm().eval();
     auto colSquaredNormsAsRow = colSquaredNorms.transpose().eval();
     dists.colwise() += rowSquaredNorms;
@@ -50,16 +68,19 @@ auto squared_dists_to_vectors(const MatrixT& X, const MatrixT& V,
 
     return dists;
 }
-template<class MatrixT>
 /** compute distances between rows of X and rows of V */
-MatrixT squared_dists_to_vectors(const MatrixT& X, const MatrixT& V) {
-    Matrix<typename MatrixT::Scalar, Dynamic, 1> rowSquaredNorms =
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT1=_infer,
+    class MatrixT2=_infer>
+inline auto squared_dists_to_vectors(const MatrixT1& X, const MatrixT2& V) ->
+    typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
+{
+    Eigen::Matrix<typename MatrixT1::Scalar, Eigen::Dynamic, 1> rowSquaredNorms =
         X.rowwise().squaredNorm().eval();
     return squared_dists_to_vectors(X, V, rowSquaredNorms);
 }
 
-template<class MatrixT>
-MatrixT dists_to_vectors(const MatrixT& X, const MatrixT& V) {
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT>
+inline MatrixT dists_to_vectors(const MatrixT& X, const MatrixT& V) {
     return squared_dists_to_vectors(X, V).array().sqrt().matrix();
 }
 

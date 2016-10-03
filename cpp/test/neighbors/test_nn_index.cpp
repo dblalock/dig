@@ -22,9 +22,6 @@ using Eigen::ArrayXd;
 using Eigen::VectorXd;
 using Eigen::RowVectorXd;
 
-//using ar::dist_sq;
-
-
 
 typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 typedef Eigen::Matrix<float, Dynamic, Dynamic, RowMajor> RowMatrixXf;
@@ -149,11 +146,11 @@ TEST_CASE("print sizes", "tmp") {
 }
 
 TEST_CASE("L2IndexBrute", "distance") {
-	// _test_index<nn::L2IndexBrute<double> >();
+	_test_index<nn::L2IndexBrute<double> >();
 	_test_index<nn::L2IndexBrute<float> >();
 }
 TEST_CASE("L2IndexAbandon", "distance") {
-	// _test_index<nn::L2IndexAbandon<double> >();
+	_test_index<nn::L2IndexAbandon<double> >();
 	_test_index<nn::L2IndexAbandon<float> >();
 }
 

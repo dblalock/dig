@@ -2510,7 +2510,7 @@ static inline vector<int64_t> rand_ints(int64_t minVal, int64_t maxVal,
 
 // ------------------------ rand_idxs
 
-template<class float_t>
+template<class float_t=float>
 static inline vector<int64_t> rand_idxs(uint64_t len, uint64_t howMany,
 	bool replace=false, const float_t* probs=nullptr)
 {
