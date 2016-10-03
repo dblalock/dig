@@ -11,6 +11,7 @@
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
+		72A789D41DA1F372004F2D18 /* test_cluster.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72A789D31DA1F372004F2D18 /* test_cluster.cpp */; };
 		72B610E91CA5B3E1008B50D3 /* test_filter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B610E81CA5B3E1008B50D3 /* test_filter.cpp */; };
 		72C4195C1C5337AD004689A2 /* deque.c in Sources */ = {isa = PBXBuildFile; fileRef = 72C4192C1C5337AD004689A2 /* deque.c */; };
 		72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C4192E1C5337AD004689A2 /* distance_utils.cpp */; };
@@ -47,7 +48,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		721403B41D8B49DD00F8658F /* neighbor_testing_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = neighbor_testing_utils.hpp; sourceTree = "<group>"; };
 		721403B51D8B535100F8658F /* test_nn_index.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_nn_index.cpp; sourceTree = "<group>"; };
 		721403B71D8B5A4E00F8658F /* euclidean.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = euclidean.hpp; sourceTree = "<group>"; };
 		721403B81D8B5AD800F8658F /* nn_index.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_index.hpp; sourceTree = "<group>"; };
@@ -389,6 +389,9 @@
 		728F874B1C55DE9C004E4AA0 /* UmfPackSupport */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = UmfPackSupport; sourceTree = "<group>"; };
 		728F874E1C55DE9C004E4AA0 /* redsvd.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = redsvd.hpp; sourceTree = "<group>"; };
 		729A0CE71D8609FA00E2E294 /* macros.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = macros.hpp; sourceTree = "<group>"; };
+		72A789D21DA1F2EF004F2D18 /* neighbor_testing_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = neighbor_testing_utils.hpp; sourceTree = "<group>"; };
+		72A789D31DA1F372004F2D18 /* test_cluster.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_cluster.cpp; sourceTree = "<group>"; };
+		72A789D51DA1F383004F2D18 /* cluster.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = cluster.hpp; sourceTree = "<group>"; };
 		72B610E81CA5B3E1008B50D3 /* test_filter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_filter.cpp; sourceTree = "<group>"; };
 		72C4192C1C5337AD004689A2 /* deque.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = deque.c; sourceTree = "<group>"; };
 		72C4192D1C5337AD004689A2 /* deque.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = deque.h; sourceTree = "<group>"; };
@@ -1167,6 +1170,7 @@
 		72C4192B1C5337AD004689A2 /* distance */ = {
 			isa = PBXGroup;
 			children = (
+				72A789D51DA1F383004F2D18 /* cluster.hpp */,
 				721403B71D8B5A4E00F8658F /* euclidean.hpp */,
 				72C4192C1C5337AD004689A2 /* deque.c */,
 				72C4192D1C5337AD004689A2 /* deque.h */,
@@ -1261,6 +1265,7 @@
 		72C4194D1C5337AD004689A2 /* distance */ = {
 			isa = PBXGroup;
 			children = (
+				72A789D31DA1F372004F2D18 /* test_cluster.cpp */,
 				72C4194E1C5337AD004689A2 /* test_distance_utils.cpp */,
 				72C4194F1C5337AD004689A2 /* test_dtw.cpp */,
 				72C419501C5337AD004689A2 /* test_ucr_funcs.c */,
@@ -1280,7 +1285,7 @@
 		72C419561C5337AD004689A2 /* testing_utils */ = {
 			isa = PBXGroup;
 			children = (
-				721403B41D8B49DD00F8658F /* neighbor_testing_utils.hpp */,
+				72A789D21DA1F2EF004F2D18 /* neighbor_testing_utils.hpp */,
 				72C419571C5337AD004689A2 /* testing_utils.cpp */,
 				72C419581C5337AD004689A2 /* testing_utils.hpp */,
 			);
@@ -1386,6 +1391,7 @@
 				72C4195E1C5337AD004689A2 /* ucr_funcs.c in Sources */,
 				72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */,
 				72C419671C5337AD004689A2 /* test_ucr_funcs.c in Sources */,
+				72A789D41DA1F372004F2D18 /* test_cluster.cpp in Sources */,
 				72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */,
 				72C4195C1C5337AD004689A2 /* deque.c in Sources */,
 				72C419661C5337AD004689A2 /* test_dtw.cpp in Sources */,
