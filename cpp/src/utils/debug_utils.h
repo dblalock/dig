@@ -18,6 +18,7 @@
 	#include <iostream>
 	#include <cstdarg>
 	#include <string>
+	#include <cstdint>
 
 	#define PRINT_VAR(VAR) \
 		std::cout << __func__ << "(): " #VAR << ": " << VAR << "\n";
@@ -31,6 +32,12 @@
 		return std::string(buff);
 		va_end(args);
 	}
+
+	template<typename P>
+	inline int32_t pretty_ptr(P ptr) {
+		return (((int64_t)ptr) << 40) >> 40;
+	}
+
 
 #endif
 

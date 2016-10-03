@@ -22,7 +22,7 @@ struct mat_traits {
         Eigen::RowMajor>;
 };
 
-template<class MatrixT, class assignment_t=int32_t>
+template<class assignment_t=int32_t, class MatrixT=char>
 auto kmeans(const MatrixT& X, assignment_t k)
     -> std::pair<typename mat_traits<MatrixT>::RowMatrixT,
         std::vector<assignment_t> >
