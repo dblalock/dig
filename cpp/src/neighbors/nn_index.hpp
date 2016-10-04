@@ -19,6 +19,8 @@
 #include "array_utils.hpp"
 #include "flat_store.hpp"
 
+#include "debug_utils.hpp"
+
 namespace nn {
 
 static const int8_t kAlignBytes = 32;
@@ -51,100 +53,11 @@ protected:
 //     typedef
 // }
 
-// template<class T>
-struct IdentityPreproc {
-    template<class RowMatrixT> IdentityPreproc(const RowMatrixT& X) {}
-
-    template<class VectorT> void preprocess(const VectorT& query,
-        typename VectorT::Scalar* out) {}
-
-    template<class RowMatrixT, class RowMatrixT2>
-    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) {}
-
-	template<class RowMatrixT, class RowMatrixT2>
-    void preprocess_data(const RowMatrixT& X) {}
-};
-
-// struct required {};
-
-template<class ScalarT, int AlignBytes=kAlignBytes>
-struct ReorderPreproc {
-    using Scalar = ScalarT;
-    using Index = int32_t;
-    enum { max_pad_elements = AlignBytes / sizeof(Scalar) };
-
-    template<class RowMatrixT> ReorderPreproc(const RowMatrixT& X):
-        _order(nn::order_col_variance(X)) {
-            assert(_length() > max_pad_elements);
-        }
-        // _order(_aligned_length(X.cols())) {
-        //     auto col_order = nn::order_col_variance(X);
-        //     assert(col_order.size() <= _order.size());
-
-        //     first X.cols() entries are sorted; zero-padding after that
-        //     just remains ordered at the end
-        //     for (int i = 0; i < col_order.size(); i++) {
-        //         _order[i] = col_order[i];
-        //     }
-        //     for (int i = 0; i < _order.size(); i++) {
-        //         _order[i] = i;
-        //     }
-        // }
-
-    // ------------------------ one query
-    // assumes that out already has appropriate padding at the end
-    template<class VectorT> void preprocess(VectorT& query,
-        typename VectorT::Scalar* out)
-    {
-        assert(_length() == _aligned_length(query.size()));
-        reorder_query(query, _order, out);
-    }
-    template<class VectorT> VectorT preprocess(VectorT& query) {
-        VectorT out(_length());
-        preprocess(query, out.data());
-    }
-
-    // ------------------------ batch of queries
-    template<class RowMatrixT, class RowMatrixT2>
-    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) {
-        assert(queries.rows() <= out.rows());
-        assert(queries.cols() == out.cols());
-        for (Index i = 0; i < queries.rows(); i++) {
-            preprocess(queries.row(i), out.row(i));
-        }
-    }
-    template<class RowMatrixT>
-    RowMatrixT preprocess_batch(const RowMatrixT& queries) {
-        RowMatrixT out(queries.rows(), _length());
-        preprocess_batch(queries, out);
-        return out;
-    }
-
-    // ------------------------ data mat
-    template<class RowMatrixT> void preprocess_data(const RowMatrixT& X) {
-        assert(X.IsRowMajor);
-        // create mat to return and ensure final cols are zeroed
-        RowMatrixT out(X.rows(), _length());
-        out.topRightCorner(X.rows(), max_pad_elements).setZero();
-        // preprocess it the same way as queries
-        preprocess_batch(X, out);
-        return out;
-    }
-private:
-    Index _aligned_length(Index n) const {
-        return aligned_length<Scalar, AlignBytes>(n);
-    }
-    Index _length() const { return _aligned_length(_order.size()); }
-    std::vector<Index> _order;
-//    std::unique_ptr<Scalar[]> ;
-};
-
 // superclass using Curiously Recurring Template Pattern to get compile-time
 // polymorphism; i.e., we can call arbitrary child class functions without
 // having to declare them anywhere in this class. This is the same pattern
 // used by Eigen.
-template<class Derived, class ScalarT, class Preprocessor=IdentityPreproc,
-    class DistT=float>
+template<class Derived, class ScalarT, class DistT=float>
 class IndexBase {
 public:
  //    typedef typename index_traits<Derived>::Distance DistT;
@@ -475,6 +388,143 @@ private:
 };
 
 // ================================================================
+// Preprocessing
+// ================================================================
+
+// template<class T>
+struct IdentityPreproc {
+    template<class RowMatrixT> IdentityPreproc(const RowMatrixT& X) {}
+
+    template<class VectorT>
+    void preprocess(const VectorT& query, typename VectorT::Scalar* out) {}
+    template<class VectorT>
+    VectorT& preprocess(VectorT& query) { return query; }
+
+    template<class RowMatrixT, class RowMatrixT2>
+    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) {}
+    template<class RowMatrixT>
+    RowMatrixT& preprocess_batch(RowMatrixT& queries) { return queries; }
+
+    template<class RowMatrixT>
+    RowMatrixT& preprocess_data(RowMatrixT& X) { return X; }
+};
+
+template<class ScalarT, int AlignBytes=kAlignBytes>
+struct ReorderPreproc { // TODO could avoid passing ScalarT template arg
+    using Scalar = ScalarT;
+    using Index = int32_t;
+    enum { max_pad_elements = AlignBytes / sizeof(Scalar) };
+
+    template<class RowMatrixT> ReorderPreproc(const RowMatrixT& X):
+            _order(nn::order_col_variance(X))
+    {
+        assert(_length() > max_pad_elements);
+    }
+        // _order(_aligned_length(X.cols())) {
+        //     auto col_order = nn::order_col_variance(X);
+        //     assert(col_order.size() <= _order.size());
+
+        //     first X.cols() entries are sorted; zero-padding after that
+        //     just remains ordered at the end
+        //     for (int i = 0; i < col_order.size(); i++) {
+        //         _order[i] = col_order[i];
+        //     }
+        //     for (int i = 0; i < _order.size(); i++) {
+        //         _order[i] = i;
+        //     }
+        // }
+
+    // ------------------------ one query
+    // assumes that out already has appropriate padding at the end
+    template<class VectorT> void preprocess(const VectorT& query,
+        typename VectorT::Scalar* out) const
+    {
+        // PRINT_VAR(_length());
+        // auto query_str = ar::to_string(query.data(), query.size());
+        // PRINT_VAR(query_str);
+
+        assert(_length() == _aligned_length(query.size()));
+        reorder_query(query, _order, out); // TODO uncomment after debug
+        // for (int i = 0; i < query.size(); i++) {
+        //     out[i] = query.data()[i];
+        // }
+        // auto outpt_str = ar::to_string(out, _length());
+        // PRINT_VAR(outpt_str);
+    }
+    template<class VectorT> VectorT preprocess(const VectorT& query) const {
+        VectorT out(_length());
+        // out.segment(query.size(), _length() - query.size()) = 0;
+        out.setZero();
+        preprocess(query, out.data());
+		return out;
+    }
+
+    // ------------------------ batch of queries
+    template<class RowMatrixT>
+    void preprocess_batch(const RowMatrixT& queries, RowMatrixT& out) const {
+        assert(queries.IsRowMajor);
+        assert(out.IsRowMajor);
+        assert(queries.rows() <= out.rows());
+        assert(queries.cols() <= out.cols());
+        for (Index i = 0; i < queries.rows(); i++) {
+            preprocess(queries.row(i), out.row(i).data());
+        }
+    }
+    template<class RowMatrixT>
+    RowMatrixT preprocess_batch(const RowMatrixT& queries) const {
+        assert(false); // verify we're not actually calling this yet
+        RowMatrixT out(queries.rows(), _length());
+        // out.topRightCorner(queries.rows(), max_pad_elements).setZero(); // TODO uncomment
+        out.setZero();
+        preprocess_batch(queries, out);
+        return out;
+    }
+
+    // ------------------------ data mat
+    template<class RowMatrixT> RowMatrixT preprocess_data(
+		const RowMatrixT& X) const
+	{
+        assert(X.IsRowMajor);
+		assert(X.cols() <= _length());
+		assert(X.cols() > 0);
+
+  //       // TODO rm after debug
+  //       RowMatrixT out(X.rows(), _length());
+		// // out.setZero();
+  //       out.topRightCorner(X.rows(), max_pad_elements).setZero();
+  //       out.topLeftCorner(X.rows(), X.cols()) = X;
+  //       for (int i = 0; i < X.rows(); i++) {
+  //           for(long j = X.cols(); j < _length(); j++) {
+  //               if (out(i, j) != 0) {
+  //                   DEBUGF("%d, %ld", i, j);
+  //                   PRINT_VAR(out(i, j));
+		// 			assert(false);
+  //               }
+  //           }
+  //       }
+  //       return out;
+
+        // create mat to return and ensure final cols are zeroed
+        RowMatrixT out(X.rows(), _length());
+        out.topRightCorner(X.rows(), max_pad_elements).setZero();
+
+        out.setZero(); // TODO rm after debug
+
+        // preprocess it the same way as queries
+        preprocess_batch(X, out);
+        return out;
+    }
+private:
+    Index _aligned_length(int64_t n) const {
+        return static_cast<Index>(aligned_length<Scalar, AlignBytes>(n));
+    }
+    Index _length() const { return _aligned_length(_order.size()); }
+    std::vector<Index> _order;
+//    std::unique_ptr<Scalar[]> ;
+};
+
+
+// ================================================================
 // NNIndex
 // ================================================================
 
@@ -499,15 +549,23 @@ private:
 template<class InnerIndex, class Preprocessor=IdentityPreproc>
 class NNIndex {
 private:
-    InnerIndex _index;
     Preprocessor _preproc;
+	InnerIndex _index;
 public:
+    using Scalar = typename InnerIndex::Scalar;
+    using Index = typename InnerIndex::Index;
 
-    template<class RowMatrixT, class... Args>
-    NNIndex(const RowMatrixT& X, Args&&... args):
-        InnerIndex(X, std::forward<Args>(args)...),
-        Preprocessor(X)
-    {}
+	template<class RowMatrixT>
+	NNIndex(const RowMatrixT& X):
+		_preproc{X}, // TODO warns about preproc uninitialized if () not {} ??
+		_index(_preproc.preprocess_data(X))
+	{}
+
+  //   template<class RowMatrixT, class... Args>
+  //   NNIndex(const RowMatrixT& X, Args&&... args):
+		// _preproc{X}, // TODO warns about preproc uninitialized if () not {} ??
+  //       _index(_preproc.preprocess_data(X), std::forward<Args>(args)...)
+  //   {}
 
     QUERY_METHOD(radius, _index.radius);
     QUERY_METHOD(onenn, _index.onenn);

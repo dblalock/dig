@@ -81,9 +81,13 @@ void reorder_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
 
 template<class IdxT=int32_t, class MatrixT=char>
 std::vector<IdxT> order_col_variance(const MatrixT& X) {
-    auto means = X.colwise.mean();
+	using Scalar = typename MatrixT::Scalar;
+	// using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::Rowmajor>;
+	
+    auto means = X.colwise().mean();
     auto Xnorm = (X.rowwise() - means).eval();
-    Eigen::RowVectorXd variances = Xnorm.colwise().squaredNorm() / X.rows();
+	Scalar nrows = static_cast<Scalar>(X.rows());
+    MatrixT variances = Xnorm.colwise().squaredNorm() / nrows;
 
     std::vector<IdxT> ret(X.cols());
     ar::argsort(variances.data(), X.cols(), ret.data(), false); // descending
@@ -94,6 +98,10 @@ std::vector<IdxT> order_col_variance(const MatrixT& X) {
 
 template<class T, int AlignBytes, class IntT>
 inline IntT aligned_length(IntT ncols) {
+	static_assert(AlignBytes >= 0, "AlignBytes must be nonnegative");
+	assert(ncols > 0);
+	if (AlignBytes == 0) { return ncols; }
+	
     int16_t align_elements = AlignBytes / sizeof(T);
     int16_t remaindr = ncols % align_elements;
     if (remaindr > 0) {
