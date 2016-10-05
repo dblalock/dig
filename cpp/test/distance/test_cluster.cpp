@@ -16,6 +16,7 @@
 using Eigen::Matrix;
 using Eigen::Dynamic;
 using Eigen::RowMajor;
+using namespace cluster;
 
 template<class Scalar>
 void _test_kmeans(int64_t N, int64_t D, int k) {

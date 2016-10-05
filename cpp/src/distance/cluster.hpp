@@ -14,13 +14,9 @@
 
 #include "Dense"
 #include "array_utils.hpp"
+#include "eigen_utils.hpp" // for mat_traits
 
-template<class MatrixT>
-struct mat_traits {
-    using Scalar = typename MatrixT::Scalar;
-    using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
-        Eigen::RowMajor>;
-};
+namespace cluster {
 
 template<class assignment_t=int32_t, class MatrixT=char>
 auto kmeans(const MatrixT& X, assignment_t k)
@@ -86,4 +82,5 @@ auto kmeans(const MatrixT& X, assignment_t k)
     return std::make_pair(centroids, assignments);
 }
 
+} // namespace cluster
 #endif // __CLUSTER_HPP

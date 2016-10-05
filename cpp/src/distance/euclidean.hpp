@@ -14,27 +14,14 @@
 #include "Dense"
 
 #include "macros.hpp"
+#include "eigen_utils.hpp"
 
 namespace dist {
-	
+
 // TODO only define kMaxDist in one place (also in neighbors.hpp)
 static constexpr float kMaxDist = std::numeric_limits<float>::max();
 using idx_t = int64_t;
 using _infer = char;
-
-// ------------------------------------------------ product_traits
-
-template<class T, class U, REQUIRE_NUM(T), REQUIRE_NUM(U)>
-struct product_traits {
-	using type = decltype(std::declval<T>() + std::declval<U>());
-};
-template<class T, class U, int RetStorageOrder=Eigen::RowMajor, class _T=typename T::Scalar,
-		class _U=typename U::Scalar>
-struct mat_product_traits {
-    using Scalar = typename product_traits<_T, _U>::type;
-    using type = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, RetStorageOrder>;
-};
-
 
 // ------------------------------------------------ brute force distances
 

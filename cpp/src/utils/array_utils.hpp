@@ -1369,11 +1369,19 @@ static inline unique_ptr<data_t[]> concat(const data_t* x, const data_t* y,
 
 template<template <class...> class Container1,
 	template <class...> class Container2, class data_t>
+static inline void concat_inplace(Container1<data_t>& x,
+	const Container1<data_t>& y)
+{
+	std::copy(begin(y), end(y), std::back_inserter(x));
+}
+
+template<template <class...> class Container1,
+	template <class...> class Container2, class data_t>
 static inline Container1<data_t> concat(const Container1<data_t>& x,
-	const Container1<data_t>& y, data_t val)
+	const Container1<data_t>& y)
 {
 	Container1<data_t> ret(x);
-	std::copy(begin(y), end(y), std::back_inserter(ret));
+	concat_inplace(x, y);
 	return ret;
 }
 

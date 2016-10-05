@@ -83,7 +83,7 @@ template<class IdxT=int32_t, class MatrixT=char>
 std::vector<IdxT> order_col_variance(const MatrixT& X) {
 	using Scalar = typename MatrixT::Scalar;
 	// using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::Rowmajor>;
-	
+
     auto means = X.colwise().mean();
     auto Xnorm = (X.rowwise() - means).eval();
 	Scalar nrows = static_cast<Scalar>(X.rows());
@@ -101,7 +101,7 @@ inline IntT aligned_length(IntT ncols) {
 	static_assert(AlignBytes >= 0, "AlignBytes must be nonnegative");
 	assert(ncols > 0);
 	if (AlignBytes == 0) { return ncols; }
-	
+
     int16_t align_elements = AlignBytes / sizeof(T);
     int16_t remaindr = ncols % align_elements;
     if (remaindr > 0) {
@@ -183,6 +183,18 @@ inline Neighbor::dist_t maybe_insert_neighbor(Container<Neighbor> neighbors_bsf,
     double dist, typename Neighbor::idx_t idx)
 {
     return maybe_insert_neighbor(neighbors_bsf, {.dist = dist, .idx = idx});
+}
+
+template<template<class...> class Container,
+    template<class...> class Container2>
+inline Neighbor::dist_t maybe_insert_neighbors(Container<Neighbor> neighbors_bsf,
+    const Container2<Neighbor>& potential_neighbors)
+{
+    Neighbor::dist_t d_bsf;
+    for (auto& n : potential_neighbors) {
+        d_bsf = maybe_insert_neighbor(neighbors_bsf, n);
+    }
+    return d_bsf;
 }
 
 

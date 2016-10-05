@@ -17,9 +17,10 @@
 #include "cluster.hpp"
 #include "nn_search.hpp"
 #include "array_utils.hpp"
+#include "eigen_utils.hpp"
 #include "flat_store.hpp"
 
-#include "debug_utils.hpp"
+// #include "debug_utils.hpp"
 
 namespace nn {
 
@@ -80,14 +81,15 @@ public:
     // ------------------------------------------------ single queries
 
     // ------------------------------------------------ batch of queries
+    // TODO allow vector of d_max values for each of these
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
-                                           DistT radius_sq)
+                                           DistT d_max)
     {
         vector<vector<Neighbor> > ret;
         for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(radius(queries.row(j).eval(), radius_sq));
+            ret.emplace_back(radius(queries.row(j).eval(), d_max));
         }
         return ret;
     }
@@ -113,33 +115,36 @@ public:
     // ------------------------------------------------ return only idxs
 
     template<class VectorT>
-    vector<idx_t> radius_idxs(const VectorT& query, DistT radius_sq) {
-        auto neighbors = Derived::radius(query, radius_sq);
+    vector<idx_t> radius_idxs(const VectorT& query, DistT d_max) {
+        auto neighbors = Derived::radius(query, d_max);
         return ar::map([](const Neighbor& n) {
             return n.idx;
         }, neighbors);
     }
 
     template<class VectorT>
-    idx_t onenn_idxs(const VectorT& query) {
+    idx_t onenn_idxs(const VectorT& query, DistT d_max=kMaxDist) {
         auto neighbor = Derived::onenn(query);
         return query.idx;
     }
 
     template<class VectorT>
-    vector<idx_t> knn_idxs(const VectorT& query, size_t k) {
+    vector<idx_t> knn_idxs(const VectorT& query, size_t k,
+        DistT d_max=kMaxDist)
+    {
         auto neighbors = Derived::knn(query, k);
         return map([](const Neighbor& n) { return static_cast<idx_t>(n.idx); },
                    neighbors);
     }
 
     // ------------------------------------------------ batch return only idxs
+    // TODO allow vector of d_max values for each of these
 
     template<class RowMatrixT>
     vector<vector<idx_t> > radius_batch_idxs(const RowMatrixT& queries,
-                                             DistT radius_sq)
+                                             DistT d_max)
     {
-        auto neighbors = Derived::radius_batch(queries, radius_sq);
+        auto neighbors = Derived::radius_batch(queries, d_max);
         return idxs_from_nested_neighbors(neighbors);
     }
 
@@ -204,17 +209,17 @@ public:
     // ------------------------------------------------ single query
 
     template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query, DistT radius_sq) {
-        return brute::radius(_matrix(), query, radius_sq);
+    vector<Neighbor> radius(const VectorT& query, DistT d_max) {
+        return brute::radius(_matrix(), query, d_max);
     }
 
     template<class VectorT>
-    Neighbor onenn(const VectorT& query) {
+    Neighbor onenn(const VectorT& query, DistT d_max=kMaxDist) {
         return brute::onenn(_matrix(), query);
     }
 
     template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, int k) {
+    vector<Neighbor> knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
         return brute::knn(_matrix(), query, k);
     }
 
@@ -222,9 +227,9 @@ public:
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
-        DistT radius_sq)
+        DistT d_max)
     {
-        return brute::radius_batch(_matrix(), queries, radius_sq, _rowNorms);
+        return brute::radius_batch(_matrix(), queries, d_max, _rowNorms);
     }
 
     template<class RowMatrixT>
@@ -270,24 +275,258 @@ public:
     }
 
     template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query, DistT radius_sq) {
-        return abandon::radius(_data, query, radius_sq, rows());
+    vector<Neighbor> radius(const VectorT& query, DistT d_max) {
+        return abandon::radius(_data, query, d_max, rows());
     }
 
     template<class VectorT>
-    Neighbor onenn(const VectorT& query) {
-        return abandon::onenn(_data, query, kMaxDist, rows());
+    Neighbor onenn(const VectorT& query, DistT d_max=kMaxDist) {
+        return abandon::onenn(_data, query, d_max, rows());
     }
 
     template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, int k) {
-        return abandon::knn(_data, query, k, kMaxDist, rows());
+    vector<Neighbor> knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
+        return abandon::knn(_data, query, k, d_max, rows());
     }
 
 private:
     DynamicRowArray<Scalar, kAlignBytes> _data;
 };
 
+
+// ================================================================
+// KmeansIndex
+// ================================================================
+
+template<class T, class InnerIndex=L2IndexAbandon<T>, class DistT=float>
+class L2KmeansIndex:
+    public IndexBase<L2KmeansIndex<T, InnerIndex, DistT>, T, DistT>,
+    public FlatIndex<> {
+public:
+    using Scalar = T;
+    using Distance = DistT;
+    using Index = idx_t;
+	using RowMatrixT = RowMatrix<T>;
+
+    template<class RowMatrixT>
+    L2KmeansIndex(const RowMatrixT& X, int k):
+        _order(k),
+        _centroid_dists(k),
+        _idxs_for_centroids(k),
+        _queries_storage(32, X.cols()) // 32 query capacity by default
+    {
+        auto centroids_assignments = kmeans(X, k);
+        _centroids = centroids_assignments.first;
+        auto assigs = centroids_assignments.second;
+
+        // create vect of which vects are associated with each centroid
+        // using assig_idx_t = assigs::value_type
+        // using idx_vect_t = std::vector<assig_idx_t>;
+        using idx_vect_t = std::vector<typename decltype(assigs)::value_type>;
+        std::vector<idx_vect_t> idxs_for_centroids(k);
+        for (int i = 0; i < k; i++) {
+            auto idx = assigs[i];
+            idxs_for_centroids[idx].push_back(i);
+        }
+        auto lengths = ar::map([](const idx_vect_t& v) {
+            return v.size();
+        }, idxs_for_centroids);
+        auto max_len = ar::max(lengths);
+
+        // create an index for each centroid
+        RowMatrixT storage(max_len, X.cols());
+        for (int i = 0; i < k; i++) {
+            // copy appropriate rows to temp storage so they're contiguous
+            auto& idxs = idxs_for_centroids[i];
+            for (auto idx : idxs) {
+                storage.row(i) = X.row(idx);
+            }
+            // create an InnerIndex instance with these rows
+            auto nrows = idxs.size();
+            _indexes.emplace_back(storage.topRows(nrows));
+        }
+    }
+
+    // ------------------------------------------------ accessors
+
+    int num_centroids() const { return _centroids.size(); }
+
+    // ------------------------------------------------ single query
+
+    template<class VectorT>
+    vector<Neighbor> radius(const VectorT& query, DistT d_max,
+        int centroids_limit=-1)
+    {
+        _update_order_for_query(query, centroids_limit); // update _order
+
+        vector<Neighbor> ret;
+        for (int i = 0; i < _order.size(); i++) {
+            auto& index = _indexes[_order[i]];
+            auto neighbors = index.radius(query, d_max);
+            ar::concat_inplace(ret, neighbors);
+            // ret.insert(std::end(ret), std::begin(neighbors), std::end(neighbors));
+        }
+        return ret;
+    }
+
+    template<class VectorT>
+    Neighbor onenn(const VectorT& query, int centroids_limit=-1,
+        DistT d_max=kMaxDist)
+    {
+        _update_order_for_query(query, centroids_limit); // update _order
+
+        Neighbor ret{.dist = d_max, .idx = kInvalidIdx};
+        for (int i = 0; i < _order.size(); i++) {
+            auto& index = _indexes[_order[i]];
+            Neighbor n = index.onenn(query, ret.dist);
+            if (n.dist < ret.dist) {
+                ret = n;
+            }
+        }
+        return ret;
+    }
+
+    template<class VectorT>
+    vector<Neighbor> knn(const VectorT& query, int k, int centroids_limit=-1,
+        DistT d_max=kMaxDist)
+    {
+        _update_order_for_query(query, centroids_limit); // update _order
+
+        vector<Neighbor> ret(k, {.dist = d_max, .idx = kInvalidIdx});
+        for (int i = 0; i < _order.size(); i++) {
+            auto& index = _indexes[_order[i]];
+            auto neighbors = index.knn(query);
+            d_max = maybe_insert_neighbors(ret, neighbors);
+        }
+    }
+
+    // ------------------------------------------------ batch of queries
+
+    template<class RowMatrixT>
+    vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
+        DistT d_max, int centroids_limit=-1)
+    {
+        _update_idxs_for_centroids(queries, centroids_limit);
+        vector<vector<Neighbor> > ret(queries.rows());
+
+        for (int kk = 0; kk < num_centroids(); kk++) { // for each centroid
+            auto& query_idxs = _idxs_for_centroids[kk];
+            auto nrows = query_idxs.size();
+            _update_query_storate(query_idxs, queries);
+
+            // get the neighbors for each query around this centroid, and
+            // append them to the master list of neighbors for each query
+            auto nested_neighbors = _indexes[kk].radius_batch(
+                _queries_storage, d_max);
+            assert(nrows == nested_neighbors.size());
+            for (int qq = 0; qq < nrows; qq++) {
+                auto query_idx = query_idxs[qq];
+                ar::concat_inplace(ret[query_idx], nested_neighbors[qq]);
+            }
+        }
+        return ret;
+    }
+
+    template<class RowMatrixT>
+    vector<Neighbor> onenn_batch(const RowMatrixT& queries,
+        int centroids_limit=-1)
+    {
+        _update_idxs_for_centroids(queries, centroids_limit);
+        vector<Neighbor> ret(queries.rows());
+        for (int kk = 0; kk < num_centroids(); kk++) {
+            auto& query_idxs = _idxs_for_centroids[kk];
+            auto nrows = query_idxs.size();
+            _update_query_storate(query_idxs, queries);
+
+            auto neighbors = _indexes[kk].onenn_batch(_queries_storage);
+            assert(nrows == neighbors.size());
+            for (int qq = 0; qq < nrows; qq++) {
+                auto query_idx = query_idxs[qq];
+                ret[query_idx].push_back(neighbors[qq]);
+            }
+        }
+        return ret;
+    }
+
+    template<class RowMatrixT>
+    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k,
+        int centroids_limit=-1)
+    {
+        _update_idxs_for_centroids(queries, centroids_limit);
+        vector<vector<Neighbor> > ret(queries.rows());
+
+        for (int kk = 0; kk < num_centroids(); kk++) { // for each centroid
+            auto& query_idxs = _idxs_for_centroids[kk];
+            auto nrows = query_idxs.size();
+            _update_query_storate(query_idxs, queries);
+
+            auto nested_neighbors = _indexes[kk].knn_batch(_queries_storage, k);
+            assert(nrows == nested_neighbors.size());
+            for (int qq = 0; qq < nrows; qq++) {
+                auto query_idx = query_idxs[qq];
+                maybe_insert_neighbors(ret[query_idx], nested_neighbors[qq]);
+            }
+        }
+        return ret;
+    }
+
+private:
+    RowMatrixT _centroids;
+    std::vector<InnerIndex> _indexes;
+    std::vector<Index> _order; // storage to avoid alloc for each query
+    ColVector<Scalar> _centroid_dists; // storage to avoid alloc for each query
+    std::vector<std::vector<Index> > _idxs_for_centroids;
+    ColMatrix<Scalar> _queries_storage;
+
+    template<class VectorT>
+    void _update_order_for_query(VectorT query, int centroids_limit=-1) {
+        _centroid_dists = dist::squared_dists_to_vector(_centroids, query);
+        ar::argsort(_centroid_dists.data(), num_centroids(), _order.data());
+        centroids_limit = std::max(1,
+            std::min(num_centroids(), centroids_limit));
+        _order.resize(centroids_limit);
+    }
+
+    template<class RowMatrixT>
+    void _update_idxs_for_centroids(const RowMatrixT& queries,
+        int centroids_limit=-1)
+    {
+        centroids_limit = std::max(1,
+                std::min(num_centroids(), centroids_limit));
+        _order.resize(centroids_limit);
+		auto k = num_centroids();
+
+        for (int kk = 0; kk < k; kk++) {
+            _idxs_for_centroids[kk].clear();
+        }
+
+        auto dists = dist::squared_dists_to_vectors<Eigen::ColMajor>(
+            _centroids, queries);
+
+        for (int j = 0; j < queries.size; j++) { // for each query
+            Scalar* dists_col = dists.col(j).data();
+            ar::argsort(dists_col, k, _order);
+            for (auto idx : _order) { // for each centroid for this query
+                _idxs_for_centroids[idx].push_back(j);
+            }
+        }
+    }
+
+    template<class RowMatrixT>
+    void _update_query_storate(const vector<Index>& query_idxs,
+        const RowMatrixT& queries)
+    {
+        assert(_queries_storage.cols() == queries.cols());
+
+        auto nrows = query_idxs.size();
+        if (nrows > _queries_storage.rows()) {
+            _queries_storage.resize(nrows, queries.cols());
+        }
+        for (int i = 0; i < nrows; i++) {
+            _queries_storage.row(i) = queries.row(query_idxs[i]);
+        }
+    }
+};
 
 // ================================================================
 // CascadeIdIndex
@@ -317,9 +556,9 @@ public:
     // Note: doesn't return distances; just indices
     template<class VectorT, class RowMatrixT>
     vector<Index> radius(const RowMatrixT& data, const VectorT& query,
-        DistT radius_sq)
+        DistT d_max)
     {
-        return abandon::radius<Index>(data, query, radius_sq, rows());
+        return abandon::radius<Index>(data, query, d_max, rows());
     }
 
     // ------------------------ insert and erase

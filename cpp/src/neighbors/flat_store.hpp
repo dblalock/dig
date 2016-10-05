@@ -74,7 +74,7 @@ public:
     typedef typename DerivedTraits::MatrixT MatrixT;
     typedef typename DerivedTraits::RowT RowT;
     // typedef Eigen::Map<MatrixT, _AlignHelper<AlignBytes>::AlignmentType> MatrixMapT;
-	typedef Eigen::Map<MatrixT, Eigen::Aligned> MatrixMapT; // whole mat aligned
+	typedef Eigen::Map<MatrixT, Eigen::Aligned> MatrixMapT; // always align whole mat
     typedef Eigen::Map<RowT, _AlignHelper<AlignBytes>::AlignmentType> RowMapT;
 
     static const bool IsRowMajor = true;
@@ -99,7 +99,7 @@ public:
         mat.topLeftCorner(X.rows(), X.cols()) = X;
     }
 
-    // init data with existing pointer that we don't own
+    // init data ptr directly with existing pointer that we don't own
     template<class RowMatrixT, REQUIRE_TRUE(!OwnPtr)>
     BaseRowArray(const RowMatrixT& X):
         _data(X.data())

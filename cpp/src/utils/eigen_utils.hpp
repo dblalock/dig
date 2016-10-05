@@ -18,6 +18,49 @@ using Eigen::RowMajor;
 using Eigen::Matrix;
 
 // ================================================================
+// typealiases
+// ================================================================
+
+template<class T, int Rows=Eigen::Dynamic, int Cols=Eigen::Dynamic>
+using RowMatrix = Eigen::Matrix<T, Rows, Cols, Eigen::RowMajor>;
+
+template<class T, int Rows=Eigen::Dynamic, int Cols=Eigen::Dynamic>
+using ColMatrix = Eigen::Matrix<T, Rows, Cols, Eigen::ColMajor>;
+
+template<class T>
+using ColVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
+template<class T>
+using RowVector = Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor>;
+
+// ================================================================
+// traits
+// ================================================================
+
+// ------------------------------------------------ product_traits
+
+template<class T, class U, REQUIRE_NUM(T), REQUIRE_NUM(U)>
+struct product_traits {
+	using type = decltype(std::declval<T>() + std::declval<U>());
+};
+template<class T, class U, int RetStorageOrder=Eigen::RowMajor, class _T=typename T::Scalar,
+		class _U=typename U::Scalar>
+struct mat_product_traits {
+    using Scalar = typename product_traits<_T, _U>::type;
+    using type = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, RetStorageOrder>;
+};
+
+// ------------------------------------------------ mat_traits
+
+template<class MatrixT>
+struct mat_traits {
+    using Scalar = typename MatrixT::Scalar;
+    using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
+        Eigen::RowMajor>;
+};
+
+
+// ================================================================
 // converting to eigen mats
 // ================================================================
 // note that all of these functions assume that the raw arrays being passed
