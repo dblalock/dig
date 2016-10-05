@@ -169,12 +169,8 @@ class L2IndexBrute:
     public FlatIndex<> {
 public:
     typedef T Scalar;
-	// typedef FlatIndex IDsStore;
-    // typedef typename IDsStore::ID ID;
     typedef DistT Distance;
     typedef idx_t Index;
-    // typedef DynamicRowArray<Scalar, 0> StorageT;
-    // typedef typename StorageT::MatrixT::Index Index;
     typedef Matrix<Scalar, Dynamic, 1> ColVectorT;
 
     template<class RowMatrixT>
@@ -184,11 +180,7 @@ public:
     {
 		assert(data.IsRowMajor);
         _rowNorms = data.rowwise().squaredNorm();
-        //_ids = ar::range(static_cast<ID>(0), static_cast<ID>(data.rows()));
     }
-
-    // // ------------------------------------------------ accessors
-    // Index rows() const { return _ids.size(); }
 
     // ------------------------------------------------ insert and erase
 
@@ -247,12 +239,7 @@ public:
 
 private:
     ColVectorT _rowNorms; // TODO raw T[] + map
-    // FixedRowArray<Scalar, 1, 0> _rowNorms;
     DynamicRowArray<Scalar, 0> _data;
-
-    // auto _row_norms() const { // TODO use this once _rowNorms is RowArray
-    //     return _rowNorms.matrix(rows());
-    // }
 
 	auto _matrix() -> decltype(_data.matrix(rows())) {
 		return _data.matrix(rows());
@@ -263,10 +250,9 @@ private:
 // L2IndexAbandon
 // ================================================================
 
-// TODO pad query if queryIdPadded == 0; maybe also do this in IndexBase?
-template<class T, class DistT=float, int QueryIsPadded=1>
+template<class T, class DistT=float>
 class L2IndexAbandon:
-    public IndexBase<L2IndexAbandon<T, DistT, QueryIsPadded>, T, DistT>,
+    public IndexBase<L2IndexAbandon<T, DistT>, T, DistT>,
     public FlatIndex<> {
 public:
     typedef T Scalar;
@@ -298,13 +284,10 @@ public:
         return abandon::knn(_data, query, k, kMaxDist, rows());
     }
 
-	// // ------------------------------------------------ accessors
-	// Index rows() const { return _ids.size(); }
-
 private:
     DynamicRowArray<Scalar, kAlignBytes> _data;
-    // RowVectT _colMeans;
 };
+
 
 // ================================================================
 // CascadeIdIndex
@@ -312,7 +295,6 @@ private:
 
 // only holds ids of points, not points themselves
 template<class T, int Projections=16, class DistT=float>
-// class CascadeIdIndex: IndexBase<CascadeIdIndex<T, Projections, DistT>, T, DistT> {
 class CascadeIdIndex {
 public:
     typedef T Scalar;
@@ -386,6 +368,7 @@ private:
     Index _nrows;                                                   // 4B
     Index _capacity;                                                // 4B
 };
+
 
 // ================================================================
 // Preprocessing
