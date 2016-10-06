@@ -113,8 +113,8 @@ template<class MatrixT, class IndexT, class QueryT>
 void _test_index_with_query(MatrixT& X, IndexT& index,
 	QueryT& q)
 {
-	// for (int i = 0; i < 100; i++) {
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 100; i++) {
+	// for (int i = 0; i < 10; i++) {
 	// for (int i = 0; i < 1; i++) {
 		q.setRandom();
 		auto nn = index.onenn(q);
@@ -153,105 +153,112 @@ void _test_cluster_index(int64_t N=100, int64_t D=16, int num_clusters=2) {
 	_test_index_with_query(X, index, q);
 }
 
-// TEST_CASE("print sizes", "tmp") {
-// 	printf("sizeof(float vector) = %ld\n", sizeof(std::vector<float>));
-// 	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
-// 	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
-// 	printf("sizeof(eigen ArrayXXd) = %ld\n", sizeof(Eigen::ArrayXXd));
-// 	printf("sizeof(DynamicRowArray<float>) = %ld\n", sizeof(nn::DynamicRowArray<float>));
-// 	printf("sizeof(FixedRowArray<float, 8>) = %ld\n", sizeof(nn::FixedRowArray<float, 8>));
-// 	printf("sizeof(FixedRowArray<float, 16>) = %ld\n", sizeof(nn::FixedRowArray<float, 16>));
-// 	printf("sizeof(L2IndexBrute<float>) = %ld\n", sizeof(nn::L2IndexBrute<float>));
-// 	printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
-// }
+TEST_CASE("print sizes", "tmp") {
+	printf("sizeof(float vector) = %ld\n", sizeof(std::vector<float>));
+	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
+	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
+	printf("sizeof(eigen ArrayXXd) = %ld\n", sizeof(Eigen::ArrayXXd));
+	printf("sizeof(DynamicRowArray<float>) = %ld\n", sizeof(nn::DynamicRowArray<float>));
+	printf("sizeof(FixedRowArray<float, 8>) = %ld\n", sizeof(nn::FixedRowArray<float, 8>));
+	printf("sizeof(FixedRowArray<float, 16>) = %ld\n", sizeof(nn::FixedRowArray<float, 16>));
+	printf("sizeof(L2IndexBrute<float>) = %ld\n", sizeof(nn::L2IndexBrute<float>));
+	printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
+}
 
-// TEST_CASE("L2IndexBrute", "distance") {
-// 	_test_index<nn::L2IndexBrute<double> >();
-// 	_test_index<nn::L2IndexBrute<float> >();
-// }
-// TEST_CASE("L2IndexAbandon", "distance") {
-// 	_test_index<nn::L2IndexAbandon<double> >();
-// 	_test_index<nn::L2IndexAbandon<float> >();
-// }
+TEST_CASE("L2IndexBrute", "neighbors") {
+	_test_index<nn::L2IndexBrute<double> >();
+	_test_index<nn::L2IndexBrute<float> >();
+}
+TEST_CASE("L2IndexAbandon", "neighbors") {
+	_test_index<nn::L2IndexAbandon<double> >();
+	_test_index<nn::L2IndexAbandon<float> >();
+}
 
-TEST_CASE("NNIndex_IdentityPreproc", "distance") {
+TEST_CASE("NNIndex_IdentityPreproc", "neighbors") {
 	using PreprocT = nn::IdentityPreproc;
 	SECTION("L2IndexAbandon") {
 		SECTION("float") {
-			using InnerIndexT = nn::L2IndexAbandon<float>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			// try with D=20; yes, this fails as it should
-			// _test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20);
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 24); // D=24
+			using IndexT = nn::L2IndexAbandon<float, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 24);
 		}
 		SECTION("double") {
-			using InnerIndexT = nn::L2IndexAbandon<double>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 24); // D=24
+			using IndexT = nn::L2IndexAbandon<double, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 24);
 		}
 	}
 	SECTION("L2IndexBrute") {
 		SECTION("float") {
-			using InnerIndexT = nn::L2IndexBrute<float>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20); // D=20
+			using IndexT = nn::L2IndexBrute<float, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 10);
+			_test_index<IndexT>(100, 24);
 		}
 		SECTION("double") {
-			using InnerIndexT = nn::L2IndexBrute<double>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20); // D=20
+			using IndexT = nn::L2IndexBrute<double, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 10);
+			_test_index<IndexT>(100, 24);
 		}
 	}
 }
 
-TEST_CASE("NNIndex_ReorderPreproc", "distance") {
+TEST_CASE("NNIndex_ReorderPreproc", "neighbors") {
 	SECTION("L2IndexBrute") {
 		SECTION("float") {
-			using InnerIndexT = nn::L2IndexBrute<float>;
 			using PreprocT = nn::ReorderPreproc<float>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20); // D=20
+			using IndexT = nn::L2IndexBrute<float, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 20); // D=20
 		}
 		SECTION("double") {
-			using InnerIndexT = nn::L2IndexBrute<double>;
-			using PreprocT = nn::ReorderPreproc<float>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20); // D=20
-		}
-	}
-	SECTION("L2IndexBrute") {
-		SECTION("float") {
-			using InnerIndexT = nn::L2IndexBrute<float>;
-			using PreprocT = nn::ReorderPreproc<float>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(); // passes
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20); // D=20 // fails
-		}
-		SECTION("double") {
-			using InnerIndexT = nn::L2IndexBrute<double>;
 			using PreprocT = nn::ReorderPreproc<double>;
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >();
-			_test_index<nn::NNIndex<InnerIndexT, PreprocT> >(100, 20); // D=20
+			using IndexT = nn::L2IndexBrute<double, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 20); // D=20
+		}
+	}
+	SECTION("L2IndexAbandon") {
+		SECTION("float") {
+			using PreprocT = nn::ReorderPreproc<float>;
+			using IndexT = nn::L2IndexAbandon<float, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 20); // D=20
+		}
+		SECTION("double") {
+			using PreprocT = nn::ReorderPreproc<double>;
+			using IndexT = nn::L2IndexAbandon<double, PreprocT>;
+			_test_index<IndexT>();
+			_test_index<IndexT>(100, 20); // D=20
 		}
 	}
 }
 
-TEST_CASE("KmeansIndex", "distance") {
+TEST_CASE("KmeansIndex", "neighbors") {
 	SECTION("L2IndexBrute+IdentityPreproc") {
 		using Scalar = float;
 		using ClusterIndexT = nn::L2IndexBrute<Scalar>;
-		using InnerIndexT = nn::L2KmeansIndex<Scalar, ClusterIndexT>;
 		using PreprocT = nn::IdentityPreproc;
-		using IndexT = nn::NNIndex<InnerIndexT, PreprocT>;
+		using IndexT = nn::L2KmeansIndex<Scalar, ClusterIndexT, PreprocT>;
 		_test_cluster_index<IndexT>(100, 16, 1);
 		_test_cluster_index<IndexT>(100, 20, 2);
 		_test_cluster_index<IndexT>(100, 10, 7);
 	}
 	SECTION("L2IndexBrute+ReorderPreproc") {
-		using Scalar = float;
+		using Scalar = double;
 		using ClusterIndexT = nn::L2IndexBrute<Scalar>;
-		using InnerIndexT = nn::L2KmeansIndex<Scalar, ClusterIndexT>;
 		using PreprocT = nn::ReorderPreproc<Scalar>;
-		using IndexT = nn::NNIndex<InnerIndexT, PreprocT>;
+		using IndexT = nn::L2KmeansIndex<Scalar, ClusterIndexT, PreprocT>;
+		_test_cluster_index<IndexT>(100, 16, 1);
+		_test_cluster_index<IndexT>(100, 20, 2);
+		_test_cluster_index<IndexT>(100, 10, 7);
+	}
+	SECTION("L2IndexAbandon+ReorderPreproc") {
+		using Scalar = float;
+		using ClusterIndexT = nn::L2IndexAbandon<Scalar>;
+		using PreprocT = nn::ReorderPreproc<Scalar>;
+		using IndexT = nn::L2KmeansIndex<Scalar, ClusterIndexT, PreprocT>;
 		_test_cluster_index<IndexT>(100, 16, 1);
 		_test_cluster_index<IndexT>(100, 20, 2);
 		_test_cluster_index<IndexT>(100, 10, 7);

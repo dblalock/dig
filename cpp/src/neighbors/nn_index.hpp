@@ -27,32 +27,32 @@ namespace nn {
 static const int8_t kAlignBytes = 32;
 
 // ================================================================
-// FlatIndex / Neighbor postprocessing
+// FlatIdStore / Neighbor postprocessing
 // ================================================================
 
-struct IdentityPostProc {
+struct IdentityIdStore {
     template<class T> T postprocess(const T& neighbors) { return neighbors; }
 };
 
 template<class IdT=idx_t>
-class FlatIndex {
+class FlatIdStore {
 public:
     typedef IdT ID;
 
-    FlatIndex(size_t len):
+    FlatIdStore(size_t len):
         _ids(ar::range(static_cast<ID>(0), static_cast<ID>(len)))
     {}
 
-    FlatIndex() = default;
-    FlatIndex(const FlatIndex& rhs) = delete;
-    // FlatIndex(FlatIndex&& rhs): _ids(std::move(rhs._ids)) {
+    FlatIdStore() = default;
+    FlatIdStore(const FlatIdStore& rhs) = delete;
+    // FlatIdStore(FlatIdStore&& rhs): _ids(std::move(rhs._ids)) {
     //     PRINT("move ctor")
     //     PRINT_VAR(_ids.size());
     // }
 
     idx_t rows() const { return static_cast<idx_t>(_ids.size()); }
 
-    // TODO keep this protected and have nn funcs do the conversion
+    // TODO keep this protected and add it as optional arg to ctor
     std::vector<ID>& ids() { return _ids; }
 
     // ------------------------ neighbor postprocessing
@@ -391,9 +391,9 @@ private:
 // answers neighbor queries using matmuls
 template<class T, class PreprocT=IdentityPreproc>
 class L2IndexBrute:
+    public IndexBase<L2IndexBrute<T, PreprocT>, T>,
     public PreprocT,
-    public FlatIndex<>,
-    public IndexBase<L2IndexBrute<T, PreprocT>, T> {
+    public FlatIdStore<> {
     friend class IndexBase<L2IndexBrute<T, PreprocT>, T>;
 public:
     typedef T Scalar;
@@ -408,7 +408,7 @@ public:
     template<class RowMatrixT>
     explicit L2IndexBrute(const RowMatrixT& data):
         PreprocT(data),
-        FlatIndex(data.rows()),
+        FlatIdStore(data.rows()),
         _data(PreprocT::preprocess_data(data))
     {
 		assert(data.IsRowMajor);
@@ -416,7 +416,7 @@ public:
     }
 
  //    L2IndexBrute(L2IndexBrute&& rhs) noexcept:
- //        FlatIndex(std::move(rhs)),
+ //        FlatIdStore(std::move(rhs)),
  //        _data(std::move(rhs._data))
  //    {
 	// 	PRINT_VAR(_ids.size());
@@ -493,9 +493,9 @@ private:
 
 template<class T, class PreprocT=IdentityPreproc>
 class L2IndexAbandon:
-    public PreprocT,
     public IndexBase<L2IndexAbandon<T, PreprocT>, T>,
-    public FlatIndex<> {
+    public PreprocT,
+    public FlatIdStore<> {
     friend class IndexBase<L2IndexAbandon<T, PreprocT>, T>;
 public:
     typedef T Scalar;
@@ -511,14 +511,14 @@ public:
     template<class RowMatrixT>
     explicit L2IndexAbandon(const RowMatrixT& data):
         PreprocT(data),
-		FlatIndex(data.rows()),
+		FlatIdStore(data.rows()),
 		_data(PreprocT::preprocess_data(data))
         // _data(data)
     {
         assert(_data.IsRowMajor);
     }
     // L2IndexAbandon(L2IndexAbandon&& rhs) noexcept:
-    //     FlatIndex(std::move(rhs)),
+    //     FlatIdStore(std::move(rhs)),
     //     _data(std::move(rhs._data))
     // {}
 
@@ -552,16 +552,20 @@ private:
 template<class T, class InnerIndex=L2IndexAbandon<T>,
     class PreprocT=IdentityPreproc>
 class L2KmeansIndex:
-    public PreprocT,
-    public IdentityPostProc,
-    public IndexBase<L2KmeansIndex<T, InnerIndex>, T> {
-    friend class IndexBase<L2KmeansIndex<T, InnerIndex>, T>;
+    public IndexBase<L2KmeansIndex<T, InnerIndex, PreprocT>, T>,
+	public PreprocT,
+    public IdentityIdStore {
+    friend class IndexBase<L2KmeansIndex<T, InnerIndex, PreprocT>, T>;
 public:
     using Scalar = T;
     using DistT = T;
     using Index = idx_t;
 	using CentroidIndex = int32_t;
-	using RowMatrixT = RowMatrix<T>;
+	using RowMatrixType = RowMatrix<T>;
+
+	L2KmeansIndex() = delete;
+	L2KmeansIndex(const L2KmeansIndex& rhs) = delete;
+	L2KmeansIndex(L2KmeansIndex&& rhs) = delete;
 
     template<class RowMatrixT>
     L2KmeansIndex(const RowMatrixT& X, int k):
@@ -758,7 +762,7 @@ protected:
     }
 
 private:
-    RowMatrixT _centroids;
+    RowMatrixType _centroids;
     // std::vector<InnerIndex> _indexes;
     std::unique_ptr<InnerIndex[]> _indexes;
     // the fields below are storage to avoid doing allocs for each query
@@ -776,7 +780,7 @@ private:
     }
 
     template<class VectorT>
-    void _update_order_for_query(VectorT query, CentroidIndex centroids_limit=-1) {
+    void _update_order_for_query(const VectorT& query, CentroidIndex centroids_limit=-1) {
         _centroid_dists = dist::squared_dists_to_vector(_centroids, query);
         ar::argsort(_centroid_dists.data(), _num_centroids, _order.data());
         centroids_limit = _clamp_centroid_limit(centroids_limit);
@@ -909,46 +913,46 @@ private:
 // NNIndex
 // ================================================================
 
-#define QUERY_METHOD(NAME, INVOCATION) \
-    template<class VectorT, class... Args> \
-    auto NAME(const VectorT& query, Args&&... args) \
-        -> decltype(INVOCATION (query, std::forward<Args>(args)...)) \
-    { \
-        auto use_query = _preproc.preprocess(query); \
-        return INVOCATION(use_query, std::forward<Args...>(args)...); \
-    }
+// #define QUERY_METHOD(NAME, INVOCATION) \
+//     template<class VectorT, class... Args> \
+//     auto NAME(const VectorT& query, Args&&... args) \
+//         -> decltype(INVOCATION (query, std::forward<Args>(args)...)) \
+//     { \
+//         auto use_query = _preproc.preprocess(query); \
+//         return INVOCATION(use_query, std::forward<Args...>(args)...); \
+//     }
 
-#define QUERY_BATCH_METHOD(NAME, INVOCATION) \
-    template<class RowMatrixT, class... Args> \
-    auto NAME(const RowMatrixT& queries, Args&&... args) \
-        -> decltype(INVOCATION (queries, std::forward<Args>(args)...)) \
-    { \
-        auto use_queries = _preproc.preprocess_batch(queries); \
-        return INVOCATION(use_queries, std::forward<Args...>(args)...); \
-    }
+// #define QUERY_BATCH_METHOD(NAME, INVOCATION) \
+//     template<class RowMatrixT, class... Args> \
+//     auto NAME(const RowMatrixT& queries, Args&&... args) \
+//         -> decltype(INVOCATION (queries, std::forward<Args>(args)...)) \
+//     { \
+//         auto use_queries = _preproc.preprocess_batch(queries); \
+//         return INVOCATION(use_queries, std::forward<Args...>(args)...); \
+//     }
 
-template<class InnerIndex, class Preprocessor=IdentityPreproc>
-class NNIndex {
-private:
-    Preprocessor _preproc;
-	InnerIndex _index;
-public:
-    using Scalar = typename InnerIndex::Scalar;
-    using Index = typename InnerIndex::Index;
+// template<class InnerIndex, class Preprocessor=IdentityPreproc>
+// class NNIndex {
+// private:
+//     Preprocessor _preproc;
+// 	InnerIndex _index;
+// public:
+//     using Scalar = typename InnerIndex::Scalar;
+//     using Index = typename InnerIndex::Index;
 
-    template<class RowMatrixT, class... Args>
-    NNIndex(const RowMatrixT& X, Args&&... args):
-		_preproc{X}, // TODO warns about preproc uninitialized if () not {} ??
-        _index(_preproc.preprocess_data(X), std::forward<Args>(args)...)
-    {}
+//     template<class RowMatrixT, class... Args>
+//     NNIndex(const RowMatrixT& X, Args&&... args):
+// 		_preproc{X}, // TODO warns about preproc uninitialized if () not {} ??
+//         _index(_preproc.preprocess_data(X), std::forward<Args>(args)...)
+//     {}
 
-    QUERY_METHOD(radius, _index.radius);
-    QUERY_METHOD(onenn, _index.onenn);
-    QUERY_METHOD(knn, _index.knn);
-    QUERY_BATCH_METHOD(radius_batch, _index.radius_batch);
-    QUERY_BATCH_METHOD(onenn_batch, _index.onenn_batch);
-    QUERY_BATCH_METHOD(knn_batch, _index.knn_batch);
-};
+//     QUERY_METHOD(radius, _index.radius);
+//     QUERY_METHOD(onenn, _index.onenn);
+//     QUERY_METHOD(knn, _index.knn);
+//     QUERY_BATCH_METHOD(radius_batch, _index.radius_batch);
+//     QUERY_BATCH_METHOD(onenn_batch, _index.onenn_batch);
+//     QUERY_BATCH_METHOD(knn_batch, _index.knn_batch);
+// };
 
     // TODO E2LSH impl
     // TODO Selective Hashing Impl on top of it
