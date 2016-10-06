@@ -26,6 +26,14 @@ namespace nn {
 
 static const int8_t kAlignBytes = 32;
 
+// ================================================================
+// FlatIndex / Neighbor postprocessing
+// ================================================================
+
+struct IdentityPostProc {
+    template<class T> T postprocess(const T& neighbors) { return neighbors; }
+};
+
 template<class IdT=idx_t>
 class FlatIndex {
 public:
@@ -33,10 +41,7 @@ public:
 
     FlatIndex(size_t len):
         _ids(ar::range(static_cast<ID>(0), static_cast<ID>(len)))
-    {
-        // PRINT("normal ctor")
-        // PRINT_VAR(_ids.size());
-    }
+    {}
 
     FlatIndex() = default;
     FlatIndex(const FlatIndex& rhs) = delete;
@@ -45,18 +50,132 @@ public:
     //     PRINT_VAR(_ids.size());
     // }
 
-    idx_t rows() const {
-        // PRINT_VAR(_ids.size());
-        // auto rows_to_return = static_cast<idx_t>(_ids.size());
-        // PRINT_VAR(rows_to_return);
-        return static_cast<idx_t>(_ids.size());
-    }
+    idx_t rows() const { return static_cast<idx_t>(_ids.size()); }
 
     // TODO keep this protected and have nn funcs do the conversion
     std::vector<ID>& ids() { return _ids; }
 
+    // ------------------------ neighbor postprocessing
+    // ie, convert indices within storage to point IDs
+
+    Neighbor postprocess(Neighbor n) {
+        return Neighbor{.dist = n.dist, .idx = _ids[n.idx]};
+    }
+    std::vector<Neighbor> postprocess(std::vector<Neighbor> neighbors) {
+        return ar::map([this](const Neighbor n) {
+			return this->postprocess(n);
+        }, neighbors);
+    }
+    std::vector<std::vector<Neighbor> > postprocess(
+        std::vector<std::vector<Neighbor> > nested_neighbors) {
+        return ar::map([this](const std::vector<Neighbor> neighbors) {
+            return this->postprocess(neighbors);
+        }, nested_neighbors);
+    }
+
 protected:
     std::vector<ID> _ids;
+};
+
+// ================================================================
+// Preprocessing
+// ================================================================
+
+struct IdentityPreproc {
+    // ------------------------ ctors
+    template<class RowMatrixT> IdentityPreproc(const RowMatrixT& X) {}
+    IdentityPreproc() = default;
+
+    // ------------------------ identity funcs
+    template<class VectorT>
+    void preprocess(const VectorT& query, typename VectorT::Scalar* out) const {}
+    template<class VectorT>
+    VectorT& preprocess(VectorT& query) const { return query; }
+
+    template<class RowMatrixT, class RowMatrixT2>
+    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) const {}
+    template<class RowMatrixT>
+    RowMatrixT& preprocess_batch(RowMatrixT& queries) const { return queries; }
+
+    template<class RowMatrixT>
+    RowMatrixT& preprocess_data(RowMatrixT& X) const { return X; }
+};
+
+template<class ScalarT, int AlignBytes=kAlignBytes>
+struct ReorderPreproc { // TODO could avoid passing ScalarT template arg
+    // ------------------------ consts
+    using Scalar = ScalarT;
+    using Index = int32_t;
+    enum { max_pad_elements = AlignBytes / sizeof(Scalar) };
+
+    // ------------------------ ctors
+    ReorderPreproc() = default;
+
+    template<class RowMatrixT> ReorderPreproc(const RowMatrixT& X):
+            _order(nn::order_col_variance(X))
+    {
+        assert(_length() > max_pad_elements);
+    }
+
+    // ------------------------ one query
+    // assumes that out already has appropriate padding at the end
+    template<class VectorT> void preprocess(const VectorT& query,
+        typename VectorT::Scalar* out) const
+    {
+        assert(_length() == _aligned_length(query.size()));
+        reorder_query(query, _order, out);
+    }
+    template<class VectorT> VectorT preprocess(const VectorT& query) const {
+        VectorT out(_length());
+        // out.segment(query.size(), _length() - query.size()) = 0;
+        out.setZero();
+        preprocess(query, out.data());
+        return out;
+    }
+
+    // ------------------------ batch of queries
+    template<class RowMatrixT>
+    void preprocess_batch(const RowMatrixT& queries, RowMatrixT& out) const {
+        assert(queries.IsRowMajor);
+        assert(out.IsRowMajor);
+        assert(queries.rows() <= out.rows());
+        assert(queries.cols() <= out.cols());
+        for (Index i = 0; i < queries.rows(); i++) {
+            preprocess(queries.row(i), out.row(i).data());
+        }
+    }
+    template<class RowMatrixT>
+    RowMatrixT preprocess_batch(const RowMatrixT& queries) const {
+        assert(false); // verify we're not actually calling this yet
+        RowMatrixT out(queries.rows(), _length());
+        // out.topRightCorner(queries.rows(), max_pad_elements).setZero(); // TODO uncomment
+        out.setZero();
+        preprocess_batch(queries, out);
+        return out;
+    }
+
+    // ------------------------ data mat
+    template<class RowMatrixT> RowMatrixT preprocess_data(
+        const RowMatrixT& X) const
+    {
+        assert(X.IsRowMajor);
+        assert(X.cols() <= _length());
+        assert(X.cols() > 0);
+
+        // create mat to return and ensure final cols are zeroed
+        RowMatrixT out(X.rows(), _length());
+        out.topRightCorner(X.rows(), max_pad_elements).setZero();
+
+        // preprocess it the same way as queries
+        preprocess_batch(X, out);
+        return out;
+    }
+private:
+    Index _aligned_length(int64_t n) const {
+        return static_cast<Index>(aligned_length<Scalar, AlignBytes>(n));
+    }
+    Index _length() const { return _aligned_length(_order.size()); }
+    std::vector<Index> _order;
 };
 
 // ================================================================
@@ -76,11 +195,40 @@ protected:
 // polymorphism; i.e., we can call arbitrary child class functions without
 // having to declare them anywhere in this class. This is the same pattern
 // used by Eigen.
-template<class Derived, class ScalarT, class DistT=float>
+//
+// The way this class works is that it defines public methods for everything a
+// Nearest Neighbor index should be able to do (except insert/delete atm)
+// and calls protected funcs, prefixed by an "_", for the actual logic; the
+// public funcs preprocess the query (e.g., to reorder or normalize it) and
+// postprocess the returned neighbors (e.g., to convert from row indices
+// to point IDs). The protected methods should be oblivious to pre- and post-
+// processing. There are default impls of some protected methods (the batch
+// queries). Also, don't override the *_idxs() methods because then you won't
+// get the pre- and post-processing; you shouldn't need to touch them anyway.
+//
+// In short, subclasses need to implement:
+//
+//  -_radius(query, d_max)
+//  -_onenn(query)
+//  -_knn(query, k)
+//
+//  -preprocess(query)
+//  -preprocess_batch(query)
+//
+//  -postprocess(Neighbor)
+//  -postprocess(vector<Neighbor>)
+//  -postprocess(vector<vector<Neighbor>>)
+//
+// and can choose to override:
+//
+//  -_radius_batch(queries, d_max)
+//  -_onenn_batch(queries)
+//  -_knn_batch(queries, k)
+//
+template<class Derived, class ScalarT>
 class IndexBase {
 public:
- //    typedef typename index_traits<Derived>::Distance DistT;
-	// typedef typename index_traits<Derived>::Scalar ScalarT;
+    using DistT = ScalarT;
 
 //    // ------------------------------------------------ insert and erase
 //
@@ -98,6 +246,26 @@ public:
 
     // ------------------------------------------------ single queries
 
+    template<class VectorT>
+    vector<Neighbor> radius(const VectorT& query,
+                                           DistT d_max)
+    {
+        auto neighbors = _derived()->_radius(_derived()->preprocess(query), d_max);
+        return _derived()->postprocess(neighbors);
+    }
+
+    template<class VectorT>
+    Neighbor onenn(const VectorT& query) {
+        auto neighbors = _derived()->_onenn(_derived()->preprocess(query));
+        return _derived()->postprocess(neighbors);
+    }
+
+    template<class VectorT>
+    vector<Neighbor> knn(const VectorT& query, int k) {
+        auto neighbors = _derived()->_knn(_derived()->preprocess(query), k);
+        return _derived()->postprocess(neighbors);
+    }
+
     // ------------------------------------------------ batch of queries
     // TODO allow vector of d_max values for each of these
 
@@ -105,29 +273,23 @@ public:
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
                                            DistT d_max)
     {
-        vector<vector<Neighbor> > ret;
-        for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(radius(queries.row(j).eval(), d_max));
-        }
-        return ret;
-    }
-
-    template<class RowMatrixT>
-    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, size_t k) {
-        vector<vector<Neighbor> > ret;
-        for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(knn(queries.row(j).eval(), k));
-        }
-        return ret;
+        auto& queries_proc = Derived::preprocess_batch(queries);
+        auto neighbors = Derived::_radius_batch(queries_proc, d_max);
+        return Derived::postprocess(neighbors);
     }
 
     template<class RowMatrixT>
     vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
-        vector<Neighbor> ret;
-        for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(onenn(queries.row(j).eval()));
-        }
-        return ret;
+        auto& queries_proc = Derived::preprocess_batch(queries);
+        auto neighbors = Derived::_onenn_batch(queries_proc);
+        return Derived::postprocess(neighbors);
+    }
+
+    template<class RowMatrixT>
+    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, size_t k) {
+        auto& queries_proc = Derived::preprocess_batch(queries);
+        auto neighbors = Derived::_knn_batch(queries_proc, k);
+        return Derived::postprocess(neighbors);
     }
 
     // ------------------------------------------------ return only idxs
@@ -179,6 +341,47 @@ public:
         auto neighbors = Derived::knn_batch(queries, k);
         return _idxs_from_nested_neighbors(neighbors);
     }
+
+protected: // default impls for derived
+
+    // ------------------------------------------------ batch of queries
+    // TODO allow vector of d_max values for each of these
+
+    template<class RowMatrixT>
+    vector<vector<Neighbor> > _radius_batch(const RowMatrixT& queries,
+                                           DistT d_max)
+    {
+        vector<vector<Neighbor> > ret;
+        for (idx_t j = 0; j < queries.rows(); j++) {
+            ret.emplace_back(_derived()->_radius(queries.row(j).eval(), d_max));
+        }
+        return ret;
+    }
+
+    template<class RowMatrixT>
+    vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, size_t k) {
+        vector<vector<Neighbor> > ret;
+        for (idx_t j = 0; j < queries.rows(); j++) {
+            ret.emplace_back(_derived()->_knn(queries.row(j).eval(), k));
+        }
+        return ret;
+    }
+
+    template<class RowMatrixT>
+    vector<Neighbor> _onenn_batch(const RowMatrixT& queries) {
+        vector<Neighbor> ret;
+        for (idx_t j = 0; j < queries.rows(); j++) {
+            ret.emplace_back(_derived()->_onenn(queries.row(j).eval()));
+        }
+        return ret;
+    }
+private:
+    // inline const Derived* _derived() const {
+    //     return static_cast<const Derived*>(this);
+    // }
+    inline Derived* _derived() {
+        return static_cast<Derived*>(this);
+    }
 };
 
 // ================================================================
@@ -186,13 +389,15 @@ public:
 // ================================================================
 
 // answers neighbor queries using matmuls
-template<class T, class DistT=float>
+template<class T, class PreprocT=IdentityPreproc>
 class L2IndexBrute:
-    public IndexBase<L2IndexBrute<T, DistT>, T, DistT>,
-    public FlatIndex<> {
+    public PreprocT,
+    public FlatIndex<>,
+    public IndexBase<L2IndexBrute<T, PreprocT>, T> {
+    friend class IndexBase<L2IndexBrute<T, PreprocT>, T>;
 public:
     typedef T Scalar;
-    typedef DistT Distance;
+    typedef T DistT;
     typedef idx_t Index;
     typedef Matrix<Scalar, Dynamic, 1> ColVectorT;
 
@@ -200,11 +405,11 @@ public:
 
     L2IndexBrute() = default;
 
-    // template<class RowMatrixT, REQUIRE_IS_NOT_A(L2IndexBrute, RowMatrixT)>
     template<class RowMatrixT>
     explicit L2IndexBrute(const RowMatrixT& data):
+        PreprocT(data),
         FlatIndex(data.rows()),
-        _data(data)
+        _data(PreprocT::preprocess_data(data))
     {
 		assert(data.IsRowMajor);
         _rowNorms = data.rowwise().squaredNorm();
@@ -236,39 +441,40 @@ public:
     //     }
     // }
 
+protected:
     // ------------------------------------------------ single query
 
     template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query, DistT d_max) {
+    vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
         return brute::radius(_matrix(), query, d_max);
     }
 
     template<class VectorT>
-    Neighbor onenn(const VectorT& query, DistT d_max=kMaxDist) {
+    Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist) {
         return brute::onenn(_matrix(), query);
     }
 
     template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
+    vector<Neighbor> _knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
         return brute::knn(_matrix(), query, k);
     }
 
     // ------------------------------------------------ batch of queries
 
     template<class RowMatrixT>
-    vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
+    vector<vector<Neighbor> > _radius_batch(const RowMatrixT& queries,
         DistT d_max)
     {
         return brute::radius_batch(_matrix(), queries, d_max, _rowNorms);
     }
 
     template<class RowMatrixT>
-    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
+    vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, int k) {
         return brute::knn_batch(_matrix(), queries, k, _rowNorms);
     }
 
     template<class RowMatrixT>
-    vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
+    vector<Neighbor> _onenn_batch(const RowMatrixT& queries) {
         return brute::onenn_batch(_matrix(), queries, _rowNorms);
     }
 
@@ -277,7 +483,6 @@ private:
     DynamicRowArray<Scalar, 0> _data;
 
 	auto _matrix() -> decltype(_data.matrix(rows())) {
-		// PRINT_VAR(rows());
 		return _data.matrix(rows());
 	}
 };
@@ -286,13 +491,15 @@ private:
 // L2IndexAbandon
 // ================================================================
 
-template<class T, class DistT=float>
+template<class T, class PreprocT=IdentityPreproc>
 class L2IndexAbandon:
-    public IndexBase<L2IndexAbandon<T, DistT>, T, DistT>,
+    public PreprocT,
+    public IndexBase<L2IndexAbandon<T, PreprocT>, T>,
     public FlatIndex<> {
+    friend class IndexBase<L2IndexAbandon<T, PreprocT>, T>;
 public:
     typedef T Scalar;
-	typedef DistT Distance;
+	typedef T DistT;
 	typedef idx_t Index;
     typedef Matrix<Scalar, 1, Dynamic, RowMajor> RowVectT;
     typedef Matrix<int32_t, 1, Dynamic, RowMajor> RowVectIdxsT;
@@ -303,8 +510,10 @@ public:
 
     template<class RowMatrixT>
     explicit L2IndexAbandon(const RowMatrixT& data):
-		FlatIndex<>(data.rows()),
-        _data(data)
+        PreprocT(data),
+		FlatIndex(data.rows()),
+		_data(PreprocT::preprocess_data(data))
+        // _data(data)
     {
         assert(_data.IsRowMajor);
     }
@@ -313,20 +522,21 @@ public:
     //     _data(std::move(rhs._data))
     // {}
 
+protected:
     // ------------------------------------------------ single query
 
     template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query, DistT d_max) {
+    vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
         return abandon::radius(_data, query, d_max, rows());
     }
 
     template<class VectorT>
-    Neighbor onenn(const VectorT& query, DistT d_max=kMaxDist) {
+    Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist) {
         return abandon::onenn(_data, query, d_max, rows());
     }
 
     template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
+    vector<Neighbor> _knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
         return abandon::knn(_data, query, k, d_max, rows());
     }
 
@@ -339,28 +549,34 @@ private:
 // KmeansIndex
 // ================================================================
 
-template<class T, class InnerIndex=L2IndexAbandon<T>, class DistT=float>
+template<class T, class InnerIndex=L2IndexAbandon<T>,
+    class PreprocT=IdentityPreproc>
 class L2KmeansIndex:
-    public IndexBase<L2KmeansIndex<T, InnerIndex, DistT>, T, DistT> {
+    public PreprocT,
+    public IdentityPostProc,
+    public IndexBase<L2KmeansIndex<T, InnerIndex>, T> {
+    friend class IndexBase<L2KmeansIndex<T, InnerIndex>, T>;
 public:
     using Scalar = T;
-    using Distance = DistT;
+    using DistT = T;
     using Index = idx_t;
 	using CentroidIndex = int32_t;
 	using RowMatrixT = RowMatrix<T>;
 
     template<class RowMatrixT>
     L2KmeansIndex(const RowMatrixT& X, int k):
+        PreprocT(X),
         _order(k),
         _indexes(new InnerIndex[k]),
         _centroid_dists(k),
         _idxs_for_centroids(k),
-        _queries_storage(32, X.cols()), // 32 query capacity by default
+        _queries_storage(32, PreprocT::preprocess_data(X).cols()), // 32 query capacity
         _num_centroids(k)
     {
         // _indexes.reserve(k);
+        auto X_ = PreprocT::preprocess_data(X);
 
-		auto centroids_assignments = cluster::kmeans(X, k);
+		auto centroids_assignments = cluster::kmeans(X_, k);
         _centroids = centroids_assignments.first;
         auto assigs = centroids_assignments.second;
 
@@ -379,13 +595,13 @@ public:
         auto max_len = ar::max(lengths);
 
         // create an index for each centroid
-        RowMatrixT storage(max_len, X.cols());
+        RowMatrixT storage(max_len, X_.cols());
         for (int i = 0; i < k; i++) {
             // copy appropriate rows to temp storage so they're contiguous
             auto& idxs = idxs_for_centroids[i];
 			for (int row_idx = 0; row_idx < idxs.size(); row_idx++) {
 				auto idx = idxs[row_idx];
-				storage.row(row_idx) = X.row(idx);
+				storage.row(row_idx) = X_.row(idx);
 			}
             // create an InnerIndex instance with these rows
             auto nrows = idxs.size();
@@ -403,8 +619,9 @@ public:
 
     // ------------------------------------------------ single query
 
+protected:
     template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query, DistT d_max,
+    vector<Neighbor> _radius(const VectorT& query, DistT d_max,
         CentroidIndex centroids_limit=-1)
     {
         _update_order_for_query(query, centroids_limit); // update _order
@@ -414,19 +631,18 @@ public:
             auto& index = _indexes[_order[i]];
             auto neighbors = index.radius(query, d_max);
 
-            // convert to orig idxs TODO rm once idxs do this themselves
-            for (auto& n : neighbors) {
-                n.idx = index.ids()[n.idx];
-            }
+            // // convert to orig idxs TODO rm once idxs do this themselves
+            // for (auto& n : neighbors) {
+            //     n.idx = index.ids()[n.idx];
+            // }
 
             ar::concat_inplace(ret, neighbors);
-            // ret.insert(std::end(ret), std::begin(neighbors), std::end(neighbors));
         }
         return ret;
     }
 
     template<class VectorT>
-    Neighbor onenn(const VectorT& query, CentroidIndex centroids_limit=-1,
+    Neighbor _onenn(const VectorT& query, CentroidIndex centroids_limit=-1,
         DistT d_max=kMaxDist)
     {
         // PRINT_VAR(_num_centroids);
@@ -438,17 +654,18 @@ public:
             auto& index = _indexes[_order[i]];
             if (index.rows() < 1) { continue; }
 
-            Neighbor n = index.onenn(query, ret.dist);
+            Neighbor n = index.onenn(query);
             if (n.dist < ret.dist) {
-                ret.dist = n.dist;
-                ret.idx = index.ids()[n.idx];
+                ret = n;
+                // ret.dist = n.dist;
+                // ret.idx = index.ids()[n.idx];
             }
         }
         return ret;
     }
 
     template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, int k, CentroidIndex centroids_limit=-1,
+    vector<Neighbor> _knn(const VectorT& query, int k, CentroidIndex centroids_limit=-1,
         DistT d_max=kMaxDist)
     {
         _update_order_for_query(query, centroids_limit); // update _order
@@ -460,10 +677,10 @@ public:
 
             auto neighbors = index.knn(query, k);
 
-            // convert to orig idxs TODO rm once idxs do this themselves
-            for (auto& n : neighbors) {
-                n.idx = index.ids()[n.idx];
-            }
+            // // convert to orig idxs TODO rm once idxs do this themselves
+            // for (auto& n : neighbors) {
+            //     n.idx = index.ids()[n.idx];
+            // }
 
             d_max = maybe_insert_neighbors(ret, neighbors);
         }
@@ -473,7 +690,7 @@ public:
     // ------------------------------------------------ batch of queries
 
     template<class RowMatrixT>
-    vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
+    vector<vector<Neighbor> > _radius_batch(const RowMatrixT& queries,
         DistT d_max, CentroidIndex centroids_limit=-1)
     {
         _update_idxs_for_centroids(queries, centroids_limit);
@@ -498,7 +715,7 @@ public:
     }
 
     template<class RowMatrixT>
-    vector<Neighbor> onenn_batch(const RowMatrixT& queries,
+    vector<Neighbor> _onenn_batch(const RowMatrixT& queries,
         CentroidIndex centroids_limit=-1)
     {
         _update_idxs_for_centroids(queries, centroids_limit);
@@ -519,7 +736,7 @@ public:
     }
 
     template<class RowMatrixT>
-    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k,
+    vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, int k,
         CentroidIndex centroids_limit=-1)
     {
         _update_idxs_for_centroids(queries, centroids_limit);
@@ -611,10 +828,11 @@ private:
 // ================================================================
 
 // only holds ids of points, not points themselves
-template<class T, int Projections=16, class DistT=float>
+template<class T, int Projections=16>
 class CascadeIdIndex {
 public:
     typedef T Scalar;
+    typedef T DistT;
     typedef float ProjectionScalar;
     typedef int32_t Index;
     typedef idx_t ID;
@@ -684,101 +902,6 @@ private:
     // DynamicRowArray<Scalar, kAlignBytes>                         // 16B
     Index _nrows;                                                   // 4B
     Index _capacity;                                                // 4B
-};
-
-
-// ================================================================
-// Preprocessing
-// ================================================================
-
-struct IdentityPreproc {
-    template<class RowMatrixT> IdentityPreproc(const RowMatrixT& X) {}
-
-    template<class VectorT>
-    void preprocess(const VectorT& query, typename VectorT::Scalar* out) {}
-    template<class VectorT>
-    VectorT& preprocess(VectorT& query) { return query; }
-
-    template<class RowMatrixT, class RowMatrixT2>
-    void preprocess_batch(const RowMatrixT& queries, RowMatrixT2& out) {}
-    template<class RowMatrixT>
-    RowMatrixT& preprocess_batch(RowMatrixT& queries) { return queries; }
-
-    template<class RowMatrixT>
-    RowMatrixT& preprocess_data(RowMatrixT& X) { return X; }
-};
-
-template<class ScalarT, int AlignBytes=kAlignBytes>
-struct ReorderPreproc { // TODO could avoid passing ScalarT template arg
-    using Scalar = ScalarT;
-    using Index = int32_t;
-    enum { max_pad_elements = AlignBytes / sizeof(Scalar) };
-
-    template<class RowMatrixT> ReorderPreproc(const RowMatrixT& X):
-            _order(nn::order_col_variance(X))
-    {
-        assert(_length() > max_pad_elements);
-    }
-
-    // ------------------------ one query
-    // assumes that out already has appropriate padding at the end
-    template<class VectorT> void preprocess(const VectorT& query,
-        typename VectorT::Scalar* out) const
-    {
-        assert(_length() == _aligned_length(query.size()));
-        reorder_query(query, _order, out);
-    }
-    template<class VectorT> VectorT preprocess(const VectorT& query) const {
-        VectorT out(_length());
-        // out.segment(query.size(), _length() - query.size()) = 0;
-        out.setZero();
-        preprocess(query, out.data());
-		return out;
-    }
-
-    // ------------------------ batch of queries
-    template<class RowMatrixT>
-    void preprocess_batch(const RowMatrixT& queries, RowMatrixT& out) const {
-        assert(queries.IsRowMajor);
-        assert(out.IsRowMajor);
-        assert(queries.rows() <= out.rows());
-        assert(queries.cols() <= out.cols());
-        for (Index i = 0; i < queries.rows(); i++) {
-            preprocess(queries.row(i), out.row(i).data());
-        }
-    }
-    template<class RowMatrixT>
-    RowMatrixT preprocess_batch(const RowMatrixT& queries) const {
-        assert(false); // verify we're not actually calling this yet
-        RowMatrixT out(queries.rows(), _length());
-        // out.topRightCorner(queries.rows(), max_pad_elements).setZero(); // TODO uncomment
-        out.setZero();
-        preprocess_batch(queries, out);
-        return out;
-    }
-
-    // ------------------------ data mat
-    template<class RowMatrixT> RowMatrixT preprocess_data(
-		const RowMatrixT& X) const
-	{
-        assert(X.IsRowMajor);
-		assert(X.cols() <= _length());
-		assert(X.cols() > 0);
-
-        // create mat to return and ensure final cols are zeroed
-        RowMatrixT out(X.rows(), _length());
-        out.topRightCorner(X.rows(), max_pad_elements).setZero();
-
-        // preprocess it the same way as queries
-        preprocess_batch(X, out);
-        return out;
-    }
-private:
-    Index _aligned_length(int64_t n) const {
-        return static_cast<Index>(aligned_length<Scalar, AlignBytes>(n));
-    }
-    Index _length() const { return _aligned_length(_order.size()); }
-    std::vector<Index> _order;
 };
 
 

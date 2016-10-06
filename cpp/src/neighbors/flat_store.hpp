@@ -206,6 +206,7 @@ private:
 
     inline const Derived* _derived() const { return static_cast<const Derived*>(this); }
     // inline auto _cols() -> decltype(Derived::cols()) { return Derived::cols(); }
+    // inline ColIndex _cols() const { return Derived::cols(); }
     inline ColIndex _cols() const { return _derived()->cols(); }
 };
 
