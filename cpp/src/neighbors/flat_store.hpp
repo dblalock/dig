@@ -64,6 +64,8 @@ template<class Derived, class T, class DerivedKey, int AlignBytes=32,
     bool OwnPtr=true>
 class BaseRowArray {
 public:
+	// typedef SELF_TYPE SelfT;
+	// using SelfT = std::remove_reference<decltype(*this)>::type;
 	typedef T Scalar;
     // typedef idx_t Index;
     typedef row_array_traits<DerivedKey, T> DerivedTraits;
@@ -77,6 +79,7 @@ public:
 	typedef Eigen::Map<MatrixT, Eigen::Aligned> MatrixMapT; // always align whole mat
     typedef Eigen::Map<RowT, _AlignHelper<AlignBytes>::AlignmentType> RowMapT;
 
+
     static const bool IsRowMajor = true;
 
     // ------------------------ ctors
@@ -89,7 +92,15 @@ public:
         assert(initial_rows >= 0);
     }
 
-    template<class RowMatrixT>
+    BaseRowArray() = default;
+	// move ctor
+    // BaseRowArray(BaseRowArray&& rhs) noexcept : _data(std::move(rhs._data)) {
+    //     rhs._data = nullptr;
+    // }
+
+
+	// template<class RowMatrixT>
+	template<class RowMatrixT, REQUIRE_IS_NOT_A(BaseRowArray, RowMatrixT)>
     BaseRowArray(const RowMatrixT& X):
         BaseRowArray(X.rows(), X.cols())
     {
@@ -110,7 +121,7 @@ public:
 	{}
 
     ~BaseRowArray() {
-        if (OwnPtr) {
+        if (OwnPtr && _data) {
             aligned_free<Scalar, AlignBytes>(_data);
         }
     }
@@ -122,6 +133,7 @@ public:
     // template<class Index>
     Scalar* row_ptr(const RowIndex i) const {
         assert(i >= 0);
+        assert(_data);
 		return _data + (i * _cols());
     }
     // template<class Index>
@@ -134,6 +146,7 @@ public:
 
     // template<class Index>
     MatrixMapT matrix(const RowIndex nrows) const {
+        assert(_data);
         return MatrixMapT{_data, nrows, _cols()};
     }
 
@@ -143,13 +156,16 @@ public:
         auto ncols = _cols();
         assert (_aligned_length(ncols) == ncols);
         assert(new_num_rows > old_num_rows); // for now, should only get bigger
+        if (_data == nullptr) { assert(old_num_rows == 0); }
 
         int64_t old_capacity = old_num_rows * ncols;
         int64_t new_capacity = new_num_rows * ncols;
         int64_t len = std::min(old_capacity, new_capacity);
         Scalar* new_data = _aligned_alloc(new_capacity);
-        std::copy(_data, _data + len, new_data);
-        aligned_free(_data);
+        if (_data) {
+            std::copy(_data, _data + len, new_data);
+            aligned_free(_data);
+        }
         _data = new_data;
     }
 
@@ -170,7 +186,6 @@ public:
         std::copy(x, x + len, row_start);
     }
 
-    // template<class Index>
     void copy_row(RowIndex from_idx, RowIndex to_idx) {
         assert(from_idx != to_idx);
 		insert<false>(row_ptr(from_idx), _cols(), to_idx);
@@ -207,6 +222,8 @@ public:
 	typedef BaseRowArray<DynamicRowArray<T, AlignBytes, OwnPtr>, T, DynamicRowArrayKey, AlignBytes, OwnPtr> Super;
 
     // ------------------------ ctors
+    DynamicRowArray() = default;
+
     DynamicRowArray(size_t initial_rows, size_t ncols):
 		Super(initial_rows, Super::_aligned_length(ncols)),
 		_ncols(Super::_aligned_length(ncols))
@@ -220,12 +237,16 @@ public:
 		_ncols(Super::_aligned_length(X.cols()))
     {}
 
-    // no copying
+    // no copying, only moving
     DynamicRowArray(const DynamicRowArray& other) = delete;
-    DynamicRowArray(const DynamicRowArray&& other) = delete;
+    // DynamicRowArray(const DynamicRowArray&& other) = delete;
+    DynamicRowArray(DynamicRowArray&& rhs) noexcept:
+        Super(std::move(rhs)),
+        _ncols(rhs._ncols)
+    {}
 
     // ------------------------ accessors
-    ColIndex cols() const { return _ncols; }
+    ColIndex cols() const { assert(_ncols > 0); return _ncols; }
 
 private:
     ColIndex _ncols;
@@ -248,7 +269,12 @@ public:
 		T, FixedRowArrayKey, AlignBytes, OwnPtr> Super;
     enum { Cols = NumCols };
 
+    static_assert(NumCols > 0, "NumCols must be > 0");
+
     // ------------------------ ctors
+
+    FixedRowArray() = default;
+
     FixedRowArray(RowIndex initial_rows):
         Super(initial_rows, NumCols)
     {
@@ -262,7 +288,8 @@ public:
     }
 
     FixedRowArray(const FixedRowArray& other) = delete;
-    FixedRowArray(const FixedRowArray&& other) = delete;
+    // FixedRowArray(const FixedRowArray&& other) = delete;
+    FixedRowArray(FixedRowArray&& rhs) noexcept: Super(std::move(rhs)) {}
 
     // ------------------------ accessors
     inline constexpr ColIndex cols() const { return NumCols; }
@@ -277,6 +304,7 @@ public:
 // ================================================================
 // RowStore
 // ================================================================
+// This code is unused but was working
 
 // stores vectors as (optionally) aligned rows in a matrix; lets us access a
 // vector and know that it's 32-byte aligned, which enables using

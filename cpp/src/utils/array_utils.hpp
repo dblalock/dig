@@ -644,9 +644,10 @@ template <class data_t1, class data_t2, class step_t=int8_t>
 static inline int32_t num_elements_in_range(data_t1 startVal,
 											data_t2 stopVal, step_t step)
 {
-	assertf( (stopVal - startVal) / step > 0,
-			"ERROR: range: invalid args min=%.3f, max=%.3f, step=%.3f\n",
-			(double)startVal, (double)stopVal, (double)step);
+	if (startVal == stopVal) { return 0; }
+	// assertf( (stopVal - startVal) / step > 0,
+	// 		"ERROR: range: invalid args min=%.3f, max=%.3f, step=%.3f\n",
+	// 		(double)startVal, (double)stopVal, (double)step);
 	return ceil((stopVal - startVal) / step);
 }
 
@@ -655,6 +656,8 @@ static inline void range_inplace(data_t0* data, data_t1 startVal,
 								 data_t2 stopVal, step_t step=1)
 {
 	int32_t len = num_elements_in_range(startVal, stopVal, step);
+	if (len < 1) { return; }
+
 	data[0] = startVal;
 	for (int32_t i = 1; i < len; i++) {
 		data[i] = data[i-1] + step;
@@ -669,6 +672,9 @@ static inline auto range_ar(data_t1 startVal, data_t2 stopVal, step_t step=1)
 {
 	typedef decltype(stopVal - startVal + step) out_t;
 	int32_t len = num_elements_in_range(startVal, stopVal, step);
+	// len = max(len, 1);
+	if (len < 1) { return nullptr; }
+
 	unique_ptr<out_t[]> data(new out_t[len]);
 	range_inplace(data, startVal, stopVal, step);
 	return data;
@@ -679,8 +685,11 @@ template <class data_t1, class data_t2, class step_t=int8_t>
 static inline auto range(data_t1 startVal, data_t2 stopVal, step_t step=1)
 	-> vector<decltype(stopVal - startVal + step)>
 {
+	using Scalar = decltype(stopVal - startVal + step);
 	int32_t len = num_elements_in_range(startVal, stopVal, step);
-	vector<decltype(stopVal - startVal + step)> data(len);
+	if (len < 1) { return vector<Scalar>{}; }
+
+	vector<Scalar> data(len);
 	range_inplace(data.data(), startVal, stopVal, step);
 	return data;
 }
@@ -691,7 +700,8 @@ static inline auto range(data_t1 startVal, data_t2 stopVal, step_t step=1)
 
 template <class data_t0, class data_t1>
 static inline void range_inplace(data_t0* data, data_t1 stopVal) {
-	int8_t step = stopVal >= 0 ? 1 : -1;
+	if (stopVal == 0) { return; }
+	int8_t step = stopVal > 0 ? 1 : -1;
 	return range_inplace(data, 0, stopVal, step);
 }
 
@@ -699,14 +709,16 @@ static inline void range_inplace(data_t0* data, data_t1 stopVal) {
  * range(startVal, stopVal, step), or MATLAB startVal:step:stopVal */
 template <class data_t>
 static inline unique_ptr<data_t> range_ar(data_t stopVal) {
-	int8_t step = stopVal >= 0 ? 1 : -1;
+	if (stopVal == 0) { return nullptr; }
+	int8_t step = stopVal > 0 ? 1 : -1;
 	return range_ar(0, stopVal, step);
 }
 /** Create an array containing a sequence of values; equivalent to Python
  * range(stopVal) */
 template <class data_t>
 static inline vector<data_t> range(data_t stopVal) {
-	int8_t step = stopVal >= 0 ? 1 : -1;
+	if (stopVal == 0) { return vector<data_t>{}; }
+	int8_t step = stopVal > 0 ? 1 : -1;
 	return range(0, stopVal, step);
 }
 

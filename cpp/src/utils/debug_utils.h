@@ -20,6 +20,9 @@
 	#include <string>
 	#include <cstdint>
 
+	#define PRINT(STR) \
+		std::cout << __func__ << "(): " STR << "\n";
+
 	#define PRINT_VAR(VAR) \
 		std::cout << __func__ << "(): " #VAR << ": " << VAR << "\n";
 

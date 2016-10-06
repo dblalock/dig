@@ -31,6 +31,9 @@
 // ------------------------ type traits macros
 	#include <type_traits>
 
+	// #define SELF_TYPE \
+	// 	typename std::remove_reference<decltype(*this)>::type
+
 	// put these in function bodies to statically assert that appropriate types
 	// have been passed in as template params; prefer using the below type
 	// constraint macros, however
@@ -59,6 +62,8 @@
 
 	#define REQUIRE_IS_NOT_A(BASE, T) \
 		typename = typename std::enable_if<!std::is_base_of<BASE, T>::value, T>::type
+
+		// REQUIRE_TRUE(!std::is_base_of<BASE, T>::value)
 
 	#define REQUIRE_INT(T) REQUIRE_TRAIT(is_integral, T)
 	#define REQUIRE_NUM(T) REQUIRE_TRAIT(is_arithmetic, T)

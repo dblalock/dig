@@ -76,7 +76,7 @@ auto kmeans(const MatrixT& X, assignment_t k)
         // break if assignments haven't changed (which yields same dist)
         if (current_dist == prev_dist) { break; }
         prev_dist = current_dist;
-        PRINT_VAR(prev_dist);
+        // PRINT_VAR(prev_dist);
     }
 
     return std::make_pair(centroids, assignments);

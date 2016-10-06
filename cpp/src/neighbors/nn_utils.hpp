@@ -190,7 +190,7 @@ template<template<class...> class Container,
 inline Neighbor::dist_t maybe_insert_neighbors(Container<Neighbor> neighbors_bsf,
     const Container2<Neighbor>& potential_neighbors)
 {
-    Neighbor::dist_t d_bsf;
+    Neighbor::dist_t d_bsf = kMaxDist;
     for (auto& n : potential_neighbors) {
         d_bsf = maybe_insert_neighbor(neighbors_bsf, n);
     }
