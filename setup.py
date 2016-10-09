@@ -58,32 +58,24 @@ print(srcFiles)
 
 # set the compiler flags so it'll build on different platforms (feel free
 # to file a  pull request with a fix if it doesn't work on yours)
+extra_args = ['-std=c++14', '-fno-rtti', '-stdlib=libc++']
 if sys.platform == 'darwin':
-    # by default use clang++ as this is most likely to have c++11 support
-    # on OSX
-    if "CC" not in os.environ or os.environ["CC"] == "":
-        os.environ["CC"] = "clang++"
-        # we need to set the min os x version for clang to be okay with
-        # letting us use c++11; also, we don't use dynamic_cast<>, so
-        # we can compile without RTTI to avoid its overhead
-        extra_args = ["-stdlib=libc++",
-          "-mmacosx-version-min=10.7","-fno-rtti",
-          "-std=c++0x"]  # c++11
-          # "-std=c++1y"]   # c++14
-else: # only tested on travis ci linux servers
-    os.environ["CC"] = "g++" # force compiling c as c++
-    extra_args = ['-std=c++0x','-fno-rtti']
+    extra_args.append('-mmacosx-version-min=10.9')
+    os.environ['LDFLAGS'] = '-mmacosx-version-min=10.9 -stdlib=libc++'
+
+os.environ["CC"] = "g++"  # force compiling c as c++
 
 # inplace extension module
-nativeExt = Extension("_dig", # must match cpp header name with leading _
-                  srcFiles,
-                  define_macros=[('NDEBUG', '1')],
-                  include_dirs=includeDirs,
-                  # swig_opts=['-c++', '-modern'],
-                  swig_opts=['-c++'],
-                  extra_compile_args=extra_args
-                  # extra_link_args=['-stdlib=libc++'],
-                  )
+nativeExt = Extension("_dig",  # must match cpp header name with leading _
+                      srcFiles,
+                      define_macros=[('NDEBUG', '1')],
+                      include_dirs=includeDirs,
+                      # swig_opts=['-c++', '-modern'],
+                      swig_opts=['-c++'],
+                      extra_compile_args=extra_args
+                      # extra_link_args=['-stdlib=libc++'],
+                      )
+
 
 # ================================ Python library
 
@@ -126,7 +118,8 @@ setup(
     license='BSD',
     description='A time series data mining library',
     long_description='%s\n%s' % (
-        re.compile('^.. start-badges.*^.. end-badges', re.M | re.S).sub('', read('README.rst')),
+        re.compile('^.. start-badges.*^.. end-badges', re.M | re.S).sub(
+            '', read('README.rst')),
         re.sub(':[a-z]+:`~?(.*?)`', r'``\1``', read('CHANGELOG.rst'))
     ),
     author='Davis Blalock',
@@ -140,7 +133,8 @@ setup(
     include_package_data=True,
     zip_safe=False,
     classifiers=[
-        # complete classifier list: http://pypi.python.org/pypi?%3Aaction=list_classifiers
+        # complete classifier list:
+        # http://pypi.python.org/pypi?%3Aaction=list_classifiers
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
@@ -169,7 +163,7 @@ setup(
     install_requires=[
         'scons>=2.3',
         'numpy',
-        'sphinx_rtd_theme' # for docs
+        'sphinx_rtd_theme'  # for docs
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
     ],
     extras_require={
