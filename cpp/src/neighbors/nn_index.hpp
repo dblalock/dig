@@ -764,11 +764,11 @@ protected:
 private:
     RowMatrixType _centroids;
     // std::vector<InnerIndex> _indexes;
-    std::unique_ptr<InnerIndex[]> _indexes;
     // the fields below are storage to avoid doing allocs for each query
     // XXX: shared storage makes this class not remotely thread safe
     // std::vector<CentroidIndex> _order;
     std::vector<CentroidIndex> _order;
+    std::unique_ptr<InnerIndex[]> _indexes;
     ColVector<Scalar> _centroid_dists;
     std::vector<std::vector<CentroidIndex> > _idxs_for_centroids;
     ColMatrix<Scalar> _queries_storage;

@@ -30,19 +30,6 @@ double swigArrayTest(const double* x, int len) {
 	return sum;
 }
 
-
-
-// static inline short 	diff(short x, short y) { 	return abs(x - y);  }
-// static inline int 		diff(int x, int y) { 		return abs(x - y);  }
-// static inline float 	diff(float x, float y) { 	return fabs(x - y); }
-// static inline double 	diff(double x, double y) { 	return fabs(x - y); }
-
-// template <class data_t>
-// static inline data_t diff_sq(data_t x, data_t y) {
-// 	data_t diff = x - y;
-// 	return diff * diff;
-// }
-
 // ================================================================
 // Core distance functions		//TODO add stride to these
 // ================================================================
