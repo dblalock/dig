@@ -17,6 +17,7 @@
 #include "array_utils.hpp"
 #include "neighbors.hpp"
 
+#include "Euclidean.hpp" // just for max_dist<>
 
 // TODO just code brute force NeighborDB_L2 here using Eigen and give no
 // craps about integrating with array_utils or anything
@@ -45,8 +46,10 @@ static const int16_t kInvalidIdx = -1;
 
 namespace nn {
 
-typedef int64_t idx_t;
-
+namespace {
+using neighbor_dist_t = typename Neighbor::dist_t;
+static constexpr neighbor_dist_t kMaxDist = dist::max_dist<neighbor_dist_t>();
+}
 // wrapper subclasses to allow only specifying type
 // template<class T, int Dim1=Dynamic, int Dim2=Dynamic>
 // class MatrixX: public Matrix<T, Dynamic, Dynamic> {};
@@ -57,7 +60,7 @@ typedef int64_t idx_t;
 // ------------------------------------------------ Preprocessing
 
 template<class T, class IdxT>
-void reorder_query(const T* RESTRICT q, const IdxT* order, idx_t len,
+inline void reorder_query(const T* RESTRICT q, const IdxT* order, idx_t len,
 	T* RESTRICT out)
 {
     for(idx_t i = 0; i < len; i++) {
@@ -65,13 +68,13 @@ void reorder_query(const T* RESTRICT q, const IdxT* order, idx_t len,
     }
 }
 template<class VectorT1, class VectorT2>
-void reorder_query(const VectorT1& q, const VectorT2& order_idxs,
+inline void reorder_query(const VectorT1& q, const VectorT2& order_idxs,
     typename VectorT1::Scalar* out)
 {
     reorder_query(q.data(), order_idxs.data(), order_idxs.size(), out);
 }
 template<class RowMatrixT, class VectorT, class RowMatrixT2>
-void reorder_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
+inline void reorder_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
     const RowMatrixT2& out)
 {
     for (idx_t i = 0; i < queries.rows(); i++) {
@@ -80,7 +83,7 @@ void reorder_query_batch(const RowMatrixT& queries, const VectorT& order_idxs,
 }
 
 template<class IdxT=int32_t, class MatrixT=char>
-std::vector<IdxT> order_col_variance(const MatrixT& X) {
+inline std::vector<IdxT> order_col_variance(const MatrixT& X) {
 	using Scalar = typename MatrixT::Scalar;
 	// using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::Rowmajor>;
 
@@ -141,7 +144,7 @@ static inline void aligned_free(T* p) {
 // ------------------------------------------------ neighbor munging
 
 template<template<class...> class Container>
-void sort_neighbors_ascending_distance(Container<Neighbor>& neighbors) {
+inline void sort_neighbors_ascending_distance(Container<Neighbor>& neighbors) {
     std::sort(std::begin(neighbors), std::end(neighbors),
         [](const Neighbor& a, const Neighbor& b) -> bool
         {
@@ -157,7 +160,7 @@ void sort_neighbors_ascending_distance(Container<Neighbor>& neighbors) {
  * Returns the distance to the last (farthest) neighbor after possible insertion
  */
 template<template<class...> class Container>
-inline Neighbor::dist_t maybe_insert_neighbor(
+inline neighbor_dist_t maybe_insert_neighbor(
 	Container<Neighbor>& neighbors_bsf, Neighbor newNeighbor)
 {
     assert(neighbors_bsf.size() > 0);
@@ -172,6 +175,7 @@ inline Neighbor::dist_t maybe_insert_neighbor(
     while (i > 0 && neighbors_bsf[i-1].dist > dist) {
         // swap new and previous neighbor
         Neighbor tmp = neighbors_bsf[i-1];
+
         neighbors_bsf[i-1] = neighbors_bsf[i];
         neighbors_bsf[i] = tmp;
         i--;
@@ -179,7 +183,7 @@ inline Neighbor::dist_t maybe_insert_neighbor(
     return neighbors_bsf[len - 1].dist;
 }
 template<template<class...> class Container>
-inline Neighbor::dist_t maybe_insert_neighbor(Container<Neighbor> neighbors_bsf,
+inline neighbor_dist_t maybe_insert_neighbor(Container<Neighbor>& neighbors_bsf,
     double dist, typename Neighbor::idx_t idx)
 {
     return maybe_insert_neighbor(neighbors_bsf, {.dist = dist, .idx = idx});
@@ -187,10 +191,10 @@ inline Neighbor::dist_t maybe_insert_neighbor(Container<Neighbor> neighbors_bsf,
 
 template<template<class...> class Container,
     template<class...> class Container2>
-inline Neighbor::dist_t maybe_insert_neighbors(Container<Neighbor> neighbors_bsf,
+inline neighbor_dist_t maybe_insert_neighbors(Container<Neighbor>& neighbors_bsf,
     const Container2<Neighbor>& potential_neighbors)
 {
-    Neighbor::dist_t d_bsf = kMaxDist;
+    neighbor_dist_t d_bsf = kMaxDist;
     for (auto& n : potential_neighbors) {
         d_bsf = maybe_insert_neighbor(neighbors_bsf, n);
     }
@@ -199,8 +203,9 @@ inline Neighbor::dist_t maybe_insert_neighbors(Container<Neighbor> neighbors_bsf
 
 
 template<class T>
-vector<Neighbor> knn_from_dists(const T* dists, size_t len, size_t k) {
+inline vector<Neighbor> knn_from_dists(const T* dists, size_t len, size_t k) {
     assert(k > 0);
+    assert(len > 0);
     k = ar::min(k, len);
     vector<Neighbor> ret(k); // warning: populates it with k 0s
     for (idx_t i = 0; i < k; i++) {
@@ -214,18 +219,18 @@ vector<Neighbor> knn_from_dists(const T* dists, size_t len, size_t k) {
 }
 
 template<class T, class R>
-vector<Neighbor> neighbors_in_radius(const T* dists, size_t len, R radius_sq) {
+inline vector<Neighbor> neighbors_in_radius(const T* dists, size_t len, R radius_sq) {
     vector<Neighbor> neighbors;
     for (idx_t i = 0; i < len; i++) {
-        auto dist = dists(i);
-        if (dists(i) <= radius_sq) {
-            neighbors.emplace_back(dist, i);
+        auto dist = dists[i];
+        if (dists[i] <= radius_sq) {
+			neighbors.emplace_back(Neighbor{dist, i});
         }
     }
     return neighbors;
 }
 
-vector<vector<idx_t> > idxs_from_nested_neighbors(
+inline vector<vector<idx_t> > idxs_from_nested_neighbors(
     const vector<vector<Neighbor> >& neighbors)
 {
     return map([](const vector<Neighbor>& inner_neighbors) -> std::vector<idx_t> {

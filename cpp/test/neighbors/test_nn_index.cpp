@@ -97,10 +97,8 @@ vector<Neighbor> knn_simple(const MatrixT& X, const VectorT& q, int k) {
 	nn::sort_neighbors_ascending_distance(trueKnn);
 
 	typename MatrixT::Scalar d_bsf = INFINITY;
-	for (int32_t i = 0; i < X.rows(); i++) {
-//		double dist = dist_sq(X.row(i).data(), q.data(), q.size());
+	for (int32_t i = k; i < X.rows(); i++) {
 		auto dist = dist::dist_sq(X.row(i), q);
-		trueKnn.push_back(Neighbor{.idx = i, .dist = dist});
 		nn::maybe_insert_neighbor(trueKnn, dist, i);
 	}
 	return trueKnn;
@@ -123,10 +121,29 @@ void _test_index_with_query(MatrixT& X, IndexT& index,
 		CAPTURE(trueNN.dist);
 		REQUIRE_NEIGHBORS_SAME(nn, trueNN);
 
-		for (int k = 1; k < 10; k += 2) {
+		auto nn_idx = index.onenn_idxs(q);
+		auto trueNN_idx = trueNN.idx;
+		CAPTURE(nn_idx);
+		CAPTURE(trueNN_idx);
+		REQUIRE(nn_idx == trueNN_idx);
+
+		for (int k = 1; k <= 5; k += 2) {
 			auto knn = index.knn(q, k);
 			auto trueKnn = knn_simple(X, q, k);
 			REQUIRE_NEIGHBORS_SAME(nn, trueNN);
+
+			auto knn_idxs = index.knn_idxs(q, k);
+			auto trueKnn_idxs = ar::map([](const Neighbor& n) {
+				return n.idx;
+			}, trueKnn);
+			CAPTURE(k);
+			CAPTURE(knn[0].dist);
+			CAPTURE(knn[0].idx);
+			CAPTURE(trueKnn[0].dist);
+			CAPTURE(trueKnn[0].idx);
+			CAPTURE(ar::to_string(knn_idxs));
+			CAPTURE(ar::to_string(trueKnn_idxs));
+			REQUIRE(ar::all_eq(knn_idxs, trueKnn_idxs));
 		}
 	}
 }
@@ -165,14 +182,14 @@ TEST_CASE("print sizes", "tmp") {
 	printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
 }
 
-TEST_CASE("L2IndexBrute", "neighbors") {
-	_test_index<nn::L2IndexBrute<double> >();
-	_test_index<nn::L2IndexBrute<float> >();
-}
-TEST_CASE("L2IndexAbandon", "neighbors") {
-	_test_index<nn::L2IndexAbandon<double> >();
-	_test_index<nn::L2IndexAbandon<float> >();
-}
+// TEST_CASE("L2IndexBrute", "neighbors") {
+// 	_test_index<nn::L2IndexBrute<double> >();
+// 	_test_index<nn::L2IndexBrute<float> >();
+// }
+// TEST_CASE("L2IndexAbandon", "neighbors") {
+// 	_test_index<nn::L2IndexAbandon<double> >();
+// 	_test_index<nn::L2IndexAbandon<float> >();
+// }
 
 TEST_CASE("NNIndex_IdentityPreproc", "neighbors") {
 	using PreprocT = nn::IdentityPreproc;

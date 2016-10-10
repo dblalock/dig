@@ -12,6 +12,8 @@
 
 #include <vector>
 
+#include "macros.hpp"
+
 using Eigen::Map;
 using Eigen::Dynamic;
 using Eigen::RowMajor;
@@ -55,6 +57,12 @@ struct mat_product_traits {
 template<class MatrixT>
 struct mat_traits {
     using Scalar = typename MatrixT::Scalar;
+    using VectorT = Eigen::Matrix<Scalar, MatrixT::RowsAtCompileTime,
+		MatrixT::ColsAtCompileTime, MatrixT::IsRowMajor>;
+    using RowVectorT = Eigen::Matrix<Scalar, 1, Eigen::Dynamic,
+		Eigen::RowMajor>;
+	using ColVectorT = Eigen::Matrix<Scalar, 1, Eigen::Dynamic,
+		Eigen::ColMajor>;
     using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
         Eigen::RowMajor>;
 };

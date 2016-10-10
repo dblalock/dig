@@ -24,6 +24,7 @@ namespace internal {
     }
     template<class RowMatrixT> // doesn't have rows()
     idx_t _num_rows(const RowMatrixT& X, int64_t nrows_hint) {
+        assert(nrows_hint > 0);
         return nrows_hint;
     }
 
@@ -53,7 +54,7 @@ namespace brute {
     inline vector<Neighbor> radius(const RowMatrixT& X, const VectorT& query,
                                          float radius_sq)
     {
-        VectorT dists = dist::squared_dists_to_vector(X, query);
+        auto dists = dist::squared_dists_to_vector(X, query);
         return neighbors_in_radius(dists.data(), dists.size(), radius_sq);
     }
 
@@ -73,7 +74,7 @@ namespace brute {
     vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query,
                                size_t k)
     {
-		VectorT dists = dist::squared_dists_to_vector(X, query);
+		auto dists = dist::squared_dists_to_vector(X, query);
         return knn_from_dists(dists.data(), dists.size(), k);
     }
 
@@ -207,7 +208,7 @@ vector<Ret> radius(const RowMatrixT& X, const VectorT& query,
 
 // ------------------------ 1nn
 
-template<class RowMatrixT, class VectorT, class DistT=typename Neighbor::dist_t>
+template<class RowMatrixT, class VectorT, class DistT=neighbor_dist_t>
 Neighbor onenn(const RowMatrixT& X, const VectorT& query,
     DistT d_bsf=kMaxDist, idx_t nrows=-1)
 {
@@ -225,7 +226,7 @@ Neighbor onenn(const RowMatrixT& X, const VectorT& query,
 }
 
 // template<class RowMatrixT, class VectorT, class IdxVectorT,
-// 	class DistT=typename Neighbor::dist_t>
+// 	class DistT=neighbor_dist_t>
 // Neighbor onenn_order(const RowMatrixT& X,
 //     const VectorT& query_sorted, const IdxVectorT& order,
 //     DistT d_bsf=kMaxDist)
@@ -244,7 +245,7 @@ Neighbor onenn(const RowMatrixT& X, const VectorT& query,
 // }
 
 // template<class RowMatrixT, class VectorT1, class VectorT2, class IdxVectorT,
-//     class DistT=typename Neighbor::dist_t>
+//     class DistT=neighbor_dist_t>
 // Neighbor onenn_adaptive(const RowMatrixT& X, const VectorT1& query,
 //     const VectorT2& means, VectorT1& query_tmp, IdxVectorT& order_tmp,
 //     idx_t num_rows_thresh, DistT d_bsf=kMaxDist)
@@ -260,7 +261,7 @@ Neighbor onenn(const RowMatrixT& X, const VectorT& query,
 
 // ------------------------ knn
 
-template<class RowMatrixT, class VectorT, class DistT=typename Neighbor::dist_t>
+template<class RowMatrixT, class VectorT, class DistT=neighbor_dist_t>
 vector<Neighbor> knn(const RowMatrixT& X,
     const VectorT& query, int k, DistT d_bsf=kMaxDist, idx_t nrows=-1)
     // const VectorT& query, idx_t num_rows, int k, DistT d_bsf=kMaxDist)
@@ -275,7 +276,7 @@ vector<Neighbor> knn(const RowMatrixT& X,
 }
 
 // template<class RowMatrixT, class VectorT, class IdxVectorT,
-// 	class DistT=typename Neighbor::dist_t>
+// 	class DistT=neighbor_dist_t>
 // vector<Neighbor> knn_order(const RowMatrixT& X,
 //     const VectorT& query_sorted, const IdxVectorT& order,
 //     int k, DistT d_bsf=kMaxDist, idx_t nrows=-1)
@@ -292,7 +293,7 @@ vector<Neighbor> knn(const RowMatrixT& X,
 // }
 
 // template<class RowMatrixT, class VectorT1, class VectorT2, class IdxVectorT,
-//     class DistT=typename Neighbor::dist_t>
+//     class DistT=neighbor_dist_t>
 // vector<Neighbor> knn_adaptive(const RowMatrixT& X, const VectorT1& query,
 //     const VectorT2& means, VectorT1& query_tmp, IdxVectorT& order_tmp,
 //     idx_t num_rows_thresh, int k, DistT d_bsf=kMaxDist, idx_t nrows=-1)

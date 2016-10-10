@@ -286,7 +286,7 @@ public:
     }
 
     template<class RowMatrixT>
-    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, size_t k) {
+    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
         auto& queries_proc = Derived::preprocess_batch(queries);
         auto neighbors = Derived::_knn_batch(queries_proc, k);
         return Derived::postprocess(neighbors);
@@ -305,11 +305,11 @@ public:
     template<class VectorT>
     idx_t onenn_idxs(const VectorT& query, DistT d_max=kMaxDist) {
         auto neighbor = Derived::onenn(query);
-        return query.idx;
+        return neighbor.idx;
     }
 
     template<class VectorT>
-    vector<idx_t> knn_idxs(const VectorT& query, size_t k,
+    vector<idx_t> knn_idxs(const VectorT& query, int k,
         DistT d_max=kMaxDist)
     {
         auto neighbors = Derived::knn(query, k);

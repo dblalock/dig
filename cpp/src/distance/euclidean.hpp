@@ -18,6 +18,9 @@
 
 namespace dist {
 
+template<class T>
+constexpr T max_dist() { return std::numeric_limits<T>::max(); }
+
 // TODO only define kMaxDist in one place (also in neighbors.hpp)
 static constexpr float kMaxDist = std::numeric_limits<float>::max();
 using idx_t = int64_t;
@@ -27,7 +30,9 @@ using _infer = char;
 
 template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
     class VectorT=_infer>
-inline VectorT squared_dists_to_vector(const MatrixT& X, const VectorT& v) {
+inline auto squared_dists_to_vector(const MatrixT& X, const VectorT& v)
+	-> typename mat_traits<VectorT>::VectorT
+{
     return (X.rowwise() - v).rowwise().squaredNorm();
 }
 template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
