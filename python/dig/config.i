@@ -55,17 +55,17 @@ using Eigen::Matrix;
 using Eigen::Dynamic;
 using Eigen::RowMajor;
 
-typedef Matrix<double, Dynamic, Dynamic> FMatrix;
-typedef Matrix<double, Dynamic, Dynamic, RowMajor> CMatrix;
-%eigen_typemaps(FMatrix);
-%eigen_typemaps(CMatrix);
+typedef Matrix<double, Dynamic, Dynamic> ColMatrixXd;
+typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+%eigen_typemaps(ColMatrixXd);
+%eigen_typemaps(RowMatrixXd);
 %eigen_typemaps(MatrixXd);
 %eigen_typemaps(VectorXd);
 %eigen_typemaps(RowVectorXd);
-typedef Array<double, Dynamic, Dynamic> FArray;
-typedef Array<double, Dynamic, Dynamic, RowMajor> CArray;
-%eigen_typemaps(FArray);
-%eigen_typemaps(CArray);
+typedef Array<double, Dynamic, Dynamic> ColArrayXXd;
+typedef Array<double, Dynamic, Dynamic, RowMajor> RowArrayXXd;
+%eigen_typemaps(ColArrayXXd);
+%eigen_typemaps(RowArrayXXd);
 %eigen_typemaps(ArrayXd);  // 1d array
 %eigen_typemaps(ArrayXXd); // 2d array
 

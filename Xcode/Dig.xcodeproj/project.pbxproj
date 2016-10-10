@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		721403B61D8B535100F8658F /* test_nn_index.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 721403B51D8B535100F8658F /* test_nn_index.cpp */; };
+		721FC9CE1DAC00AE00EF824F /* neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 721FC9CD1DAC00AE00EF824F /* neighbors.cpp */; };
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
@@ -51,6 +52,7 @@
 		721403B91D8B5AD800F8658F /* nn_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_utils.hpp; sourceTree = "<group>"; };
 		721403BA1D8B5AF000F8658F /* nn_search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = nn_search.hpp; sourceTree = "<group>"; };
 		721403BB1D90642900F8658F /* flat_store.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = flat_store.hpp; sourceTree = "<group>"; };
+		721FC9CD1DAC00AE00EF824F /* neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = neighbors.cpp; sourceTree = "<group>"; };
 		72247DAA1C600AA300B74A64 /* test_tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_tree.cpp; sourceTree = "<group>"; };
 		72247DAC1C6FE64F00B74A64 /* intmap.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = intmap.hpp; sourceTree = "<group>"; };
 		72247DAD1C71087F00B74A64 /* test_intmap.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_intmap.cpp; sourceTree = "<group>"; };
@@ -1196,6 +1198,7 @@
 		72C419401C5337AD004689A2 /* neighbors */ = {
 			isa = PBXGroup;
 			children = (
+				721FC9CD1DAC00AE00EF824F /* neighbors.cpp */,
 				721403BA1D8B5AF000F8658F /* nn_search.hpp */,
 				721403BB1D90642900F8658F /* flat_store.hpp */,
 				721403B81D8B5AD800F8658F /* nn_index.hpp */,
@@ -1375,6 +1378,7 @@
 				72C419661C5337AD004689A2 /* test_dtw.cpp in Sources */,
 				728F85E01C55B565004E4AA0 /* tree.cpp in Sources */,
 				72C419691C5337AD004689A2 /* testing_utils.cpp in Sources */,
+				721FC9CE1DAC00AE00EF824F /* neighbors.cpp in Sources */,
 				72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */,
 				72C419631C5337AD004689A2 /* array_utils.c in Sources */,
 				72B610E91CA5B3E1008B50D3 /* test_filter.cpp in Sources */,

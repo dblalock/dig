@@ -14,31 +14,58 @@
 
 #include "Dense"
 
-//#include "type_defs.h"
-
-//typedef int32_t length_t;
-
 using std::vector;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
-static constexpr double kMaxDist = std::numeric_limits<double>::max();
-
+namespace nn {
+	using idx_t = int64_t;
+}
 
 double swigEigenTest(double* X, int m, int n);
 
 // ------------------------------------------------ Neighbor
 typedef struct Neighbor {
 	typedef double dist_t;
-	typedef int64_t idx_t;
-	
+	typedef nn::idx_t idx_t;
+
 	double dist;
-	int64_t idx;
+	idx_t idx;
 } Neighbor;
 
 // ================================================================
 // Classes
 // ================================================================
+
+// ------------------------------------------------ MatmulIndex
+
+class MatmulIndex { // TODO also have MatmulIndexF for floats
+private:
+	class Impl;
+	std::unique_ptr<Impl> _ths; // pimpl idiom
+public:
+	typedef MatmulIndex SelfT;
+
+	// ------------------------ lifecycle
+	MatmulIndex(const SelfT& other) = delete;
+	SelfT& operator=(const SelfT&) = delete;
+	~MatmulIndex();
+
+	MatmulIndex(const MatrixXd& X);
+	MatmulIndex(double* X, int m, int n);
+
+	// ------------------------ querying
+	vector<int64_t> radius(const VectorXd& q, double radiusL2);
+	vector<int64_t> knn(const VectorXd& q, int k);
+	// TODO use RowMatrixXd
+	// vector<int32_t> radius_batch(const VectorXd& q, double radiusL2);
+	// vector<int32_t> knn_batch(const VectorXd& q, int k);
+
+	// ------------------------ stats
+	double getIndexConstructionTimeMs();
+	double getQueryTimeMs();
+};
+
 
 // ------------------------------------------------ BinTree
 
