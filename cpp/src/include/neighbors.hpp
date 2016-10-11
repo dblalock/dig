@@ -47,69 +47,43 @@ typedef struct Neighbor {
 
 // ------------------------------------------------ MatmulIndex
 
+#define NO_COPYING_AND_DEFAULT_DTOR(NAME) \
+	NAME(const NAME & other) = delete; \
+	NAME & operator=(const NAME &) = delete; \
+	~NAME();
 
+#define DECLARE_INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
+	NAME(const MatrixT & X); \
+	NAME(Scalar* X, int m, int n); \
+	NO_COPYING_AND_DEFAULT_DTOR(NAME) \
 
-// // NOTE: have to use typedef instead of using or SWIG gets unhappy
-// #define DECLARE_INDEX_CLASS(NAME, SCALAR_T) \
-	// typedef SCALAR_T Scalar; \
-	// typedef typename scalar_traits<Scalar>::ColMatrixT MatrixT; \
- //    typedef typename scalar_traits<Scalar>::ColVectorT VectorT; \
- //    typedef typename scalar_traits<Scalar>::RowMatrixT RowMatrixT; \
+#define DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
+	vector<int64_t> radius(const VectorT & q, double radiusL2); \
+	vector<int64_t> knn(const VectorT & q, int k); \
+	MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2); \
+	MatrixXi knn_batch(const RowMatrixT & queries, int k);
+
+#define DECLARE_INDEX_STATS_FUNCS \
+	double getIndexConstructionTimeMs(); \
+	double getQueryTimeMs();
+
+#define DECLARE_INDEX_PIMPL(NAME) \
+private: \
+	class Impl; \
+	std::unique_ptr<Impl> _this; \
 
 // NOTE: we can't just compute VectorT, etc, based on Scalar because it
 // makes SWIG unhappy; compiles but thinks args have wrong types at runtime
 #define DECLARE_INDEX_CLASS(NAME, Scalar, VectorT, MatrixT, RowMatrixT) \
 class NAME { \
 public: \
-	NAME(const NAME & other) = delete; \
-	NAME & operator=(const NAME &) = delete; \
-	~NAME(); \
-\
-	NAME(const MatrixT & X); \
-	NAME(Scalar* X, int m, int n); \
-\
-	vector<int64_t> radius(const VectorT & q, double radiusL2); \
-	vector<int64_t> knn(const VectorT & q, int k); \
-	MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2); \
-	MatrixXi knn_batch(const RowMatrixT & queries, int k); \
-\
-	double getIndexConstructionTimeMs(); \
-	double getQueryTimeMs(); \
-private: \
-	class Impl; \
-	std::unique_ptr<Impl> _this; \
+	DECLARE_INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
+	DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
+	DECLARE_INDEX_STATS_FUNCS \
+	DECLARE_INDEX_PIMPL(NAME) \
 };
 
-// class MatmulIndex {
-// private:
-//     class Impl;
-//     std::unique_ptr<Impl> _this;
-// public:
-//     using Scalar = double;
-//     using MatrixT = typename scalar_traits<Scalar>::ColMatrixT;
-//     using VectorT = typename scalar_traits<Scalar>::ColVectorT;
-//     using RowMatrixT = typename scalar_traits<Scalar>::RowMatrixT;
-
-//     MatmulIndex(const MatmulIndex& other) = delete;
-//     MatmulIndex& operator=(const MatmulIndex&) = delete;
-//     ~MatmulIndex();
-
-//     MatmulIndex(const MatrixT& X);
-//     MatmulIndex(Scalar* X, int m, int n);
-
-//     vector<int64_t> radius(const VectorT & q, double radiusL2);
-//     vector<int64_t> knn(const VectorT & q, int k);
-//     MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2);
-//     MatrixXi knn_batch(const RowMatrixT & queries, int k);
-
-//     double getIndexConstructionTimeMs();
-//     double getQueryTimeMs();
-// };
-
 DECLARE_INDEX_CLASS(MatmulIndex, double, VectorXd, MatrixXd, RowMatrixXd);
-// DECLARE_INDEX_CLASS(MatmulIndex, double);
-
-// DECLARE_INDEX_CLASS(MatmulIndexF, float, VectorXf, MatrixXf, RowMatrixXf);
 
 // ------------------------------------------------ BinTree
 
