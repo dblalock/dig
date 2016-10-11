@@ -54,14 +54,29 @@ import_array();
 using Eigen::Matrix;
 using Eigen::Dynamic;
 using Eigen::RowMajor;
+using Eigen::MatrixXi;
 
+// XXX these have to match typedefs in code exactly
+// TODO just include a shared header with these in it?
 typedef Matrix<double, Dynamic, Dynamic> ColMatrixXd;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+typedef Matrix<double, Dynamic, Dynamic> ColMatrixXf;
+typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXf;
+typedef Matrix<long long, Dynamic, Dynamic> ColMatrixXi;
+typedef Matrix<long long, Dynamic, Dynamic, RowMajor> RowMatrixXi;
+
 %eigen_typemaps(ColMatrixXd);
 %eigen_typemaps(RowMatrixXd);
+%eigen_typemaps(ColMatrixXf);
+%eigen_typemaps(RowMatrixXf);
+%eigen_typemaps(ColMatrixXi);
+%eigen_typemaps(RowMatrixXi);
+
 %eigen_typemaps(MatrixXd);
 %eigen_typemaps(VectorXd);
 %eigen_typemaps(RowVectorXd);
+%eigen_typemaps(MatrixXi);
+
 typedef Array<double, Dynamic, Dynamic> ColArrayXXd;
 typedef Array<double, Dynamic, Dynamic, RowMajor> RowArrayXXd;
 %eigen_typemaps(ColArrayXXd);

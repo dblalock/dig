@@ -56,11 +56,38 @@
 
 %fragment("Eigen_Fragments", "header",  fragment="NumPy_Fragments")
 %{
-  template <typename T> int NumPyType() {return -1;};
+  // these funcs define the mapping between c types and numpy types;
+  // add more as needed
+  template <typename T> int NumPyType() { return -1; };
+
+  template<> int NumPyType<float>() {return NPY_FLOAT;};
+  template<> int NumPyType<double>() {return NPY_DOUBLE;};
+
+  template<> int NumPyType<signed char>() {return NPY_BYTE;};
+  template<> int NumPyType<unsigned char>() {return NPY_UBYTE;};
+  template<> int NumPyType<short>() {return NPY_INT;};
+  template<> int NumPyType<unsigned short>() {return NPY_UINT;};
+  template<> int NumPyType<int>() {return NPY_INT;};
+  template<> int NumPyType<unsigned int>() {return NPY_UINT;};
+  template<> int NumPyType<long>() {return NPY_LONG;};
+  template<> int NumPyType<unsigned long>() {return NPY_ULONG;};
+  template<> int NumPyType<long long>() {return NPY_LONGLONG;};
+  template<> int NumPyType<unsigned long long>() {return NPY_ULONGLONG;};
+
+  // template<> int NumPyType<int8_t>() {return NPY_BYTE;};
+  // template<> int NumPyType<int16_t>() {return NPY_INT;};
+  // template<> int NumPyType<int32_t>() {return NPY_INT;};
+  // template<> int NumPyType<int64_t>() {return NPY_LONGLONG;};
+  // template<> int NumPyType<uint8_t>() {return NPY_BYTE;};
+  // template<> int NumPyType<uint16_t>() {return NPY_UINT;};
+  // template<> int NumPyType<uint32_t>() {return NPY_UINT;};
+  // template<> int NumPyType<uint64_t>() {return NPY_ULONGLONG;};
+
 
   template <class Derived>
   bool ConvertFromNumpyToEigenMatrix(Eigen::DenseBase<Derived>* out, PyObject* in)
   {
+    typedef typename Derived::Scalar Scalar;
     int rows = 0;
     int cols = 0;
     // Check object type
@@ -70,7 +97,7 @@
       return false;
     }
     // Check data type
-    else if (array_type(in) != NumPyType<typename Derived::Scalar>())
+    else if (array_type(in) != NumPyType<Scalar>())
     {
       PyErr_SetString(PyExc_ValueError, "Type mismatch between NumPy and Eigen objects.");
       return false;
@@ -120,7 +147,7 @@
       return false;
     }
     out->derived().setZero(rows, cols);
-    typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(temp));
+    Scalar* data = static_cast<Scalar*>(array_data(temp));
     if (array_is_fortran(temp)) { // column-major
       for (int j = 0; j != cols; ++j) {
         for (int i = 0; i != rows; ++i) {
@@ -142,6 +169,8 @@
   template <class Derived>
   bool CopyFromEigenToNumPyMatrix(PyObject* out, Eigen::DenseBase<Derived>* in)
   {
+    typedef typename Derived::Scalar Scalar;
+    int numpy_scalar_t = NumPyType<Scalar>();
     int rows = 0;
     int cols = 0;
     // Check object type
@@ -151,7 +180,7 @@
       return false;
     }
     // Check data type
-    else if (array_type(out) != NumPyType<typename Derived::Scalar>())
+    else if (array_type(out) != numpy_scalar_t)
     {
       PyErr_SetString(PyExc_ValueError, "Type mismatch between NumPy and Eigen objects.");
       return false;
@@ -159,7 +188,7 @@
     // Check dimensions
     else if (array_numdims(out) > 2)
     {
-      PyErr_SetString(PyExc_ValueError, "Eigen only support 1D or 2D array.");
+      PyErr_SetString(PyExc_ValueError, "Eigen only supports 1D or 2D array.");
       return false;
     }
     else if (array_numdims(out) == 1)
@@ -198,7 +227,7 @@
       return false;
     }
 
-    typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(out));
+    Scalar* data = static_cast<Scalar*>(array_data(out));
     if (array_is_fortran(out)) { // column-major
       for (int j = 0; j != in->cols(); ++j) {
         for (int i = 0; i != in->rows(); ++i) {
@@ -218,26 +247,34 @@
   template <class Derived>
   bool ConvertFromEigenToNumPyMatrix(PyObject** out, Eigen::DenseBase<Derived>* in)
   {
+    typedef typename Derived::Scalar Scalar;
+    int numpy_scalar_t = NumPyType<Scalar>();
+
+    if (numpy_scalar_t == -1) {
+      PyErr_SetString(PyExc_ValueError, "No numpy type known for Eigen object's scalar type");
+      return false;
+    }
+
     // vector (1D)
-    if (in->cols() == 1) {
-      npy_intp dims[1] = {in->rows()};
-      *out = PyArray_SimpleNew(1, dims, NumPyType<typename Derived::Scalar>());
+    if (in->cols() == 1 || in->rows() == 1) {
+      npy_intp dims[1] = {in->size()};
+      *out = PyArray_SimpleNew(1, dims, numpy_scalar_t);
       if (!out) {
         return false;
       }
-      typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(*out));
+      Scalar* data = static_cast<Scalar*>(array_data(*out));
       for (int i = 0; i != dims[0]; ++i) {
-        data[i] = in->coeff(i, 1);
+        data[i] = in->coeff(i);
       }
       return true;
     }
     // matrix (2D)
     npy_intp dims[2] = {in->rows(), in->cols()};
-    *out = PyArray_SimpleNew(2, dims, NumPyType<typename Derived::Scalar>());
+    *out = PyArray_SimpleNew(2, dims, numpy_scalar_t);
     if (!out) {
       return false;
     }
-    typename Derived::Scalar* data = static_cast<typename Derived::Scalar*>(array_data(*out));
+    Scalar* data = static_cast<Scalar*>(array_data(*out));
     npy_intp rows = dims[0];
     npy_intp cols = dims[1];
     if (array_is_fortran(out)) { // column-major
@@ -255,13 +292,6 @@
     }
     return true;
   };
-
-  // these funcs define the mapping between c types and numpy types;
-  // add more as needed
-  template<> int NumPyType<double>() {return NPY_DOUBLE;};
-  template<> int NumPyType<float>() {return NPY_FLOAT;};
-  template<> int NumPyType<int>() {return NPY_INT;};
-  template<> int NumPyType<long>() {return NPY_LONG;};
 %}
 
 // ----------------------------------------------------------------------------

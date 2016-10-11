@@ -17,6 +17,12 @@
 using std::vector;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
+using Eigen::MatrixXi;
+
+typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+	Eigen::RowMajor> RowMatrixXd;
+// typedef Eigen::Matrix<long long, Eigen::Dynamic, Eigen::Dynamic,
+// 	Eigen::RowMajor> MatrixXi;
 
 namespace nn {
 	using idx_t = int64_t;
@@ -57,9 +63,8 @@ public:
 	// ------------------------ querying
 	vector<int64_t> radius(const VectorXd& q, double radiusL2);
 	vector<int64_t> knn(const VectorXd& q, int k);
-	// TODO use RowMatrixXd
-	// vector<int32_t> radius_batch(const VectorXd& q, double radiusL2);
-	// vector<int32_t> knn_batch(const VectorXd& q, int k);
+	MatrixXi radius_batch(const RowMatrixXd& queries, double radiusL2);
+	MatrixXi knn_batch(const RowMatrixXd& queries, int k);
 
 	// ------------------------ stats
 	double getIndexConstructionTimeMs();

@@ -16,6 +16,7 @@
 
 #include "cluster.hpp"
 #include "nn_search.hpp"
+#include "nn_utils.hpp"
 #include "array_utils.hpp"
 #include "eigen_utils.hpp"
 #include "flat_store.hpp"
@@ -273,9 +274,9 @@ public:
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
                                            DistT d_max)
     {
-        auto& queries_proc = Derived::preprocess_batch(queries);
-        auto neighbors = Derived::_radius_batch(queries_proc, d_max);
-        return Derived::postprocess(neighbors);
+        auto& queries_proc = _derived()->preprocess_batch(queries);
+        auto neighbors = _derived()->_radius_batch(queries_proc, d_max);
+        return _derived()->postprocess(neighbors);
     }
 
     template<class RowMatrixT>
@@ -287,9 +288,9 @@ public:
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
-        auto& queries_proc = Derived::preprocess_batch(queries);
-        auto neighbors = Derived::_knn_batch(queries_proc, k);
-        return Derived::postprocess(neighbors);
+        auto& queries_proc = _derived()->preprocess_batch(queries);
+        auto neighbors = _derived()->_knn_batch(queries_proc, k);
+        return _derived()->postprocess(neighbors);
     }
 
     // ------------------------------------------------ return only idxs
@@ -337,9 +338,9 @@ public:
     }
 
     template<class RowMatrixT>
-    vector<vector<idx_t> > knn_batch_idxs(const RowMatrixT& queries, size_t k) {
+    vector<vector<idx_t> > knn_batch_idxs(const RowMatrixT& queries, int k) {
         auto neighbors = Derived::knn_batch(queries, k);
-        return _idxs_from_nested_neighbors(neighbors);
+        return idxs_from_nested_neighbors(neighbors);
     }
 
 protected: // default impls for derived

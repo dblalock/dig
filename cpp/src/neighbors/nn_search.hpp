@@ -80,9 +80,9 @@ namespace brute {
 
     // ------------------------ batch of queries
 
-    template<class RowMatrixT, class ColVectorT>
+    template<class RowMatrixT, class RowMatrixT2, class ColVectorT>
     inline vector<vector<Neighbor> > radius_batch(const RowMatrixT& X,
-        const RowMatrixT& queries, float radius_sq, const ColVectorT& rowNorms)
+        const RowMatrixT2& queries, float radius_sq, const ColVectorT& rowNorms)
     {
         auto dists = dist::squared_dists_to_vectors(X, queries, rowNorms);
         assert(queries.rows() == dists.cols());
@@ -96,9 +96,9 @@ namespace brute {
         return ret;
     }
 
-    template<class RowMatrixT, class ColVectorT>
+    template<class RowMatrixT, class RowMatrixT2, class ColVectorT>
     inline vector<vector<Neighbor> > knn_batch(const RowMatrixT& X,
-        const RowMatrixT& queries, size_t k, const ColVectorT& rowNorms)
+        const RowMatrixT2& queries, size_t k, const ColVectorT& rowNorms)
     {
         auto dists = dist::squared_dists_to_vectors(X, queries, rowNorms);
         assert(queries.rows() == dists.cols());
@@ -111,7 +111,7 @@ namespace brute {
         return ret;
     }
 
-    template<class RowMatrixT, class ColVectorT>
+    template<class RowMatrixT, class RowMatrixT2, class ColVectorT>
     inline vector<Neighbor> onenn_batch(const RowMatrixT& X,
         const RowMatrixT& queries, const ColVectorT& rowNorms)
     {
