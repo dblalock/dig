@@ -13,10 +13,68 @@ def all_eq(x, y):
     return np.max(np.abs(x - y)) < .001
 
 
-def test_index(idx_func=dig.MatmulIndex):
+def sq_dists_to_vectors(X, queries, rowNorms=None, queryNorms=None):
+    Q = queries.shape[0]
+
+    if rowNorms is None:
+        rowNorms = np.sum(X * X, axis=1, keepdims=True)
+
+    t0 = time.clock()
+
+    if queryNorms is None:
+        queryNorms = np.sum(queries * queries, axis=1)
+
+    dotProds = np.dot(X, queries.T)
+    dists = (-2 * dotProds) + rowNorms + queryNorms
+
+    t_python = (time.clock() - t0) * 1000
+    print "-> python batch{} knn time\t= {:03} ({:.3}/query)".format(
+        Q, t_python, t_python / Q)
+
+    idxs_sorted = np.argsort(dists, axis=0)
+    return dists, idxs_sorted, t_python
+
+
+def test_knn_batch_query(index, queries, idxs_sorted, k, name):
+    Q = queries.shape[0]
+
+    nested_neighbors = index.knn_batch(queries, k)
+    true_knn = idxs_sorted[0:k, :].T
+    assert(all_eq(nested_neighbors, true_knn))
+
+    t_cpp = index.getQueryTimeMs()
+    print "-> {} batch{} {}nn time \t= {:03} ({:.3}/query)".format(
+        name, Q, k, t_cpp, t_cpp / Q)
+
+    return t_cpp
+
+
+def test_radius_batch_query(index, queries, dists, name, r2):
+    nested_neighbors = index.radius_batch(queries, r2)
+
+    for q in range(queries.shape[0]):
+        # pull out idxs > 0 for this query in full dist mat
+        query_dists = dists[:, q]
+        true_idxs = np.where(query_dists < r2)[0]
+
+        # find idxs > -1 in row for this query
+        returned_idxs = nested_neighbors[q]
+        where_valid = np.where(returned_idxs >= 0)[0]
+        if len(where_valid):
+            returned_idxs = returned_idxs[where_valid]
+        else:
+            returned_idxs = np.array([])
+
+        # print "true_idxs:", true_idxs
+        # print "returned_idxs:", returned_idxs
+        assert(all_eq(returned_idxs, true_idxs))
+
+
+def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1):
     N = 100 * 1000
     D = 100
-    r2 = 1. * D
+    if r2 <= 0:
+        r2 = 1. * D
 
     # ------------------------ data and index construction
 
@@ -27,7 +85,7 @@ def test_index(idx_func=dig.MatmulIndex):
 
     index = idx_func(X)
     t = index.getIndexConstructionTimeMs()
-    print "index time: {}".format(t)
+    print "{} index time: {}".format(name, t)
 
     # ------------------------ dists for ground truth
 
@@ -35,7 +93,7 @@ def test_index(idx_func=dig.MatmulIndex):
     diffs = X - q
     trueDists = np.sum(diffs * diffs, axis=1)
     t_python = (time.clock() - t0) * 1000
-    print "-> brute force time\t= {}".format(t_python)
+    print "-> python full dists time\t= {}".format(t_python)
 
     # ------------------------------------------------ single query
 
@@ -50,7 +108,7 @@ def test_index(idx_func=dig.MatmulIndex):
     if len(trueNeighborIdxs < 100):
         print "neighborIdxs: ", neighborIdxs
         print "trueNeighborIdxs: ", trueNeighborIdxs
-    print "-> range query time\t= {}".format(t)
+    print "-> {} range query time\t= {}".format(name, t)
 
     assert(len(neighborIdxs) == len(trueNeighborIdxs))
     assert(all_eq(neighborIdxs, trueNeighborIdxs))
@@ -61,47 +119,28 @@ def test_index(idx_func=dig.MatmulIndex):
     t = index.getQueryTimeMs()
     trueNN10 = np.argsort(trueDists)[:10]
     # print "nn10, true nn10 = {}, {}".format(nn10, trueNN10)
-    print "-> knn time\t\t= {}".format(t)
+    print "-> {} knn time\t\t= {}".format(name, t)
     assert(all_eq(nn10, trueNN10))
 
     # ------------------------------------------------ batch of queries
 
     # ------------------------ dists for ground truth
 
-    Q = 4
+    Q = 128
     queries = np.random.randn(Q, D)
     queries = np.cumsum(queries, axis=1)
 
-    # compute idxs in sorted order
-    rowNorms = np.sum(X * X, axis=1, keepdims=True)
-    t0 = time.clock()
-    queryNorms = np.sum(queries * queries, axis=1)
-    dotProds = np.dot(X, queries.T)
-    dists = (-2 * dotProds) + rowNorms + queryNorms
-    t_python = (time.clock() - t0) * 1000
-    print "-> python batch brute force time ms\t= {:03} ({:.3}/query)".format(
-        t_python, t_python / Q)
+    dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
     # ------------------------ knn query
 
-    k = 5
-    idxs_sorted = np.argsort(dists, axis=0)
-    true_knn = idxs_sorted[0:k, :].T
-
-    nested_neighbors = index.knn_batch(queries, k)
-    assert(all_eq(nested_neighbors, true_knn))
-    t_cpp = index.getQueryTimeMs()
-    print "-> cpp batch brute force time ms\t= {:03} ({:.3}/query)".format(
-        t_cpp, t_cpp / Q)
+    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3)
+    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10)
 
     # ------------------------ radius
 
-    # true_knn = np.where(dists < dists.mean())
-    # print true_knn[:2]
-
-    nested_neighbors = index.radius_batch(queries, r2)
-    print nested_neighbors
+    test_radius_batch_query(index, queries, dists, name=name, r2=r2)
 
 
 if __name__ == '__main__':
-    test_index()
+    test_index(dig.MatmulIndex, "matmul")
