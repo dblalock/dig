@@ -25,5 +25,14 @@ static inline double durationMs(cputime_t t1, cputime_t t0) {
 	return std::abs(diffMicros) / 1000.0;
 }
 
+class EasyTimer {
+public:
+    EasyTimer(double* write_to): _write_here(write_to), _tstart(timeNow()) {}
+    ~EasyTimer() { *_write_here = durationMs(_tstart, timeNow()); }
+private:
+    double* _write_here;
+    cputime_t _tstart;
+};
+
 } // anon namespace
 #endif // _TIMING_UTILS_HPP

@@ -14,6 +14,8 @@
 
 #include "macros.hpp"
 
+namespace {
+
 using Eigen::Map;
 using Eigen::Dynamic;
 using Eigen::RowMajor;
@@ -65,6 +67,26 @@ struct mat_traits {
 		Eigen::ColMajor>;
     using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
         Eigen::RowMajor>;
+};
+
+// ------------------------------------------------ scalar_traits
+
+template<class ScalarT>
+struct scalar_traits {
+	using Scalar = ScalarT;
+
+    using RowVectorT = Eigen::Matrix<Scalar, 1, Eigen::Dynamic,
+		Eigen::RowMajor>;
+	using ColVectorT = Eigen::Matrix<Scalar, Eigen::Dynamic, 1,
+		Eigen::ColMajor>;
+
+	using RowMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
+        Eigen::RowMajor>;
+    using ColMatrixT = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
+        Eigen::ColMajor>;
+
+	using VectorT = ColVectorT;
+    using MatrixT = ColMatrixT;
 };
 
 
@@ -147,6 +169,7 @@ eigenWrap2D_aligned(const T* X, int m, int n) {
 	return A;
 }
 
+} // anon namespace
 #endif
 
 

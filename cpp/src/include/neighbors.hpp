@@ -14,6 +14,8 @@
 
 #include "Dense"
 
+#include "eigen_utils.hpp"
+
 using std::vector;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
@@ -45,32 +47,69 @@ typedef struct Neighbor {
 
 // ------------------------------------------------ MatmulIndex
 
-class MatmulIndex { // TODO also have MatmulIndexF for floats
-private:
-	class Impl;
-	std::unique_ptr<Impl> _ths; // pimpl idiom
-public:
-	typedef MatmulIndex SelfT;
 
-	// ------------------------ lifecycle
-	MatmulIndex(const SelfT& other) = delete;
-	SelfT& operator=(const SelfT&) = delete;
-	~MatmulIndex();
 
-	MatmulIndex(const MatrixXd& X);
-	MatmulIndex(double* X, int m, int n);
+// // NOTE: have to use typedef instead of using or SWIG gets unhappy
+// #define DECLARE_INDEX_CLASS(NAME, SCALAR_T) \
+	// typedef SCALAR_T Scalar; \
+	// typedef typename scalar_traits<Scalar>::ColMatrixT MatrixT; \
+ //    typedef typename scalar_traits<Scalar>::ColVectorT VectorT; \
+ //    typedef typename scalar_traits<Scalar>::RowMatrixT RowMatrixT; \
 
-	// ------------------------ querying
-	vector<int64_t> radius(const VectorXd& q, double radiusL2);
-	vector<int64_t> knn(const VectorXd& q, int k);
-	MatrixXi radius_batch(const RowMatrixXd& queries, double radiusL2);
-	MatrixXi knn_batch(const RowMatrixXd& queries, int k);
-
-	// ------------------------ stats
-	double getIndexConstructionTimeMs();
-	double getQueryTimeMs();
+// NOTE: we can't just compute VectorT, etc, based on Scalar because it
+// makes SWIG unhappy; compiles but thinks args have wrong types at runtime
+#define DECLARE_INDEX_CLASS(NAME, Scalar, VectorT, MatrixT, RowMatrixT) \
+class NAME { \
+public: \
+	NAME(const NAME & other) = delete; \
+	NAME & operator=(const NAME &) = delete; \
+	~NAME(); \
+\
+	NAME(const MatrixT & X); \
+	NAME(Scalar* X, int m, int n); \
+\
+	vector<int64_t> radius(const VectorT & q, double radiusL2); \
+	vector<int64_t> knn(const VectorT & q, int k); \
+	MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2); \
+	MatrixXi knn_batch(const RowMatrixT & queries, int k); \
+\
+	double getIndexConstructionTimeMs(); \
+	double getQueryTimeMs(); \
+private: \
+	class Impl; \
+	std::unique_ptr<Impl> _this; \
 };
 
+// class MatmulIndex {
+// private:
+//     class Impl;
+//     std::unique_ptr<Impl> _this;
+// public:
+//     using Scalar = double;
+//     using MatrixT = typename scalar_traits<Scalar>::ColMatrixT;
+//     using VectorT = typename scalar_traits<Scalar>::ColVectorT;
+//     using RowMatrixT = typename scalar_traits<Scalar>::RowMatrixT;
+
+//     MatmulIndex(const MatmulIndex& other) = delete;
+//     MatmulIndex& operator=(const MatmulIndex&) = delete;
+//     ~MatmulIndex();
+
+//     MatmulIndex(const MatrixT& X);
+//     MatmulIndex(Scalar* X, int m, int n);
+
+//     vector<int64_t> radius(const VectorT & q, double radiusL2);
+//     vector<int64_t> knn(const VectorT & q, int k);
+//     MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2);
+//     MatrixXi knn_batch(const RowMatrixT & queries, int k);
+
+//     double getIndexConstructionTimeMs();
+//     double getQueryTimeMs();
+// };
+
+DECLARE_INDEX_CLASS(MatmulIndex, double, VectorXd, MatrixXd, RowMatrixXd);
+// DECLARE_INDEX_CLASS(MatmulIndex, double);
+
+// DECLARE_INDEX_CLASS(MatmulIndexF, float, VectorXf, MatrixXf, RowMatrixXf);
 
 // ------------------------------------------------ BinTree
 
@@ -85,7 +124,7 @@ class BinTree {
 private:
 	class Impl;
 	std::unique_ptr<Impl> _ths; // pimpl idiom
-	// Impl* _ths; // pimpl idiom--no uniq ptr since SWIG can't handle it
+	// Impl* _this; // pimpl idiom--no uniq ptr since SWIG can't handle it
 	// EDIT: nvm, new SWIG seems to be good with it
 
 public:
