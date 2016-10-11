@@ -60,8 +60,8 @@ using Eigen::MatrixXi;
 // TODO just include a shared header with these in it?
 typedef Matrix<double, Dynamic, Dynamic> ColMatrixXd;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
-typedef Matrix<double, Dynamic, Dynamic> ColMatrixXf;
-typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXf;
+typedef Matrix<float, Dynamic, Dynamic> ColMatrixXf;
+typedef Matrix<float, Dynamic, Dynamic, RowMajor> RowMatrixXf;
 typedef Matrix<long long, Dynamic, Dynamic> ColMatrixXi;
 typedef Matrix<long long, Dynamic, Dynamic, RowMajor> RowMatrixXi;
 
@@ -75,6 +75,11 @@ typedef Matrix<long long, Dynamic, Dynamic, RowMajor> RowMatrixXi;
 %eigen_typemaps(MatrixXd);
 %eigen_typemaps(VectorXd);
 %eigen_typemaps(RowVectorXd);
+
+%eigen_typemaps(MatrixXf);
+%eigen_typemaps(VectorXf);
+%eigen_typemaps(RowVectorXf);
+
 %eigen_typemaps(MatrixXi);
 
 typedef Array<double, Dynamic, Dynamic> ColArrayXXd;
@@ -131,6 +136,27 @@ typedef Array<double, Dynamic, Dynamic, RowMajor> RowArrayXXd;
 // ================================
 
 // ------------------------------- 1D arrays
+// float
+%apply (float* IN_ARRAY1, int DIM1) {(const float* ar, int len)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* buff, int n)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* buff, int len)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* buff, int buffLen)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* x, int m)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* x, int len)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* x, int xLen)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* q, int m)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* q, int len)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* q, int qLen)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* query, int qLen)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v, int len)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v, int inLen)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v1, int m)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v1, int len1)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v2, int m)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v2, int n)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* v2, int len2)};
+%apply (float* IN_ARRAY1, int DIM1) {(const float* seq, int seqLen)};
+// double
 %apply (double* IN_ARRAY1, int DIM1) {(const double* ar, int len)};
 %apply (double* IN_ARRAY1, int DIM1) {(const double* buff, int n)};
 %apply (double* IN_ARRAY1, int DIM1) {(const double* buff, int len)};
@@ -152,6 +178,16 @@ typedef Array<double, Dynamic, Dynamic, RowMajor> RowArrayXXd;
 %apply (double* IN_ARRAY1, int DIM1) {(const double* seq, int seqLen)};
 
 // ------------------------------- 2D arrays
+// float
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(const float* A, int m, int n)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(const float* X, int m, int n)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(const float* X, int d, int n)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(const float* X, int n, int d)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(float* A, int m, int n)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(float* X, int m, int n)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(float* X, int d, int n)};
+%apply (float* IN_ARRAY2, int DIM1, int DIM2) {(float* X, int n, int d)};
+// double
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* A, int m, int n)};
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* X, int m, int n)};
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double* X, int d, int n)};

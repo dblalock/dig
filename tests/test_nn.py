@@ -70,7 +70,8 @@ def test_radius_batch_query(index, queries, dists, name, r2):
         assert(all_eq(returned_idxs, true_idxs))
 
 
-def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1):
+def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
+               dtype=np.float64):
     N = 100 * 1000
     D = 100
     if r2 <= 0:
@@ -78,10 +79,10 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1):
 
     # ------------------------ data and index construction
 
-    X = np.random.randn(N, D)
+    X = np.random.randn(N, D).astype(dtype)
     X = np.cumsum(X, axis=1)
 
-    q = np.cumsum(np.random.randn(D))
+    q = np.cumsum(np.random.randn(D).astype(dtype))
 
     index = idx_func(X)
     t = index.getIndexConstructionTimeMs()
@@ -127,7 +128,7 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1):
     # ------------------------ dists for ground truth
 
     Q = 128
-    queries = np.random.randn(Q, D)
+    queries = np.random.randn(Q, D).astype(dtype)
     queries = np.cumsum(queries, axis=1)
 
     dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
@@ -144,3 +145,4 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1):
 
 if __name__ == '__main__':
     test_index(dig.MatmulIndex, "matmul")
+    test_index(dig.MatmulIndexF, "matmulf", dtype=np.float32)

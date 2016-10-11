@@ -18,11 +18,15 @@
 
 using std::vector;
 using Eigen::MatrixXd;
+using Eigen::MatrixXf;
 using Eigen::VectorXd;
+using Eigen::VectorXf;
 using Eigen::MatrixXi;
 
 typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
 	Eigen::RowMajor> RowMatrixXd;
+typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
+Eigen::RowMajor> RowMatrixXf;
 // typedef Eigen::Matrix<long long, Eigen::Dynamic, Eigen::Dynamic,
 // 	Eigen::RowMajor> MatrixXi;
 
@@ -52,8 +56,8 @@ typedef struct Neighbor {
 	NAME & operator=(const NAME &) = delete; \
 	~NAME();
 
+// NAME(const MatrixT & X);
 #define DECLARE_INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
-	NAME(const MatrixT & X); \
 	NAME(Scalar* X, int m, int n); \
 	NO_COPYING_AND_DEFAULT_DTOR(NAME) \
 
@@ -84,6 +88,7 @@ public: \
 };
 
 DECLARE_INDEX_CLASS(MatmulIndex, double, VectorXd, MatrixXd, RowMatrixXd);
+DECLARE_INDEX_CLASS(MatmulIndexF, float, VectorXf, MatrixXf, RowMatrixXf);
 
 // ------------------------------------------------ BinTree
 

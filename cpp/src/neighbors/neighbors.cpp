@@ -102,7 +102,7 @@ protected:
 
 // ------------------------ pimpl
 
-#define INDEX_IMPL(INDEX_NAME, InnerIndexT) \
+#define INDEX_PIMPL(INDEX_NAME, InnerIndexT) \
 class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > { \
     using Super = IndexImpl<InnerIndexT >; \
     friend class INDEX_NAME; \
@@ -111,8 +111,8 @@ class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > { \
 
 // ------------------------ ctors / dtors
 
+// INDEX_NAME ::INDEX_NAME(const MatrixT & X): _this{new INDEX_NAME ::Impl{X}} {}
 #define INDEX_CTORS_DTOR(INDEX_NAME, Scalar, MatrixT) \
-    INDEX_NAME ::INDEX_NAME(const MatrixT & X): _this{new INDEX_NAME ::Impl{X}} {} \
     INDEX_NAME ::INDEX_NAME(Scalar* X, int m, int n): \
         _this{new INDEX_NAME ::Impl{X, m, n}} {} \
     INDEX_NAME ::~INDEX_NAME() = default;
@@ -121,16 +121,16 @@ class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > { \
 // ------------------------ query funcs
 
 #define INDEX_QUERY_FUNCS(INDEX_NAME, VectorT, RowMatrixT) \
-vector<int64_t> MatmulIndex::radius(const VectorT & q, double radiusL2) { \
+vector<int64_t> INDEX_NAME ::radius(const VectorT & q, double radiusL2) { \
     return _this->radius(q, radiusL2); \
 } \
-vector<int64_t> MatmulIndex::knn(const VectorT & q, int k) { \
+vector<int64_t> INDEX_NAME ::knn(const VectorT & q, int k) { \
     return _this->knn(q, k); \
 } \
-MatrixXi MatmulIndex::radius_batch(const RowMatrixT & queries, double radiusL2) { \
+MatrixXi INDEX_NAME ::radius_batch(const RowMatrixT & queries, double radiusL2) { \
     return _this->radius_batch(queries, radiusL2); \
 } \
-MatrixXi MatmulIndex::knn_batch(const RowMatrixT & queries, int k) { \
+MatrixXi INDEX_NAME ::knn_batch(const RowMatrixT & queries, int k) { \
     return _this->knn_batch(queries, k); \
 }
 
@@ -142,14 +142,41 @@ double INDEX_NAME ::getQueryTimeMs() { return _this->_queryTimeMs; }
 
 // ------------------------ top-level macro for convenience
 
-#define DEFINE_INDEX(NAME, InnerIndexT, Scalar, VectorT, MatrixT, RowMatrixT) \
-    INDEX_IMPL(NAME, InnerIndexT) \
+#define DEFINE_INDEX(NAME, Scalar, VectorT, MatrixT, RowMatrixT, InnerIndexT) \
+    INDEX_PIMPL(NAME, InnerIndexT) \
     INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
     INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
     INDEX_STATS_FUNCS(NAME)
 
 // ------------------------------------------------ MatmulIndex
 
-DEFINE_INDEX(MatmulIndex, nn::L2IndexBrute<double>, double, VectorXd, MatrixXd, RowMatrixXd)
+DEFINE_INDEX(MatmulIndex, double, VectorXd, MatrixXd, RowMatrixXd, nn::L2IndexBrute<double>)
+DEFINE_INDEX(MatmulIndexF, float, VectorXf, MatrixXf, RowMatrixXf, nn::L2IndexBrute<float>);
 
 
+//     INDEX_PIMPL(MatmulIndexF, nn::L2IndexBrute<float>)
+
+// // class MatmulIndexF ::Impl: public IndexImpl<nn::L2IndexBrute<float> > { \
+// //     using Super = IndexImpl<nn::L2IndexBrute<float> >; \
+// //     friend class MatmulIndexF; \
+// //     using Super::Super; \
+// // };
+
+//     INDEX_CTORS_DTOR(MatmulIndexF, float, MatrixXf)
+
+//     INDEX_QUERY_FUNCS(MatmulIndexF, VectorXf, RowMatrixXf)
+
+// // vector<int64_t> MatmulIndexF ::radius(const VectorXf & q, double radiusL2) { \
+// //     return _this->radius(q, radiusL2); \
+// // } \
+// // vector<int64_t> MatmulIndexF ::knn(const VectorXf & q, int k) { \
+// //     return _this->knn(q, k); \
+// // } \
+// // MatrixXi MatmulIndexF ::radius_batch(const RowMatrixXf & queries, double radiusL2) { \
+// //     return _this->radius_batch(queries, radiusL2); \
+// // } \
+// // MatrixXi MatmulIndexF ::knn_batch(const RowMatrixXf & queries, int k) { \
+// //     return _this->knn_batch(queries, k); \
+// // }
+
+//     INDEX_STATS_FUNCS(MatmulIndexF)
