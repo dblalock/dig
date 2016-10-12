@@ -112,7 +112,7 @@ class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > { \
 // ------------------------ ctors / dtors
 
 // INDEX_NAME ::INDEX_NAME(const MatrixT & X): _this{new INDEX_NAME ::Impl{X}} {}
-#define INDEX_CTORS_DTOR(INDEX_NAME, Scalar, MatrixT) \
+#define INDEX_CTORS_DTOR(INDEX_NAME, Scalar) \
     INDEX_NAME ::INDEX_NAME(Scalar* X, int m, int n): \
         _this{new INDEX_NAME ::Impl{X, m, n}} {} \
     INDEX_NAME ::~INDEX_NAME() = default;
@@ -142,16 +142,16 @@ double INDEX_NAME ::getQueryTimeMs() { return _this->_queryTimeMs; }
 
 // ------------------------ top-level macro for convenience
 
-#define DEFINE_INDEX(NAME, Scalar, VectorT, MatrixT, RowMatrixT, InnerIndexT) \
+#define DEFINE_INDEX(NAME, Scalar, VectorT, RowMatrixT, InnerIndexT) \
     INDEX_PIMPL(NAME, InnerIndexT) \
-    INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
+    INDEX_CTORS_DTOR(NAME, Scalar) \
     INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
     INDEX_STATS_FUNCS(NAME)
 
 // ------------------------------------------------ MatmulIndex
 
-DEFINE_INDEX(MatmulIndex, double, VectorXd, MatrixXd, RowMatrixXd, nn::L2IndexBrute<double>)
-DEFINE_INDEX(MatmulIndexF, float, VectorXf, MatrixXf, RowMatrixXf, nn::L2IndexBrute<float>);
+DEFINE_INDEX(MatmulIndex, double, VectorXd, RowMatrixXd, nn::L2IndexBrute<double>)
+DEFINE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf, nn::L2IndexBrute<float>);
 
 
 //     INDEX_PIMPL(MatmulIndexF, nn::L2IndexBrute<float>)

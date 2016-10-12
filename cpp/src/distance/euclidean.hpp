@@ -28,30 +28,19 @@ using _infer = char;
 
 // ------------------------------------------------ brute force distances
 
-template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
-    class VectorT=_infer>
-inline auto squared_dists_to_vector(const MatrixT& X, const VectorT& v)
-	-> typename mat_traits<VectorT>::VectorT
-{
-    return (X.rowwise() - v).rowwise().squaredNorm();
-}
-template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
-    class VectorT=_infer>
-inline VectorT dists_to_vector(const MatrixT& X, const VectorT& v) {
-    return squared_dists_to_vector(X, v).array().sqrt().matrix();
-}
+// ------------------------ dists to batch of vectors, with row norms
 
 /** compute distances between rows of X and rows of V */
 template<int RetStorageOrder=Eigen::ColMajor, class MatrixT1=_infer,
     class MatrixT2=_infer, class VectorT=_infer>
 inline auto squared_dists_to_vectors(const MatrixT1& X, const MatrixT2& V,
-    VectorT rowSquaredNorms) ->
-        typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
+    const VectorT& rowSquaredNorms)
+    -> typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
 {
     // create a matrix of appropriate type; this way dists for each vector
     // can be contiguous (if ColumnMajor storage)
     typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
-        dists = -2. * (X * V.transpose());
+        dists = -2 * (X * V.transpose());
     auto colSquaredNorms = V.rowwise().squaredNorm().eval();
     auto colSquaredNormsAsRow = colSquaredNorms.transpose().eval();
     dists.colwise() += rowSquaredNorms;
@@ -60,11 +49,23 @@ inline auto squared_dists_to_vectors(const MatrixT1& X, const MatrixT2& V,
 
     return dists;
 }
+
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT1=_infer,
+    class MatrixT2=_infer, class VectorT=_infer>
+inline auto dists_to_vectors(const MatrixT1& X, const MatrixT2& V,
+    const VectorT& rowSquaredNorms)
+    -> decltype(squared_dists_to_vectors(X, V, rowSquaredNorms))
+{
+    return squared_dists_to_vectors(X, V, rowSquaredNorms).array().sqrt().matrix();
+}
+
+// ------------------------ dists to batch of vectors, no row norms
+
 /** compute distances between rows of X and rows of V */
 template<int RetStorageOrder=Eigen::ColMajor, class MatrixT1=_infer,
     class MatrixT2=_infer>
-inline auto squared_dists_to_vectors(const MatrixT1& X, const MatrixT2& V) ->
-    typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
+inline auto squared_dists_to_vectors(const MatrixT1& X, const MatrixT2& V)
+    -> typename mat_product_traits<MatrixT1, MatrixT2, RetStorageOrder>::type
 {
     Eigen::Matrix<typename MatrixT1::Scalar, Eigen::Dynamic, 1> rowSquaredNorms =
         X.rowwise().squaredNorm().eval();
@@ -82,6 +83,50 @@ auto dist_sq(const VectorT1& x, const VectorT2& y)
 {
     return (x - y).squaredNorm();
 }
+
+// ------------------------ dist to single vector, with row norms
+// Note that this is after the batch functions because it calls them
+
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
+    class VectorT=_infer, class VectorT2=_infer>
+inline auto squared_dists_to_vector(const MatrixT& X, const VectorT& v,
+    const VectorT2& rowSquaredNorms)
+	-> typename mat_product_traits<MatrixT, VectorT>::type
+	// -> decltype(squared_dists_to_vectors(X, VectorT::IsRowMajor ? v : v.transpose(), rowSquaredNorms))
+    //-> typename mat_traits<VectorT>::VectorT
+{
+    if (VectorT::IsRowMajor) {
+        return squared_dists_to_vectors(X, v, rowSquaredNorms);
+    } else {
+        return squared_dists_to_vectors(X, v.transpose(), rowSquaredNorms);
+    }
+}
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
+    class VectorT=_infer, class VectorT2=_infer>
+inline auto dists_to_vector(const MatrixT& X, const VectorT& v,
+    const VectorT2& rowSquaredNorms)
+    -> decltype(squared_dists_to_vector(X, v, rowSquaredNorms))
+{
+    return squared_dists_to_vector(X, v).array().sqrt().matrix();
+}
+
+// ------------------------ dist to single vector, no row norms
+
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
+    class VectorT=_infer>
+inline auto squared_dists_to_vector(const MatrixT& X, const VectorT& v)
+    -> typename mat_traits<VectorT>::VectorT
+{
+    return (X.rowwise() - v).rowwise().squaredNorm();
+}
+template<int RetStorageOrder=Eigen::ColMajor, class MatrixT=_infer,
+    class VectorT=_infer>
+inline auto dists_to_vector(const MatrixT& X, const VectorT& v)
+    -> decltype(squared_dists_to_vector(X, v))
+{
+    return squared_dists_to_vector(X, v).array().sqrt().matrix();
+}
+
 
 // ------------------------------------------------ early abandoning distances
 namespace abandon {

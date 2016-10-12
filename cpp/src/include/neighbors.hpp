@@ -57,7 +57,7 @@ typedef struct Neighbor {
 	~NAME();
 
 // NAME(const MatrixT & X);
-#define DECLARE_INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
+#define DECLARE_INDEX_CTORS_DTOR(NAME, Scalar) \
 	NAME(Scalar* X, int m, int n); \
 	NO_COPYING_AND_DEFAULT_DTOR(NAME) \
 
@@ -78,17 +78,17 @@ private: \
 
 // NOTE: we can't just compute VectorT, etc, based on Scalar because it
 // makes SWIG unhappy; compiles but thinks args have wrong types at runtime
-#define DECLARE_INDEX_CLASS(NAME, Scalar, VectorT, MatrixT, RowMatrixT) \
+#define DECLARE_INDEX_CLASS(NAME, Scalar, VectorT, RowMatrixT) \
 class NAME { \
 public: \
-	DECLARE_INDEX_CTORS_DTOR(NAME, Scalar, MatrixT) \
+	DECLARE_INDEX_CTORS_DTOR(NAME, Scalar) \
 	DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
 	DECLARE_INDEX_STATS_FUNCS \
 	DECLARE_INDEX_PIMPL(NAME) \
 };
 
-DECLARE_INDEX_CLASS(MatmulIndex, double, VectorXd, MatrixXd, RowMatrixXd);
-DECLARE_INDEX_CLASS(MatmulIndexF, float, VectorXf, MatrixXf, RowMatrixXf);
+DECLARE_INDEX_CLASS(MatmulIndex, double, VectorXd, RowMatrixXd);
+DECLARE_INDEX_CLASS(MatmulIndexF, float, VectorXf, RowMatrixXf);
 
 // ------------------------------------------------ BinTree
 

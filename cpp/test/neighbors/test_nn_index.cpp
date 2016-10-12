@@ -182,14 +182,14 @@ TEST_CASE("print sizes", "tmp") {
 	printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
 }
 
-// TEST_CASE("L2IndexBrute", "neighbors") {
-// 	_test_index<nn::L2IndexBrute<double> >();
-// 	_test_index<nn::L2IndexBrute<float> >();
-// }
-// TEST_CASE("L2IndexAbandon", "neighbors") {
-// 	_test_index<nn::L2IndexAbandon<double> >();
-// 	_test_index<nn::L2IndexAbandon<float> >();
-// }
+TEST_CASE("L2IndexBrute", "neighbors") {
+	_test_index<nn::L2IndexBrute<double> >();
+	_test_index<nn::L2IndexBrute<float> >();
+}
+TEST_CASE("L2IndexAbandon", "neighbors") {
+	_test_index<nn::L2IndexAbandon<double> >();
+	_test_index<nn::L2IndexAbandon<float> >();
+}
 
 TEST_CASE("NNIndex_IdentityPreproc", "neighbors") {
 	using PreprocT = nn::IdentityPreproc;

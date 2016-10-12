@@ -50,8 +50,11 @@ struct product_traits {
 template<class T, class U, int RetStorageOrder=Eigen::RowMajor, class _T=typename T::Scalar,
 		class _U=typename U::Scalar>
 struct mat_product_traits {
+	static constexpr int RowsAtCompileTime = T::RowsAtCompileTime;
+	static constexpr int ColsAtCompileTime = U::ColsAtCompileTime;
     using Scalar = typename product_traits<_T, _U>::type;
-    using type = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, RetStorageOrder>;
+    using type = Eigen::Matrix<Scalar, RowsAtCompileTime, ColsAtCompileTime,
+    	RetStorageOrder>;
 };
 
 // ------------------------------------------------ mat_traits

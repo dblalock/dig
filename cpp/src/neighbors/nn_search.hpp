@@ -48,8 +48,9 @@ namespace internal {
 
 namespace brute {
 
-    // ------------------------ single query
+    // ================================ single query, with + without row norms
 
+    // ------------------------ radius
     template<class RowMatrixT, class VectorT>
     inline vector<Neighbor> radius(const RowMatrixT& X, const VectorT& query,
                                          float radius_sq)
@@ -57,28 +58,72 @@ namespace brute {
         auto dists = dist::squared_dists_to_vector(X, query);
         return neighbors_in_radius(dists.data(), dists.size(), radius_sq);
     }
+    template<class RowMatrixT, class VectorT, class ColVectorT>
+    inline vector<Neighbor> radius(const RowMatrixT& X, const VectorT& query,
+        float radius_sq, const ColVectorT& rowSquaredNorms)
+    {
+        auto dists = dist::squared_dists_to_vector(X, query, rowSquaredNorms);
+        return neighbors_in_radius(dists.data(), dists.size(), radius_sq);
+    }
 
+    // ------------------------ onenn
     template<class RowMatrixT, class VectorT>
     inline Neighbor onenn(const RowMatrixT& X, const VectorT& query) {
         typename RowMatrixT::Index idx;
+        static_assert(VectorT::IsRowMajor, "query must be row-major");
 		auto diffs = X.rowwise() - query;
 		auto norms = diffs.rowwise().squaredNorm();
-//		PRINT_STATIC_TYPE(norms);
 		auto dist = norms.minCoeff(&idx);
+        return {.dist = dist, .idx = static_cast<idx_t>(idx)};
+    }
+    template<class RowMatrixT, class VectorT, class ColVectorT>
+    inline Neighbor onenn(const RowMatrixT& X, const VectorT& query,
+        const ColVectorT& rowSquaredNorms)
+    {
+        // static_assert(VectorT::IsRowMajor, "query must be row-major");
+        typename RowMatrixT::Index idx;
+        if (VectorT::IsRowMajor) {
+            auto dists = rowSquaredNorms - (2 * (X * query.transpose()));
+            auto min_dist = dists.minCoeff(&idx);
+            min_dist += query.squaredNorm();
+            return {.dist = min_dist, .idx = static_cast<idx_t>(idx)};
+		} else {
+            auto dists = rowSquaredNorms - (2 * (X * query));
+            auto min_dist = dists.minCoeff(&idx) + query.squaredNorm();
+            min_dist += query.squaredNorm();
+            return {.dist = min_dist, .idx = static_cast<idx_t>(idx)};
+        }
 
-//        double dist = (X.rowwise() - query).rowwise().squaredNorm().minCoeff(&idx);
-        return {.dist = dist, .idx = static_cast<int32_t>(idx)}; // TODO fix length_t
+        // SELF: pick up here by reimplementing this using rowSquaredNorms
+
+        // // typename RowMatrixT::Index idx;
+        // auto diffs = X.rowwise() - query;
+        // auto norms = diffs.rowwise().squaredNorm();
+        // auto dist = norms.minCoeff(&idx);
+        // return {.dist = dist, .idx = static_cast<idx_t>(idx)};
     }
 
+    // ------------------------ knn
     template<class RowMatrixT, class VectorT>
-    vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query,
-                               size_t k)
+    vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query, size_t k)
     {
-		auto dists = dist::squared_dists_to_vector(X, query);
+        if (VectorT::IsRowMajor) {
+    		auto dists = dist::squared_dists_to_vector(X, query);
+            return knn_from_dists(dists.data(), dists.size(), k);
+        } else {
+            auto dists = dist::squared_dists_to_vector(X, query.transpose());
+            return knn_from_dists(dists.data(), dists.size(), k);
+        }
+    }
+    template<class RowMatrixT, class VectorT, class ColVectorT>
+    vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query,
+        size_t k, const ColVectorT& rowSquaredNorms)
+    {
+        auto dists = dist::squared_dists_to_vector(X, query, rowSquaredNorms);
         return knn_from_dists(dists.data(), dists.size(), k);
     }
 
-    // ------------------------ batch of queries
+    // ================================ batch of queries
 
     template<class RowMatrixT, class RowMatrixT2, class ColVectorT>
     inline vector<vector<Neighbor> > radius_batch(const RowMatrixT& X,

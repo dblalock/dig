@@ -447,17 +447,17 @@ protected:
 
     template<class VectorT>
     vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
-        return brute::radius(_matrix(), query, d_max);
+        return brute::radius(_matrix(), query, d_max, _rowNorms);
     }
 
     template<class VectorT>
     Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist) {
-        return brute::onenn(_matrix(), query);
+        return brute::onenn(_matrix(), query, _rowNorms);
     }
 
     template<class VectorT>
     vector<Neighbor> _knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
-        return brute::knn(_matrix(), query, k);
+        return brute::knn(_matrix(), query, k, _rowNorms);
     }
 
     // ------------------------------------------------ batch of queries
