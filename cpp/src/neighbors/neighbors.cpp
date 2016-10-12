@@ -154,6 +154,11 @@ DEFINE_INDEX(MatmulIndex, double, VectorXd, RowMatrixXd, nn::L2IndexBrute<double
 DEFINE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf, nn::L2IndexBrute<float>);
 
 
+// TODO use reorder preproc once we verify that this is working
+// DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, nn::L2IndexAbandon<double>);
+
+
+
 //     INDEX_PIMPL(MatmulIndexF, nn::L2IndexBrute<float>)
 
 // // class MatmulIndexF ::Impl: public IndexImpl<nn::L2IndexBrute<float> > { \

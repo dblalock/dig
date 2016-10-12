@@ -44,6 +44,8 @@ typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
 static const int16_t kInvalidIdx = -1;
 
+static constexpr int kDefaultAlignBytes = EIGEN_DEFAULT_ALIGN_BYTES;
+
 namespace nn {
 
 namespace {
@@ -115,15 +117,20 @@ inline IntT aligned_length(IntT ncols) {
 
 // helper struct to get Eigen::Map<> MapOptions based on alignment in bytes
 template<int AlignBytes> struct _AlignHelper {};
-template<> struct _AlignHelper<0> { enum { AlignmentType = Eigen::Unaligned }; };
-template<> struct _AlignHelper<16> { enum { AlignmentType = Eigen::Aligned }; };
-template<> struct _AlignHelper<32> { enum { AlignmentType = Eigen::Aligned }; };
+template<> struct _AlignHelper<0> {
+    static constexpr int AlignmentType = Eigen::Unaligned;
+};
+template<> struct _AlignHelper<kDefaultAlignBytes> {
+    static constexpr int AlignmentType = Eigen::Aligned;
+};
 
 template<class T, int AlignBytes>
 static inline T* aligned_alloc(size_t n) {
-    static_assert(AlignBytes == 0 || AlignBytes == 32,
-                  "Only AlignBytes values of 0 and 32 are supported!");
-    if (AlignBytes == 32) {
+    static_assert(AlignBytes == 0 || AlignBytes == kDefaultAlignBytes,
+        "Only AlignBytes values of 0 and kDefaultAlignBytes are supported!");
+    static_assert(EIGEN_DEFAULT_ALIGN_BYTES == AlignBytes,
+        "AlignBytes does not match Eigen default align bytes!");
+    if (AlignBytes == kDefaultAlignBytes) {
         return Eigen::aligned_allocator<T>{}.allocate(n);
     } else {
         return new T[n];
@@ -131,9 +138,9 @@ static inline T* aligned_alloc(size_t n) {
 }
 template<class T, int AlignBytes>
 static inline void aligned_free(T* p) {
-    static_assert(AlignBytes == 0 || AlignBytes == 32,
-                  "Only AlignBytes values of 0 and 32 are supported!");
-    if (AlignBytes == 32) {
+    static_assert(AlignBytes == 0 || AlignBytes == kDefaultAlignBytes,
+        "Only AlignBytes values of 0 and kDefaultAlignBytes are supported!");
+    if (AlignBytes == kDefaultAlignBytes) {
         Eigen::aligned_allocator<T>{}.deallocate(p, 0); // 0 unused
     } else {
         delete[] p;

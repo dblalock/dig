@@ -14,7 +14,7 @@
 
 #include "Dense"
 
-// #include "nn_search.hpp"
+#include "nn_utils.hpp"
 #include "array_utils.hpp"
 
 namespace nn {
@@ -60,7 +60,7 @@ struct row_array_traits<FixedRowArrayKey, T, NumCols> {
 // Also aligns each row to AlignBytes boundaries, assuming that Derived::cols()
 // is guaranteed to yield a number of objects that's an even multiple of
 // AlignBytes / sizeof(T)
-template<class Derived, class T, class DerivedKey, int AlignBytes=32,
+template<class Derived, class T, class DerivedKey, int AlignBytes=kDefaultAlignBytes,
     bool OwnPtr=true>
 class BaseRowArray {
 public:
@@ -195,7 +195,7 @@ protected:
     Scalar* _aligned_alloc(size_t n) {
         // note: always use aligned alloc here, even if rows don't need to
         // be aligned
-        return aligned_alloc<Scalar, 32>(n);
+        return aligned_alloc<Scalar, kDefaultAlignBytes>(n);
     }
     ColIndex _aligned_length(size_t ncols) {
         return static_cast<ColIndex>(aligned_length<T, AlignBytes>(ncols));
@@ -213,7 +213,7 @@ private:
 // ------------------------------------------------ DynamicRowArray
 
 // BaseRowArray subclass with a width set at construction time
-template<class T, int AlignBytes=32, bool OwnPtr=true>
+template<class T, int AlignBytes=kDefaultAlignBytes, bool OwnPtr=true>
 class DynamicRowArray :
 	public BaseRowArray<DynamicRowArray<T, AlignBytes, OwnPtr>,
 		T, DynamicRowArrayKey, AlignBytes, OwnPtr> {
@@ -257,7 +257,7 @@ private:
 
 // BaseRowArray subclass that has a fixed width, and so doesn't need to
 // store it
-template<class T, int NumCols, int AlignBytes=32, bool OwnPtr=true>
+template<class T, int NumCols, int AlignBytes=kDefaultAlignBytes, bool OwnPtr=true>
 class FixedRowArray :
 	public BaseRowArray<FixedRowArray<T, NumCols, AlignBytes, OwnPtr>,
 		T, FixedRowArrayKey, AlignBytes, OwnPtr> {
@@ -314,7 +314,7 @@ public:
 // This code is somewhat redundant with RowArray code, but refactoring
 // to combine them is not a priority atm. Also, I don't think anything is
 // actually using this code anymore.
-template<class T, int AlignBytes=32, class IdT=int64_t>
+template<class T, int AlignBytes=kDefaultAlignBytes, class IdT=int64_t>
 class RowStore {
 public:
     typedef typename Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>::Index Index;

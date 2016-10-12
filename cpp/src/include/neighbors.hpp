@@ -78,7 +78,7 @@ private: \
 
 // NOTE: we can't just compute VectorT, etc, based on Scalar because it
 // makes SWIG unhappy; compiles but thinks args have wrong types at runtime
-#define DECLARE_INDEX_CLASS(NAME, Scalar, VectorT, RowMatrixT) \
+#define DECLARE_INDEX(NAME, Scalar, VectorT, RowMatrixT) \
 class NAME { \
 public: \
 	DECLARE_INDEX_CTORS_DTOR(NAME, Scalar) \
@@ -87,8 +87,12 @@ public: \
 	DECLARE_INDEX_PIMPL(NAME) \
 };
 
-DECLARE_INDEX_CLASS(MatmulIndex, double, VectorXd, RowMatrixXd);
-DECLARE_INDEX_CLASS(MatmulIndexF, float, VectorXf, RowMatrixXf);
+// ------------------------------------------------ Index Wrappers
+
+DECLARE_INDEX(MatmulIndex, double, VectorXd, RowMatrixXd);
+DECLARE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf);
+
+// DECLARE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd);
 
 // ------------------------------------------------ BinTree
 
