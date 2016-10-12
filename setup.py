@@ -58,7 +58,9 @@ print(srcFiles)
 
 # set the compiler flags so it'll build on different platforms (feel free
 # to file a  pull request with a fix if it doesn't work on yours)
-extra_args = ['-std=c++14', '-fno-rtti', '-stdlib=libc++']
+# note that -march=native implies -mavx and/or -mavx2, which significantly
+# boost performance, if your system supports them
+extra_args = ['-std=c++14', '-fno-rtti', '-stdlib=libc++', '-march=native']
 if sys.platform == 'darwin':
     extra_args.append('-mmacosx-version-min=10.9')
     os.environ['LDFLAGS'] = '-mmacosx-version-min=10.9 -stdlib=libc++'
