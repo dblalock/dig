@@ -185,7 +185,7 @@ vector<Ret> radius(const RowMatrixT& X, const VectorT& query,
     vector<Ret> ret;
     for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
         auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, radius_sq);
-        if (dist <= radius_sq) {
+        if (dist < radius_sq) {
             internal::emplace_neighbor<Ret>{}(ret, dist, i);
         }
     }

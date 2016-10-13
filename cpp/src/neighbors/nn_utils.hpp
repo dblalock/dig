@@ -161,6 +161,16 @@ inline void sort_neighbors_ascending_distance(Container<Neighbor>& neighbors) {
     );
 }
 
+template<template<class...> class Container>
+inline void sort_neighbors_ascending_idx(Container<Neighbor>& neighbors) {
+    std::sort(std::begin(neighbors), std::end(neighbors),
+        [](const Neighbor& a, const Neighbor& b) -> bool
+        {
+            return a.idx < b.idx;
+        }
+    );
+}
+
 /** given a sorted collection of the best neighbors found so far, (potentially)
  * inserts a new neighbor into the list such that the sorting is preserved;
  * assumes the neighbors container contains only valid neighbors and is sorted
@@ -231,7 +241,7 @@ inline vector<Neighbor> neighbors_in_radius(const T* dists, size_t len, R radius
     vector<Neighbor> neighbors;
     for (idx_t i = 0; i < len; i++) {
         auto dist = dists[i];
-        if (dists[i] <= radius_sq) {
+        if (dists[i] < radius_sq) {
 			neighbors.emplace_back(Neighbor{dist, i});
         }
     }

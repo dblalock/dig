@@ -80,7 +80,7 @@ public:
     typedef Eigen::Map<RowT, _AlignHelper<AlignBytes>::AlignmentType> RowMapT;
 
 
-    static const bool IsRowMajor = true;
+    static constexpr bool IsRowMajor = true;
 
     // ------------------------ ctors
 
@@ -104,6 +104,7 @@ public:
     BaseRowArray(const RowMatrixT& X):
         BaseRowArray(X.rows(), X.cols())
     {
+		static_assert(RowMatrixT::IsRowMajor, "Data matrix X must be row-major");
         assert(X.IsRowMajor);
         auto ncols = _aligned_length(X.cols());
         MatrixMapT mat(_data, X.rows(), ncols);
@@ -325,7 +326,7 @@ public:
         _AlignHelper<AlignBytes>::AlignmentType> RowT;
     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> RowMatrixT;
 
-    static const bool IsRowMajor = true;
+    static constexpr bool IsRowMajor = true;
 
     // ------------------------ ctors
 

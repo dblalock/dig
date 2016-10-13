@@ -56,12 +56,11 @@ template<class IndexT>
 class IndexImpl {
 public:
     using Scalar = typename IndexT::Scalar;
-    using MatrixT = typename scalar_traits<Scalar>::ColMatrixT;
     using VectorT = typename scalar_traits<Scalar>::ColVectorT;
     using RowMatrixT = typename scalar_traits<Scalar>::RowMatrixT;
 
     // ------------------------ ctors
-    IndexImpl(const MatrixT& X):
+    IndexImpl(const RowMatrixT& X):
         _indexStartTimeMs(timeNow()),
         _index(X),
         _indexTimeMs(durationMs(_indexStartTimeMs, timeNow()))

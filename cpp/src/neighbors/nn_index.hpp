@@ -518,7 +518,8 @@ public:
 		_data(PreprocT::preprocess_data(data))
         // _data(data)
     {
-        assert(_data.IsRowMajor);
+        static_assert(RowMatrixT::IsRowMajor, "Data matrix must be row-major");
+        // assert(_data.IsRowMajor);
     }
     // L2IndexAbandon(L2IndexAbandon&& rhs) noexcept:
     //     FlatIdStore(std::move(rhs)),
@@ -636,6 +637,7 @@ protected:
         vector<Neighbor> ret;
         for (int i = 0; i < _order.size(); i++) {
             auto& index = _indexes[_order[i]];
+            if (index.rows() < 1) { continue; }
             auto neighbors = index.radius(query, d_max);
 
             // // convert to orig idxs TODO rm once idxs do this themselves
@@ -645,6 +647,7 @@ protected:
 
             ar::concat_inplace(ret, neighbors);
         }
+        sort_neighbors_ascending_idx(ret);
         return ret;
     }
 

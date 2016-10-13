@@ -22,6 +22,53 @@
     REQUIRE(std::abs(nn.dist - trueNN.dist) < .0001);
 
 
+template<class Container>
+vector<typename Neighbor::idx_t> idxs_from_neighbors(const Container& neighbors)
+{
+    return ar::map([](const Neighbor& n) { return n.idx; }, neighbors);
+}
+template<class Container>
+vector<typename Neighbor::dist_t> dists_from_neighbors(const Container& neighbors)
+{
+    return ar::map([](const Neighbor& n) { return n.dist; }, neighbors);
+}
+
+template<class Container1, class Container2>
+void require_neighbor_lists_same(const Container1& nn, const Container2& trueNN)
+{
+    CAPTURE(ar::to_string(idxs_from_neighbors(nn)));
+    CAPTURE(ar::to_string(idxs_from_neighbors(trueNN)));
+    CAPTURE(ar::to_string(dists_from_neighbors(nn)));
+    CAPTURE(ar::to_string(dists_from_neighbors(trueNN)));
+    REQUIRE(nn.size() == trueNN.size());
+    for (int i = 0; i < nn.size(); i++) {
+        REQUIRE_NEIGHBORS_SAME(nn[i], trueNN[i]);
+    }
+}
+
+template<class Container1, class Container2>
+void require_neighbor_idx_lists_same(const Container1& nn_idxs,
+    const Container2& trueNN_idxs)
+{
+    REQUIRE(nn_idxs.size() == trueNN_idxs.size());
+    REQUIRE(ar::all_eq(nn_idxs, trueNN_idxs));
+}
+
+
+template<class MatrixT, class VectorT, class DistT = typename MatrixT::Scalar>
+inline vector<Neighbor> radius_simple(const MatrixT& X, const VectorT& q,
+									  DistT radius_sq)
+{
+    vector<Neighbor> trueKnn;
+    for (int32_t i = 0; i < X.rows(); i++) {
+        DistT d = (X.row(i) - q).squaredNorm();
+        if (d < radius_sq) {
+            trueKnn.emplace_back(Neighbor{.dist = d, .idx = i});
+        }
+    }
+    return trueKnn;
+}
+
 template<class MatrixT, class VectorT>
 inline Neighbor onenn_simple(const MatrixT& X, const VectorT& q) {
     Neighbor trueNN;
@@ -29,7 +76,7 @@ inline Neighbor onenn_simple(const MatrixT& X, const VectorT& q) {
     for (int32_t i = 0; i < X.rows(); i++) {
         double dist1 = (X.row(i) - q).squaredNorm();
 //      double dist2 = dist_sq(X.row(i).data(), q.data(), q.size());
-        double dist2 = dist::dist_sq(X.row(i), q);
+        // double dist2 = dist::dist_sq(X.row(i), q);
 //      REQUIRE(approxEq(dist1, dist2));
         if (dist1 < d_bsf) {
             d_bsf = dist1;
@@ -69,6 +116,8 @@ inline void _test_index_with_query(MatrixT& X, IndexT& index,
     // for (int i = 0; i < 10; i++) {
     // for (int i = 0; i < 1; i++) {
         q.setRandom();
+
+        // ------------------------ onenn
         auto nn = index.onenn(q);
         auto trueNN = onenn_simple(X, q);
         CAPTURE(nn.dist);
@@ -81,15 +130,26 @@ inline void _test_index_with_query(MatrixT& X, IndexT& index,
         CAPTURE(trueNN_idx);
         REQUIRE(nn_idx == trueNN_idx);
 
+        // ------------------------ radius
+        auto reasonable_dist = (X.row(0) - q).squaredNorm() + .00001;
+        auto allnn = index.radius(q, reasonable_dist);
+        auto all_trueNN = radius_simple(X, q, reasonable_dist);
+        require_neighbor_lists_same(allnn, all_trueNN);
+
+        auto allnn_idxs = index.radius_idxs(q, reasonable_dist);
+        auto trueNN_idxs = idxs_from_neighbors(all_trueNN);
+        CAPTURE(ar::to_string(allnn_idxs));
+        CAPTURE(ar::to_string(trueNN_idxs));
+        require_neighbor_idx_lists_same(allnn_idxs, trueNN_idxs);
+
+        // ------------------------ knn
         for (int k = 1; k <= 5; k += 2) {
             auto knn = index.knn(q, k);
             auto trueKnn = knn_simple(X, q, k);
-            REQUIRE_NEIGHBORS_SAME(nn, trueNN);
+            require_neighbor_lists_same(knn, trueKnn);
 
             auto knn_idxs = index.knn_idxs(q, k);
-            auto trueKnn_idxs = ar::map([](const Neighbor& n) {
-                return n.idx;
-            }, trueKnn);
+            auto trueKnn_idxs = idxs_from_neighbors(trueKnn);
             CAPTURE(k);
             CAPTURE(knn[0].dist);
             CAPTURE(knn[0].idx);
@@ -101,16 +161,6 @@ inline void _test_index_with_query(MatrixT& X, IndexT& index,
         }
     }
 }
-
-// template<class IndexT>
-// struct index_traits {
-// 	using Scalar = typename IndexT::Scalar;
-// };
-// template<>
-// struct index_traits<MatmulIndex> {
-// 	using Scalar = double;
-// };
-
 
 template<class IndexT>
 void _test_index(int64_t N=100, int64_t D=16) {
