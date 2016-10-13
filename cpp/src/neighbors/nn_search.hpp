@@ -31,14 +31,14 @@ namespace internal {
     // either return vector of neighbors or just indices
     template<class Ret> struct emplace_neighbor {
         template<class Dist, class Idx>
-        void operator()(const std::vector<Ret>& vect, Dist d, Idx idx) {
+        void operator()(std::vector<Ret>& vect, Dist d, Idx idx) {
             vect.emplace_back(static_cast<Ret>(idx));
         }
     };
     template<> struct emplace_neighbor<Neighbor> {
         template<class Dist, class Idx>
-        void operator()(const std::vector<Neighbor>& vect, Dist d, Idx idx) {
-            vect.emplace_back(d, idx);
+        void operator()(std::vector<Neighbor>& vect, Dist d, Idx idx) {
+			vect.emplace_back(Neighbor{.dist = d, .idx = idx});
         }
     };
 }
@@ -179,14 +179,14 @@ namespace abandon {
 template<class Ret=Neighbor, class RowMatrixT=char, class VectorT=char,
     class DistT=char>
 vector<Ret> radius(const RowMatrixT& X, const VectorT& query,
-    DistT radius_sq)
+    DistT radius_sq, idx_t nrows=-1)
     // const VectorT& query, idx_t num_rows, DistT radius_sq)
 {
     vector<Ret> ret;
-    for (idx_t i = 0; i < X.rows(); i++) {
+    for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
         auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, radius_sq);
         if (dist <= radius_sq) {
-            internal::emplace_neighbor<Ret>(ret, dist, i);
+            internal::emplace_neighbor<Ret>{}(ret, dist, i);
         }
     }
     return ret;

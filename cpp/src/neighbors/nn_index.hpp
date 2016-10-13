@@ -126,8 +126,10 @@ struct ReorderPreproc { // TODO could avoid passing ScalarT template arg
         assert(_length() == _aligned_length(query.size()));
         reorder_query(query, _order, out);
     }
-    template<class VectorT> VectorT preprocess(const VectorT& query) const {
-        VectorT out(_length());
+    template<class VectorT> auto preprocess(const VectorT& query) const
+		-> typename mat_traits<VectorT>::VectorT
+	{
+		typename mat_traits<VectorT>::VectorT out(_length());
         // out.segment(query.size(), _length() - query.size()) = 0;
         out.setZero();
         preprocess(query, out.data());
@@ -274,21 +276,21 @@ public:
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
                                            DistT d_max)
     {
-        auto& queries_proc = _derived()->preprocess_batch(queries);
+        const auto& queries_proc = _derived()->preprocess_batch(queries);
         auto neighbors = _derived()->_radius_batch(queries_proc, d_max);
         return _derived()->postprocess(neighbors);
     }
 
     template<class RowMatrixT>
     vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
-        auto& queries_proc = Derived::preprocess_batch(queries);
+        const auto& queries_proc = Derived::preprocess_batch(queries);
         auto neighbors = Derived::_onenn_batch(queries_proc);
         return Derived::postprocess(neighbors);
     }
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
-        auto& queries_proc = _derived()->preprocess_batch(queries);
+        const auto& queries_proc = _derived()->preprocess_batch(queries);
         auto neighbors = _derived()->_knn_batch(queries_proc, k);
         return _derived()->postprocess(neighbors);
     }
@@ -360,7 +362,7 @@ protected: // default impls for derived
     }
 
     template<class RowMatrixT>
-    vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, size_t k) {
+    vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, int k) {
         vector<vector<Neighbor> > ret;
         for (idx_t j = 0; j < queries.rows(); j++) {
             ret.emplace_back(_derived()->_knn(queries.row(j).eval(), k));

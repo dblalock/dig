@@ -111,8 +111,8 @@ class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > { \
 
 // ------------------------ ctors / dtors
 
-// INDEX_NAME ::INDEX_NAME(const MatrixT & X): _this{new INDEX_NAME ::Impl{X}} {}
-#define INDEX_CTORS_DTOR(INDEX_NAME, Scalar) \
+#define INDEX_CTORS_DTOR(INDEX_NAME, Scalar, MatrixT) \
+    INDEX_NAME ::INDEX_NAME(const MatrixT & X): _this{new INDEX_NAME ::Impl{X}} {} \
     INDEX_NAME ::INDEX_NAME(Scalar* X, int m, int n): \
         _this{new INDEX_NAME ::Impl{X, m, n}} {} \
     INDEX_NAME ::~INDEX_NAME() = default;
@@ -144,7 +144,7 @@ double INDEX_NAME ::getQueryTimeMs() { return _this->_queryTimeMs; }
 
 #define DEFINE_INDEX(NAME, Scalar, VectorT, RowMatrixT, InnerIndexT) \
     INDEX_PIMPL(NAME, InnerIndexT) \
-    INDEX_CTORS_DTOR(NAME, Scalar) \
+    INDEX_CTORS_DTOR(NAME, Scalar, RowMatrixT) \
     INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
     INDEX_STATS_FUNCS(NAME)
 
@@ -155,8 +155,13 @@ DEFINE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf, nn::L2IndexBrute<float>
 
 
 // TODO use reorder preproc once we verify that this is working
-// DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, nn::L2IndexAbandon<double>);
-
+// template<class T>
+// using InnerIndexAbandonT = nn::L2IndexAbandon<T, nn::ReorderPreproc<T> >;
+// DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
+// DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
+template<class T> using InnerIndexAbandonT = nn::L2IndexAbandon<T>;
+DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
+DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
 
 
 //     INDEX_PIMPL(MatmulIndexF, nn::L2IndexBrute<float>)

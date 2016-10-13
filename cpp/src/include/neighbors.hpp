@@ -56,9 +56,9 @@ typedef struct Neighbor {
 	NAME & operator=(const NAME &) = delete; \
 	~NAME();
 
-// NAME(const MatrixT & X);
-#define DECLARE_INDEX_CTORS_DTOR(NAME, Scalar) \
-	NAME(Scalar* X, int m, int n); \
+#define DECLARE_INDEX_CTORS_DTOR(NAME, ScalarT, MatrixT) \
+	NAME(const MatrixT & X); \
+	NAME(ScalarT* X, int m, int n); \
 	NO_COPYING_AND_DEFAULT_DTOR(NAME) \
 
 #define DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
@@ -78,10 +78,11 @@ private: \
 
 // NOTE: we can't just compute VectorT, etc, based on Scalar because it
 // makes SWIG unhappy; compiles but thinks args have wrong types at runtime
-#define DECLARE_INDEX(NAME, Scalar, VectorT, RowMatrixT) \
+#define DECLARE_INDEX(NAME, ScalarT, VectorT, RowMatrixT) \
 class NAME { \
 public: \
-	DECLARE_INDEX_CTORS_DTOR(NAME, Scalar) \
+	typedef ScalarT Scalar; \
+	DECLARE_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
 	DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
 	DECLARE_INDEX_STATS_FUNCS \
 	DECLARE_INDEX_PIMPL(NAME) \
@@ -92,7 +93,8 @@ public: \
 DECLARE_INDEX(MatmulIndex, double, VectorXd, RowMatrixXd);
 DECLARE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf);
 
-// DECLARE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd);
+DECLARE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd);
+DECLARE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf);
 
 // ------------------------------------------------ BinTree
 

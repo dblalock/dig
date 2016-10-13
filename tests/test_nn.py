@@ -114,12 +114,12 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     assert(len(neighborIdxs) == len(trueNeighborIdxs))
     assert(all_eq(neighborIdxs, trueNeighborIdxs))
 
-    # # ------------------------ knn query
+    # ------------------------ knn query
 
     nn10 = index.knn(q, 10)
     t = index.getQueryTimeMs()
     trueNN10 = np.argsort(trueDists)[:10]
-    # print "nn10, true nn10 = {}, {}".format(nn10, trueNN10)
+    print "nn10, true nn10 = {}, {}".format(nn10, trueNN10)
     print "-> {} knn time\t\t= {}".format(name, t)
     assert(all_eq(nn10, trueNN10))
 
@@ -130,6 +130,7 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     Q = 128
     queries = np.random.randn(Q, D).astype(dtype)
     queries = np.cumsum(queries, axis=1)
+    queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
 
     dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
@@ -146,3 +147,6 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 if __name__ == '__main__':
     test_index(dig.MatmulIndex, "matmul")
     test_index(dig.MatmulIndexF, "matmulf", dtype=np.float32)
+
+    # test_index(dig.AbandonIndex, "abandon")
+    # test_index(dig.AbandonIndexF, "abandonf", dtype=np.float32)
