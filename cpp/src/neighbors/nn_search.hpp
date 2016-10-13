@@ -44,6 +44,59 @@ namespace internal {
 }
 
 
+// ------------------------------------------------ naive (vectorized) search
+
+namespace simple {
+
+template<class MatrixT, class VectorT, class DistT = typename MatrixT::Scalar>
+inline vector<Neighbor> radius(const MatrixT& X, const VectorT& q,
+                                      DistT radius_sq)
+{
+    vector<Neighbor> trueKnn;
+    for (int32_t i = 0; i < X.rows(); i++) {
+        DistT d = (X.row(i) - q).squaredNorm();
+        if (d < radius_sq) {
+            trueKnn.emplace_back(Neighbor{.dist = d, .idx = i});
+        }
+    }
+    return trueKnn;
+}
+
+template<class MatrixT, class VectorT>
+inline Neighbor onenn(const MatrixT& X, const VectorT& q) {
+    Neighbor trueNN;
+    double d_bsf = INFINITY;
+    for (int32_t i = 0; i < X.rows(); i++) {
+		auto dist = dist::simple::dist_sq(X.row(i), q);
+        if (dist < d_bsf) {
+            d_bsf = dist;
+			trueNN = Neighbor{.idx = i, .dist = dist};
+        }
+    }
+    return trueNN;
+}
+
+template<class MatrixT, class VectorT>
+inline vector<Neighbor> knn(const MatrixT& X, const VectorT& q, int k) {
+    assert(k <= X.rows());
+
+    vector<Neighbor> trueKnn;
+    for (int32_t i = 0; i < k; i++) {
+        auto dist = (X.row(i) - q).squaredNorm();
+        trueKnn.push_back(Neighbor{.idx = i, .dist = dist});
+    }
+    sort_neighbors_ascending_distance(trueKnn);
+
+    typename MatrixT::Scalar d_bsf = INFINITY;
+    for (int32_t i = k; i < X.rows(); i++) {
+		auto dist = dist::simple::dist_sq(X.row(i), q);
+        maybe_insert_neighbor(trueKnn, dist, i);
+    }
+    return trueKnn;
+}
+
+} // namespace simple
+
 // ------------------------------------------------ brute force search
 
 namespace brute {

@@ -31,6 +31,7 @@
 		72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BF01C93629D00639302 /* test_subseq.cpp */; };
 		72CFE90C1CD464890085FB1B /* test_bit_ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */; };
 		72E714791DAFE6DB00CE06EC /* test_neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E714781DAFE6DB00CE06EC /* test_neighbors.cpp */; };
+		72E7147B1DB04BE000CE06EC /* test_euclidean.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */; };
 		72F66F441CA4B0F900EDB8E7 /* test_flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */; };
 /* End PBXBuildFile section */
 
@@ -435,6 +436,7 @@
 		72C81BF01C93629D00639302 /* test_subseq.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_subseq.cpp; sourceTree = "<group>"; };
 		72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_bit_ops.cpp; sourceTree = "<group>"; };
 		72E714781DAFE6DB00CE06EC /* test_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_neighbors.cpp; sourceTree = "<group>"; };
+		72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_euclidean.cpp; sourceTree = "<group>"; };
 		72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_flock.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -1255,6 +1257,7 @@
 			isa = PBXGroup;
 			children = (
 				72A789D31DA1F372004F2D18 /* test_cluster.cpp */,
+				72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */,
 				72C4194E1C5337AD004689A2 /* test_distance_utils.cpp */,
 				72C4194F1C5337AD004689A2 /* test_dtw.cpp */,
 			);
@@ -1380,6 +1383,7 @@
 				72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */,
 				72C4195C1C5337AD004689A2 /* deque.c in Sources */,
 				72C419661C5337AD004689A2 /* test_dtw.cpp in Sources */,
+				72E7147B1DB04BE000CE06EC /* test_euclidean.cpp in Sources */,
 				728F85E01C55B565004E4AA0 /* tree.cpp in Sources */,
 				72C419691C5337AD004689A2 /* testing_utils.cpp in Sources */,
 				721FC9CE1DAC00AE00EF824F /* neighbors.cpp in Sources */,

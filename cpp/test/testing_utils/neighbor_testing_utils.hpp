@@ -99,7 +99,7 @@ inline vector<Neighbor> knn_simple(const MatrixT& X, const VectorT& q, int k) {
 
     typename MatrixT::Scalar d_bsf = INFINITY;
     for (int32_t i = k; i < X.rows(); i++) {
-        auto dist = dist::dist_sq(X.row(i), q);
+		auto dist = dist::simple::dist_sq(X.row(i), q);
         nn::maybe_insert_neighbor(trueKnn, dist, i);
     }
     return trueKnn;

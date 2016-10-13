@@ -77,13 +77,6 @@ inline MatrixT dists_to_vectors(const MatrixT& X, const MatrixT& V) {
     return squared_dists_to_vectors(X, V).array().sqrt().matrix();
 }
 
-template<class VectorT1, class VectorT2>
-auto dist_sq(const VectorT1& x, const VectorT2& y)
-    -> decltype((x - y).squaredNorm())
-{
-    return (x - y).squaredNorm();
-}
-
 // ------------------------ dist to single vector, with row norms
 // Note that this is after the batch functions because it calls them
 
@@ -127,6 +120,18 @@ inline auto dists_to_vector(const MatrixT& X, const VectorT& v)
     return squared_dists_to_vector(X, v).array().sqrt().matrix();
 }
 
+
+// ------------------------------------------------ simple vectorized distances
+namespace simple {
+
+template<class VectorT1, class VectorT2>
+auto dist_sq(const VectorT1& x, const VectorT2& y)
+    -> decltype((x - y).squaredNorm())
+{
+    return (x - y).squaredNorm();
+}
+
+} // namespace simple
 
 // ------------------------------------------------ early abandoning distances
 namespace abandon {

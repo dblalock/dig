@@ -10,7 +10,7 @@
 #include "catch.hpp"
 
 #include "neighbor_testing_utils.hpp"
-
+#include "nn_search.hpp"
 
 // template<class IndexT>
 // struct index_traits {
@@ -43,7 +43,7 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
         // ------------------------ knn
         for (int k = 1; k <= 5; k += 2) {
             auto knn_idxs = index.knn(q, k);
-            auto trueKnn = knn_simple(X, q, k);
+			auto trueKnn = nn::simple::knn(X, q, k);
 			auto trueKnn_idxs = idxs_from_neighbors(trueKnn);
 
             CAPTURE(k);
