@@ -26,7 +26,7 @@ using Eigen::MatrixXi;
 typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
 	Eigen::RowMajor> RowMatrixXd;
 typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
-Eigen::RowMajor> RowMatrixXf;
+	Eigen::RowMajor> RowMatrixXf;
 // typedef Eigen::Matrix<long long, Eigen::Dynamic, Eigen::Dynamic,
 // 	Eigen::RowMajor> MatrixXi;
 

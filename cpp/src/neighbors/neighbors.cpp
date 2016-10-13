@@ -154,38 +154,11 @@ DEFINE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf, nn::L2IndexBrute<float>
 
 
 // TODO use reorder preproc once we verify that this is working
-// template<class T>
-// using InnerIndexAbandonT = nn::L2IndexAbandon<T, nn::ReorderPreproc<T> >;
-// DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
-// DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
-template<class T> using InnerIndexAbandonT = nn::L2IndexAbandon<T>;
+template<class T>
+using InnerIndexAbandonT = nn::L2IndexAbandon<T, nn::ReorderPreproc<T> >;
 DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
 DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
+// template<class T> using InnerIndexAbandonT = nn::L2IndexAbandon<T>;
+// DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
+// DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
 
-
-//     INDEX_PIMPL(MatmulIndexF, nn::L2IndexBrute<float>)
-
-// // class MatmulIndexF ::Impl: public IndexImpl<nn::L2IndexBrute<float> > { \
-// //     using Super = IndexImpl<nn::L2IndexBrute<float> >; \
-// //     friend class MatmulIndexF; \
-// //     using Super::Super; \
-// // };
-
-//     INDEX_CTORS_DTOR(MatmulIndexF, float, MatrixXf)
-
-//     INDEX_QUERY_FUNCS(MatmulIndexF, VectorXf, RowMatrixXf)
-
-// // vector<int64_t> MatmulIndexF ::radius(const VectorXf & q, double radiusL2) { \
-// //     return _this->radius(q, radiusL2); \
-// // } \
-// // vector<int64_t> MatmulIndexF ::knn(const VectorXf & q, int k) { \
-// //     return _this->knn(q, k); \
-// // } \
-// // MatrixXi MatmulIndexF ::radius_batch(const RowMatrixXf & queries, double radiusL2) { \
-// //     return _this->radius_batch(queries, radiusL2); \
-// // } \
-// // MatrixXi MatmulIndexF ::knn_batch(const RowMatrixXf & queries, int k) { \
-// //     return _this->knn_batch(queries, k); \
-// // }
-
-//     INDEX_STATS_FUNCS(MatmulIndexF)

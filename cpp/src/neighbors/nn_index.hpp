@@ -520,6 +520,8 @@ public:
     {
         static_assert(RowMatrixT::IsRowMajor, "Data matrix must be row-major");
         // assert(_data.IsRowMajor);
+        // PRINT("L2IndexAbandon received data:");
+        // PRINT_VAR(data);
     }
     // L2IndexAbandon(L2IndexAbandon&& rhs) noexcept:
     //     FlatIdStore(std::move(rhs)),
@@ -531,6 +533,9 @@ protected:
 
     template<class VectorT>
     vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
+        // PRINT("L2IndexAbandon received query, dmax:");
+        // PRINT_VAR(query);
+        // PRINT_VAR(d_max);
         return abandon::radius(_data, query, d_max, rows());
     }
 

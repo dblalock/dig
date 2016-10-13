@@ -119,7 +119,9 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     nn10 = index.knn(q, 10)
     t = index.getQueryTimeMs()
     trueNN10 = np.argsort(trueDists)[:10]
-    print "nn10, true nn10 = {}, {}".format(nn10, trueNN10)
+    # print "nn10, true nn10 =\n{}\n{}".format(nn10, trueNN10)
+    print "sorted nn10, true nn10 =\n{}\n{}".format(
+        sorted(nn10), sorted(trueNN10))
     print "-> {} knn time\t\t= {}".format(name, t)
     assert(all_eq(nn10, trueNN10))
 
@@ -144,9 +146,30 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     test_radius_batch_query(index, queries, dists, name=name, r2=r2)
 
 
+def debug():
+    N = 4
+    D = 3
+
+    dtype = np.float32
+
+    # X = np.random.randn(N, D).astype(dtype)
+    # X = np.cumsum(X, axis=1)
+    X = np.arange(N * D, dtype=dtype).reshape((N, D))
+
+    # q = np.cumsum(np.random.randn(D).astype(dtype))
+    print "X py:\n", X
+    index = dig.AbandonIndexF(X)
+
+    q = np.arange(D, dtype=dtype)
+    print "q py:\n", q
+    index.radius(q, 99.)
+
+
 if __name__ == '__main__':
+    # debug()
+
     test_index(dig.MatmulIndex, "matmul")
     test_index(dig.MatmulIndexF, "matmulf", dtype=np.float32)
 
     test_index(dig.AbandonIndex, "abandon")
-    # test_index(dig.AbandonIndexF, "abandonf", dtype=np.float32)
+    test_index(dig.AbandonIndexF, "abandonf", dtype=np.float32)

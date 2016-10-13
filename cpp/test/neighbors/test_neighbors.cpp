@@ -38,8 +38,7 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
 
         CAPTURE(ar::to_string(allnn_idxs));
         CAPTURE(ar::to_string(trueNN_idxs));
-        REQUIRE(allnn_idxs.size() == trueNN_idxs.size());
-        REQUIRE(ar::all_eq(allnn_idxs, trueNN_idxs));
+        require_neighbor_idx_lists_same(allnn_idxs, trueNN_idxs);
 
         // ------------------------ knn
         for (int k = 1; k <= 5; k += 2) {
@@ -52,8 +51,7 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
             CAPTURE(trueKnn_idxs[0]);
             CAPTURE(ar::to_string(knn_idxs));
             CAPTURE(ar::to_string(trueKnn_idxs));
-            REQUIRE(knn_idxs.size() == trueKnn_idxs.size());
-            REQUIRE(ar::all_eq(knn_idxs, trueKnn_idxs));
+            require_neighbor_idx_lists_same(knn_idxs, trueKnn_idxs);
         }
     }
 }
@@ -72,14 +70,22 @@ void _test_wrapper_index(int64_t N=100, int64_t D=16) {
 
 TEST_CASE("MatmulIndex", "neighbors") {
     _test_wrapper_index<MatmulIndex>();
+    _test_wrapper_index<MatmulIndex>(100, 10);
+    _test_wrapper_index<MatmulIndex>(64, 19);
 }
 TEST_CASE("MatmulIndexF", "neighbors") {
     _test_wrapper_index<MatmulIndexF>();
+    _test_wrapper_index<MatmulIndexF>(100, 10);
+    _test_wrapper_index<MatmulIndexF>(64, 19);
 }
 
 TEST_CASE("AbandonIndex", "neighbors") {
     _test_wrapper_index<AbandonIndex>();
+    _test_wrapper_index<AbandonIndex>(100, 10);
+    _test_wrapper_index<AbandonIndex>(64, 19);
 }
 TEST_CASE("AbandonIndexF", "neighbors") {
     _test_wrapper_index<AbandonIndexF>();
+    _test_wrapper_index<AbandonIndexF>(100, 10);
+    _test_wrapper_index<AbandonIndexF>(64, 19);
 }
