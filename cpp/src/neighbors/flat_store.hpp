@@ -85,7 +85,7 @@ public:
     // ------------------------ ctors
 
     // init data with new pointer that we own
-    template<REQUIRE_TRUE(OwnPtr)>
+    template<METHOD_REQ(OwnPtr)>
     BaseRowArray(size_t initial_rows, size_t ncols):
         _data(_aligned_alloc(initial_rows * _aligned_length(ncols)))
     {
@@ -112,11 +112,11 @@ public:
     }
 
     // init data ptr directly with existing pointer that we don't own
-    template<class RowMatrixT, REQUIRE_TRUE(!OwnPtr)>
+    template<class RowMatrixT, METHOD_REQ(!OwnPtr)>
     BaseRowArray(const RowMatrixT& X):
         _data(X.data())
     {}
-	template<REQUIRE_TRUE(!OwnPtr)>
+	template<METHOD_REQ(!OwnPtr)>
 	BaseRowArray(const Scalar* ptr):
 		_data(ptr)
 	{}
@@ -282,11 +282,8 @@ public:
     {
         // NOTE: wouldn't need this restriction if we had BaseRowArray
         // always align what it got from derived()->cols()
-        size_t aligned_ncols = aligned_length<T, AlignBytes>(NumCols);
-        assert(aligned_ncols == NumCols);
-		// constexpr size_t aligned_ncols = aligned_length<T, AlignBytes>(NumCols);
-   //      static_assert(aligned_ncols == NumCols,
-			// "NumCols * sizeof(T) must be a mulitple of AlignBytes");
+        static_assert(NumCols == (aligned_length<T, AlignBytes>(NumCols)),
+            "Specified NumCols will not yield aligned rows!");
     }
 
     FixedRowArray(const FixedRowArray& other) = delete;

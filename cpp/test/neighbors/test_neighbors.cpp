@@ -89,3 +89,14 @@ TEST_CASE("AbandonIndexF", "neighbors") {
     _test_wrapper_index<AbandonIndexF>(100, 10);
     _test_wrapper_index<AbandonIndexF>(64, 19);
 }
+
+TEST_CASE("SimpleIndex", "neighbors") {
+    _test_wrapper_index<SimpleIndex>();
+    _test_wrapper_index<SimpleIndex>(100, 10);
+    _test_wrapper_index<SimpleIndex>(64, 19);
+}
+TEST_CASE("SimpleIndexF", "neighbors") {
+    _test_wrapper_index<SimpleIndexF>();
+    _test_wrapper_index<SimpleIndexF>(100, 10);
+    _test_wrapper_index<SimpleIndexF>(64, 19);
+}

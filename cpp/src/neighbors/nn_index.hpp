@@ -83,6 +83,8 @@ protected:
 // ================================================================
 
 struct IdentityPreproc {
+    static constexpr int align_bytes = 0;
+
     // ------------------------ ctors
     template<class RowMatrixT> IdentityPreproc(const RowMatrixT& X) {}
     IdentityPreproc() = default;
@@ -107,7 +109,8 @@ struct ReorderPreproc { // TODO could avoid passing ScalarT template arg
     // ------------------------ consts
     using Scalar = ScalarT;
     using Index = int32_t;
-    enum { max_pad_elements = AlignBytes / sizeof(Scalar) };
+	static constexpr int max_pad_elements = AlignBytes / sizeof(Scalar);
+    static constexpr int align_bytes = AlignBytes;
 
     // ------------------------ ctors
     ReorderPreproc() = default;
@@ -175,7 +178,7 @@ struct ReorderPreproc { // TODO could avoid passing ScalarT template arg
     }
 private:
     Index _aligned_length(int64_t n) const {
-        return static_cast<Index>(aligned_length<Scalar, AlignBytes>(n));
+        return static_cast<Index>(aligned_length<Scalar, align_bytes>(n));
     }
     Index _length() const { return _aligned_length(_order.size()); }
     std::vector<Index> _order;
@@ -519,9 +522,8 @@ public:
         // _data(data)
     {
         static_assert(RowMatrixT::IsRowMajor, "Data matrix must be row-major");
-        // assert(_data.IsRowMajor);
-        // PRINT("L2IndexAbandon received data:");
-        // PRINT_VAR(data);
+        assert(_data.cols() ==
+			(aligned_length<Scalar, kAlignBytes>(data.cols())) );
     }
     // L2IndexAbandon(L2IndexAbandon&& rhs) noexcept:
     //     FlatIdStore(std::move(rhs)),
@@ -533,9 +535,6 @@ protected:
 
     template<class VectorT>
     vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
-        // PRINT("L2IndexAbandon received query, dmax:");
-        // PRINT_VAR(query);
-        // PRINT_VAR(d_max);
         return abandon::radius(_data, query, d_max, rows());
     }
 
@@ -553,6 +552,64 @@ private:
     DynamicRowArray<Scalar, kAlignBytes> _data;
 };
 
+// ================================================================
+// L2IndexSimple
+// ================================================================
+
+// simple index that searches thru points like L2AbandonIndex, but without
+// the abandoning; this lets us measure the effect of the abandoning
+template<class T, class PreprocT=IdentityPreproc>
+class L2IndexSimple:
+    public IndexBase<L2IndexSimple<T, PreprocT>, T>,
+    public PreprocT,
+    public FlatIdStore<> {
+    friend class IndexBase<L2IndexSimple<T, PreprocT>, T>;
+public:
+    typedef T Scalar;
+    typedef T DistT;
+    typedef idx_t Index;
+    typedef Matrix<Scalar, 1, Dynamic, RowMajor> RowVectT;
+    typedef Matrix<int32_t, 1, Dynamic, RowMajor> RowVectIdxsT;
+
+    // ------------------------------------------------ ctors
+
+    L2IndexSimple() = default;
+
+    template<class RowMatrixT>
+    explicit L2IndexSimple(const RowMatrixT& data):
+        PreprocT(data),
+        FlatIdStore(data.rows()),
+        _data(PreprocT::preprocess_data(data))
+    {
+        static_assert(RowMatrixT::IsRowMajor, "Data matrix must be row-major");
+    }
+
+protected:
+    // ------------------------------------------------ single query
+
+    template<class VectorT>
+    vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
+        return simple::radius(_data, query, d_max, rows());
+    }
+
+    template<class VectorT>
+    Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist) {
+        return simple::onenn(_data, query, rows());
+    }
+
+    template<class VectorT>
+    vector<Neighbor> _knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
+        return simple::knn(_data, query, k, rows());
+    }
+
+    // SELF: the problem is that _data.cols() is 16 cuz of alignment, while the
+    // query has the original number of cols passed in (which is 10).
+    //     -abandon version always needs rows aligned
+    //     -simple version (this class) doesnt really need rows
+
+private:
+    DynamicRowArray<Scalar, PreprocT::align_bytes> _data;
+};
 
 // ================================================================
 // KmeansIndex

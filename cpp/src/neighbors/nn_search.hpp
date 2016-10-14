@@ -1,4 +1,4 @@
-//
+
 //  nn_search.hpp
 //  Dig
 //
@@ -15,18 +15,67 @@
 namespace nn {
 
 namespace internal {
-	template<class RowMatrixT, class _=decltype(std::declval<RowMatrixT>().rows())>
-    idx_t _num_rows(const RowMatrixT& X, int64_t nrows_hint) {
+
+    //
+    // any of these work to define a test functor
+    //
+	// auto hasRows = is_valid([](auto&& x) -> decltype(x.rows()) { });
+	// auto hasRows = TEST_FOR_METHOD(rows());
+    auto hasRows = CREATE_TEST(x, x.rows());
+	// auto hasRows = CREATE_TEST_X(x.rows());
+
+    // this func and the one below use two different macros to conditionally
+    // allow substitution based on whether X.rows() will compile; we could
+    // also put one of these in the template signature, but not both, because
+    // then the funcs would only differ in optional template args and the
+    // compiler would complain that the second one was redefining default
+    // args / redefining the whole function.
+    template<class RowMatrixT>
+    auto _num_rows(const RowMatrixT& X, int64_t nrows_hint)
+        -> ENABLE_IF(PASSES_TEST(X, hasRows), idx_t)
+    {
         if (nrows_hint > 0) {
             return nrows_hint;
         }
         return X.rows();
     }
-    template<class RowMatrixT> // doesn't have rows()
-    idx_t _num_rows(const RowMatrixT& X, int64_t nrows_hint) {
+
+    template<class RowMatrixT>
+    auto _num_rows(const RowMatrixT& X, int64_t nrows_hint)
+        -> ENABLE_IF(!TYPE_PASSES_TEST(RowMatrixT, hasRows), idx_t)
+    {
         assert(nrows_hint > 0);
-        return nrows_hint;
+        return static_cast<idx_t>(nrows_hint);
     }
+
+ //    	// class _ = typename std::enable_if<!std::is_integral< decltype(std::declval<RowMatrixT>().rows()) >::value >::type>
+ //    // template<class RowMatrixT, class _=void>
+ //    template<class RowMatrixT>
+	// idx_t _num_rows<RowMatrixT, void>(const RowMatrixT& X, int64_t nrows_hint) {
+	// 	assert(nrows_hint > 0);
+	// 	return static_cast<idx_t>(nrows_hint);
+	// }
+
+    // template<class RowMatrixT, class _=decltype(std::declval<RowMatrixT>().rows())>
+    // struct _num_rows_struct {
+    //     idx_t operator()(const RowMatrixT& X, int64_t nrows_hint) {
+    //         if (nrows_hint > 0) { return nrows_hint; }
+    //         return X.rows();
+    //     }
+    // };
+
+    // template<class RowMatrixT>
+    // struct _num_rows_struct<RowMatrixT, void> {
+    //     idx_t operator()(const RowMatrixT& X, int64_t nrows_hint) {
+    //         assert(nrows_hint > 0);
+    //         return static_cast<idx_t>(nrows_hint);
+    //     }
+    // };
+
+    // template<class RowMatrixT>
+    // idx_t _num_rows(const RowMatrixT& X, int64_t nrows_hint) {
+    //     return _num_rows_struct<RowMatrixT>{}(X, nrows_hint);
+    // }
 
     // either return vector of neighbors or just indices
     template<class Ret> struct emplace_neighbor {
@@ -48,13 +97,14 @@ namespace internal {
 
 namespace simple {
 
-template<class MatrixT, class VectorT, class DistT = typename MatrixT::Scalar>
+template<class MatrixT, class VectorT, class DistT>
 inline vector<Neighbor> radius(const MatrixT& X, const VectorT& q,
-                                      DistT radius_sq)
+    DistT radius_sq, idx_t nrows=-1)
 {
     vector<Neighbor> trueKnn;
-    for (int32_t i = 0; i < X.rows(); i++) {
-        DistT d = (X.row(i) - q).squaredNorm();
+    // auto numrows = internal::_num_rows<RowMatrixT>{}(X, nrows);
+    for (int32_t i = 0; i < internal::_num_rows(X, nrows); i++) {
+        auto d = dist::simple::dist_sq(X.row(i), q);
         if (d < radius_sq) {
             trueKnn.emplace_back(Neighbor{.dist = d, .idx = i});
         }
@@ -63,10 +113,10 @@ inline vector<Neighbor> radius(const MatrixT& X, const VectorT& q,
 }
 
 template<class MatrixT, class VectorT>
-inline Neighbor onenn(const MatrixT& X, const VectorT& q) {
+inline Neighbor onenn(const MatrixT& X, const VectorT& q, idx_t nrows=-1) {
     Neighbor trueNN;
     double d_bsf = INFINITY;
-    for (int32_t i = 0; i < X.rows(); i++) {
+    for (int32_t i = 0; i < internal::_num_rows(X, nrows); i++) {
 		auto dist = dist::simple::dist_sq(X.row(i), q);
         if (dist < d_bsf) {
             d_bsf = dist;
@@ -77,18 +127,20 @@ inline Neighbor onenn(const MatrixT& X, const VectorT& q) {
 }
 
 template<class MatrixT, class VectorT>
-inline vector<Neighbor> knn(const MatrixT& X, const VectorT& q, int k) {
-    assert(k <= X.rows());
+inline vector<Neighbor> knn(const MatrixT& X, const VectorT& q, int k,
+    idx_t nrows=-1)
+{
+    assert(k > 0);
+    assert(k <= internal::_num_rows(X, nrows));
 
     vector<Neighbor> trueKnn;
     for (int32_t i = 0; i < k; i++) {
-        auto dist = (X.row(i) - q).squaredNorm();
+        auto dist = dist::simple::dist_sq(X.row(i), q);
         trueKnn.push_back(Neighbor{.idx = i, .dist = dist});
     }
     sort_neighbors_ascending_distance(trueKnn);
 
-    typename MatrixT::Scalar d_bsf = INFINITY;
-    for (int32_t i = k; i < X.rows(); i++) {
+    for (int32_t i = k; i < internal::_num_rows(X, nrows); i++) {
 		auto dist = dist::simple::dist_sq(X.row(i), q);
         maybe_insert_neighbor(trueKnn, dist, i);
     }
@@ -160,6 +212,7 @@ namespace brute {
     template<class RowMatrixT, class VectorT>
     vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query, size_t k)
     {
+        assert(k > 0);
         if (VectorT::IsRowMajor) {
     		auto dists = dist::squared_dists_to_vector(X, query);
             return knn_from_dists(dists.data(), dists.size(), k);
@@ -172,6 +225,7 @@ namespace brute {
     vector<Neighbor> knn(const RowMatrixT& X, const VectorT& query,
         size_t k, const ColVectorT& rowSquaredNorms)
     {
+        assert(k > 0);
         auto dists = dist::squared_dists_to_vector(X, query, rowSquaredNorms);
         return knn_from_dists(dists.data(), dists.size(), k);
     }
@@ -198,6 +252,7 @@ namespace brute {
     inline vector<vector<Neighbor> > knn_batch(const RowMatrixT& X,
         const RowMatrixT2& queries, size_t k, const ColVectorT& rowNorms)
     {
+        assert(k > 0);
         auto dists = dist::squared_dists_to_vectors(X, queries, rowNorms);
         assert(queries.rows() == dists.cols());
         auto num_queries = queries.rows();
@@ -365,6 +420,8 @@ vector<Neighbor> knn(const RowMatrixT& X,
     // const VectorT& query, idx_t num_rows, int k, DistT d_bsf=kMaxDist)
 {
     assert(k > 0);
+    assert(k <= internal::_num_rows(X, nrows));
+
     vector<Neighbor> ret(k, {.dist = d_bsf, .idx = kInvalidIdx});
 	for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
 		auto d = dist::abandon::dist_sq(X.row(i).eval(), query, d_bsf);

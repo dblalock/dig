@@ -162,3 +162,7 @@ DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<flo
 // DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
 // DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
 
+template<class T>
+using InnerIndexSimpleT = nn::L2IndexSimple<T>;
+DEFINE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd, InnerIndexSimpleT<double>);
+DEFINE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf, InnerIndexSimpleT<float>);

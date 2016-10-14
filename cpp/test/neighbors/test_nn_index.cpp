@@ -25,7 +25,7 @@ TEST_CASE("print sizes", "tmp") { // not really a test; just prints sizes
 	printf("sizeof(FixedRowArray<float, 8>) = %ld\n", sizeof(nn::FixedRowArray<float, 8>));
 	printf("sizeof(FixedRowArray<float, 16>) = %ld\n", sizeof(nn::FixedRowArray<float, 16>));
 	printf("sizeof(L2IndexBrute<float>) = %ld\n", sizeof(nn::L2IndexBrute<float>));
-	printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
+	// printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
 }
 
 TEST_CASE("L2IndexBrute", "neighbors") {
@@ -35,6 +35,10 @@ TEST_CASE("L2IndexBrute", "neighbors") {
 TEST_CASE("L2IndexAbandon", "neighbors") {
 	_test_index<nn::L2IndexAbandon<double> >();
 	_test_index<nn::L2IndexAbandon<float> >();
+}
+TEST_CASE("L2IndexSimple", "neighbors") {
+	_test_index<nn::L2IndexSimple<double> >();
+	_test_index<nn::L2IndexSimple<float> >();
 }
 
 TEST_CASE("NNIndex_IdentityPreproc", "neighbors") {

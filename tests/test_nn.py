@@ -168,8 +168,11 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
-    test_index(dig.MatmulIndex, "matmul")
-    test_index(dig.MatmulIndexF, "matmulf", dtype=np.float32)
+    # test_index(dig.MatmulIndex, "matmul")
+    # test_index(dig.MatmulIndexF, "matmulf", dtype=np.float32)
 
-    test_index(dig.AbandonIndex, "abandon")
-    test_index(dig.AbandonIndexF, "abandonf", dtype=np.float32)
+    # test_index(dig.AbandonIndex, "abandon")
+    # test_index(dig.AbandonIndexF, "abandonf", dtype=np.float32)
+
+    test_index(dig.SimpleIndex, "simple")
+    test_index(dig.SimpleIndexF, "simplef", dtype=np.float32)

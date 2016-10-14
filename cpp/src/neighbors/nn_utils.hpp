@@ -103,7 +103,7 @@ inline std::vector<IdxT> order_col_variance(const MatrixT& X) {
 // ------------------------------------------------ Alignment
 
 template<class T, int AlignBytes, class IntT>
-inline IntT aligned_length(IntT ncols) {
+inline constexpr IntT aligned_length(IntT ncols) {
 	static_assert(AlignBytes >= 0, "AlignBytes must be nonnegative");
 	assert(ncols > 0);
 	if (AlignBytes == 0) { return ncols; }

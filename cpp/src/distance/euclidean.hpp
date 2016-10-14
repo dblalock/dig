@@ -125,9 +125,17 @@ inline auto dists_to_vector(const MatrixT& X, const VectorT& v)
 namespace simple {
 
 template<class VectorT1, class VectorT2>
-auto dist_sq(const VectorT1& x, const VectorT2& y)
-    -> decltype((x - y).squaredNorm())
+inline auto dist_sq(const VectorT1& x, const VectorT2& y)
+	-> typename mat_product_traits<VectorT1, VectorT2>::Scalar
 {
+	constexpr auto static_mismatch = (VectorT1::IsRowMajor != VectorT2::IsRowMajor);
+	// auto runtime_mismatch = (x.IsRowMajor != y.IsRowMajor);
+    // if (static_mismatch || runtime_mismatch) {
+	if (static_mismatch) {
+        return (x - y.transpose()).squaredNorm();
+    }
+	assert(x.rows() == y.rows());
+	assert(x.cols() == y.cols());
     return (x - y).squaredNorm();
 }
 
@@ -156,7 +164,7 @@ namespace abandon {
 
 
 template<int BlockSize=8, class VectorT1, class VectorT2, class dist_t>
-dist_t dist_sq(const VectorT1& x, const VectorT2& y, dist_t thresh=kMaxDist) {
+inline dist_t dist_sq(const VectorT1& x, const VectorT2& y, dist_t thresh=kMaxDist) {
     // typedef decltype(x.data()[0] * y.data()[0]) dist_t;
 
 //	STATIC_ASSERT_SAME_SHAPE(VectorT1, VectorT2);
@@ -198,7 +206,7 @@ dist_t dist_sq(const VectorT1& x, const VectorT2& y, dist_t thresh=kMaxDist) {
 
 template<int BlockSize=8, class VectorT1, class VectorT2, class IdxVectorT,
     class dist_t>
-dist_t dist_sq_order(const VectorT1& x, const VectorT2& y,
+inline dist_t dist_sq_order(const VectorT1& x, const VectorT2& y,
     const IdxVectorT& order, dist_t thresh)
 {
     auto n = x.size();
@@ -222,7 +230,7 @@ dist_t dist_sq_order(const VectorT1& x, const VectorT2& y,
 
 template<int BlockSize=8, class VectorT1, class VectorT2, class IdxVectorT,
     class dist_t>
-dist_t dist_sq_order_presorted(const VectorT1& x_sorted, const VectorT2& y,
+inline dist_t dist_sq_order_presorted(const VectorT1& x_sorted, const VectorT2& y,
     const IdxVectorT& order, dist_t thresh)
 {
     auto n = x_sorted.size();
@@ -254,7 +262,7 @@ dist_t dist_sq_order_presorted(const VectorT1& x_sorted, const VectorT2& y,
 
 // NOTE: query_out and query must be padded to multiple of block size
 template<int BlockSize=8, class VectorT, class IdxT>
-void create_ordered_query(const VectorT& query, const VectorT& means,
+inline void create_ordered_query(const VectorT& query, const VectorT& means,
     typename VectorT::Scalar * query_out, IdxT* order_out)
 {
     typedef typename VectorT::Scalar data_t;

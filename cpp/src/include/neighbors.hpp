@@ -96,6 +96,9 @@ DECLARE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf);
 DECLARE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd);
 DECLARE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf);
 
+DECLARE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd);
+DECLARE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf);
+
 // ------------------------------------------------ BinTree
 
 // TODO these shouldn't be in this header; probably use pimpl idiom
