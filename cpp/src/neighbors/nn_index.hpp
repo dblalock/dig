@@ -60,7 +60,7 @@ public:
     // ie, convert indices within storage to point IDs
 
     Neighbor postprocess(Neighbor n) {
-        return Neighbor{.dist = n.dist, .idx = _ids[n.idx]};
+		return Neighbor{_ids[n.idx], n.dist};
     }
     std::vector<Neighbor> postprocess(std::vector<Neighbor> neighbors) {
         return ar::map([this](const Neighbor n) {
@@ -720,7 +720,7 @@ protected:
         // PRINT_VAR(_num_centroids);
         _update_order_for_query(query, centroids_limit); // update _order
 
-        Neighbor ret{.dist = d_max, .idx = kInvalidIdx};
+        Neighbor ret{kInvalidIdx, d_max};
         // PRINT_VAR(_order.size());
         for (int i = 0; i < _order.size(); i++) {
             auto& index = _indexes[_order[i]];
@@ -742,7 +742,7 @@ protected:
     {
         _update_order_for_query(query, centroids_limit); // update _order
 
-        vector<Neighbor> ret(k, {.dist = d_max, .idx = kInvalidIdx});
+        vector<Neighbor> ret(k, Neighbor{kInvalidIdx, d_max});
         for (int i = 0; i < _order.size(); i++) {
             auto& index = _indexes[_order[i]];
             if (index.rows() < 1) continue;

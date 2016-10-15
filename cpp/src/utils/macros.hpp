@@ -30,7 +30,6 @@
 #ifdef __cplusplus
 // ------------------------ type traits macros
 	#include <type_traits>
-	// #include "hana.hpp"
 
 	// #define SELF_TYPE \
 	// 	typename std::remove_reference<decltype(*this)>::type
@@ -105,7 +104,7 @@
 	#define REQUIRE_NOT_PTR(T) REQUIRE_NOT_TRAIT(is_pointer, T)
 
 	// ------------------------ is_valid; requires C++14
-	//  inspired by https://gist.github.com/Jiwan/7a586c739a30dd90d259
+	// inspired by https://gist.github.com/Jiwan/7a586c739a30dd90d259
 
 	template <typename T> struct _valid_helper {
 	private:
@@ -124,8 +123,6 @@
 
 	public:
 	    template <typename Param> constexpr auto operator()(const Param& p) {
-	        // The argument is forwarded to one of the two overloads.
-	        // The SFINAE on the 'true_type' will come into play to dispatch.
 	        return _is_valid<Param>(int(0));
 	    }
 	};
@@ -133,9 +130,6 @@
 	template <typename T> constexpr auto is_valid(const T& t) {
 	    return _valid_helper<T>();
 	}
-
-	// #define IS_VALID(EXPR)) \
-	// 	hana::is_valid([](auto&& x) -> decltype(EXPR) { })
 
 	#define CREATE_TEST(OBJNAME, EXPR) \
 		is_valid([](auto&& OBJNAME) -> decltype(EXPR) { })
@@ -150,7 +144,7 @@
 		decltype(TEST(OBJ))::value
 
 	#define TYPE_PASSES_TEST(T, TEST) \
-		decltype(TEST(std::declval<T>()))::value
+		PASSES_TEST(std::declval<T>(), TEST)
 
 	#define REQ_TYPE_PASSES(T, TEST) \
 		REQ(TYPE_PASSES_TEST(T, TEST))

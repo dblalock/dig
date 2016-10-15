@@ -38,11 +38,20 @@ double swigEigenTest(double* X, int m, int n);
 
 // ------------------------------------------------ Neighbor
 typedef struct Neighbor {
-	typedef double dist_t;
+	typedef float dist_t;
+	// typedef double dist_t;
 	typedef nn::idx_t idx_t;
 
-	double dist;
 	idx_t idx;
+	dist_t dist;
+
+	Neighbor() = default;
+	Neighbor(const Neighbor& rhs) = default;
+	Neighbor(float d, idx_t i):  idx(i), dist(static_cast<dist_t>(d)) {}
+	Neighbor(idx_t i, float d):  idx(i), dist(static_cast<dist_t>(d)) {}
+	Neighbor(double d, idx_t i): idx(i), dist(static_cast<dist_t>(d)) {}
+	Neighbor(idx_t i, double d): idx(i), dist(static_cast<dist_t>(d)) {}
+
 } Neighbor;
 
 // ================================================================

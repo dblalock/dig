@@ -50,8 +50,8 @@ static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");
 namespace nn {
 
 namespace {
-using neighbor_dist_t = typename Neighbor::dist_t;
-static constexpr neighbor_dist_t kMaxDist = dist::max_dist<neighbor_dist_t>();
+using dist_t = typename Neighbor::dist_t;
+static constexpr dist_t kMaxDist = dist::max_dist<dist_t>();
 }
 // wrapper subclasses to allow only specifying type
 // template<class T, int Dim1=Dynamic, int Dim2=Dynamic>
@@ -178,7 +178,7 @@ inline void sort_neighbors_ascending_idx(Container<Neighbor>& neighbors) {
  * Returns the distance to the last (farthest) neighbor after possible insertion
  */
 template<template<class...> class Container>
-inline neighbor_dist_t maybe_insert_neighbor(
+inline dist_t maybe_insert_neighbor(
 	Container<Neighbor>& neighbors_bsf, Neighbor newNeighbor)
 {
     assert(neighbors_bsf.size() > 0);
@@ -201,18 +201,18 @@ inline neighbor_dist_t maybe_insert_neighbor(
     return neighbors_bsf[len - 1].dist;
 }
 template<template<class...> class Container>
-inline neighbor_dist_t maybe_insert_neighbor(Container<Neighbor>& neighbors_bsf,
+inline dist_t maybe_insert_neighbor(Container<Neighbor>& neighbors_bsf,
     double dist, typename Neighbor::idx_t idx)
 {
-    return maybe_insert_neighbor(neighbors_bsf, {.dist = dist, .idx = idx});
+	return maybe_insert_neighbor(neighbors_bsf, Neighbor{idx, dist});
 }
 
 template<template<class...> class Container,
     template<class...> class Container2>
-inline neighbor_dist_t maybe_insert_neighbors(Container<Neighbor>& neighbors_bsf,
+inline dist_t maybe_insert_neighbors(Container<Neighbor>& neighbors_bsf,
     const Container2<Neighbor>& potential_neighbors)
 {
-    neighbor_dist_t d_bsf = kMaxDist;
+    dist_t d_bsf = kMaxDist;
     for (auto& n : potential_neighbors) {
         d_bsf = maybe_insert_neighbor(neighbors_bsf, n);
     }
@@ -227,7 +227,7 @@ inline vector<Neighbor> knn_from_dists(const T* dists, size_t len, size_t k) {
     k = ar::min(k, len);
     vector<Neighbor> ret(k); // warning: populates it with k 0s
     for (idx_t i = 0; i < k; i++) {
-        ret[i] = Neighbor{.dist = dists[i], .idx = i};
+		ret[i] = Neighbor{i, dists[i]};
     }
     sort_neighbors_ascending_distance(ret);
     for (idx_t i = k; i < len; i++) {
@@ -242,7 +242,7 @@ inline vector<Neighbor> neighbors_in_radius(const T* dists, size_t len, R radius
     for (idx_t i = 0; i < len; i++) {
         auto dist = dists[i];
         if (dists[i] < radius_sq) {
-			neighbors.emplace_back(Neighbor{dist, i});
+			neighbors.emplace_back(Neighbor{static_cast<dist_t>(dist), i});
         }
     }
     return neighbors;

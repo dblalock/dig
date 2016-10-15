@@ -161,7 +161,7 @@ void run1nnTest(int N, int D, depth_t P=16, double binWidth=-1) {
 	for (length_t i = 0; i < X.rows(); i++) {
 		if (trueDists(i) < d_bsf) {
 			d_bsf = trueDists(i);
-			trueNN = Neighbor{.idx = i, .dist = trueDists(i)};
+			trueNN = Neighbor(i, trueDists(i));
 		}
 	}
 
@@ -215,7 +215,7 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 //	std::cout << "trueDists: " << trueDists << "\n"; // TODO remove
 	vector<Neighbor> trueNeighbors;
 	for (length_t i = 0; i < k; i++) {
-		trueNeighbors.push_back(Neighbor{.idx=i, .dist=trueDists(i)});
+		trueNeighbors.emplace_back(Neighbor(i, trueDists(i)));
 	}
 	std::sort(std::begin(trueNeighbors), std::end(trueNeighbors), // sort first k
 			  [](const Neighbor& n1, const Neighbor& n2) {
@@ -236,7 +236,7 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 		if (dist < d_bsf) { // found a closer point than current kth nn
 			// propagate point down to the appropriate index
 			int j = k-1;
-			trueNeighbors[j] = Neighbor{.idx=i, .dist=dist};
+			trueNeighbors[j] = Neighbor{i, dist};
 			while (j > 0 && trueNeighbors[j-1].dist > dist) {
 				Neighbor tmp = trueNeighbors[j-1];
 				trueNeighbors[j-1] = trueNeighbors[j];
@@ -260,10 +260,10 @@ void runKnnTest(int N, int D, depth_t P=16, int k=1, double binWidth=-1) {
 		return (length_t)n.idx;
 	}, trueNeighbors);
 	vector<double> neighborDists = ar::map([](const Neighbor& n) {
-		return n.dist;
+		return static_cast<double>(n.dist);
 	}, neighbors);
 	vector<double> trueNeighborDists = ar::map([](const Neighbor& n) {
-		return n.dist;
+		return static_cast<double>(n.dist);
 	}, trueNeighbors);
 
 	if (trueNeighbors.size() < 50) {

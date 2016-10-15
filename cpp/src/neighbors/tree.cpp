@@ -568,7 +568,7 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 				nn = point;
 			}
 		}
-		return Neighbor{.idx = nn, .dist = d_bsf};
+		return Neighbor{nn, d_bsf};
 	}
 
 	// ------------------------ internal node
@@ -617,7 +617,7 @@ Neighbor find1nnForBins(const VectorXd& q, const MatrixXd& X, Node* node,
 			}
 		}
 	}
-	return Neighbor{.idx = nn, .dist = d_bsf};
+	return Neighbor{nn, d_bsf};
 
 // 	hash_t maxBinGap = hash_t(floor(sqrt(d_cushion) / binWidth));
 // 	hash_t maxBinOffset = maxBinGap + 1;
@@ -823,9 +823,9 @@ vector<Neighbor> findKnn(const VectorXd& q, const MatrixXd& X, uint16_t k,
 	auto idxs = ar::rand_ints(0, X.rows(), numNeighborGuesses);
 	vector<Neighbor> sampleNeighbors;
 	for (int i = 0; i < numNeighborGuesses; i++) {
-		double dist = squaredL2Dist(X.row(i), q);
+		double d = squaredL2Dist(X.row(i), q);
 		length_t idx = static_cast<length_t>(idxs[i]);
-		sampleNeighbors.push_back(Neighbor{.dist=dist, .idx=idx});
+		sampleNeighbors.emplace_back(idx, d);
 	}
 
 	// sort sampled points by increasing distance from the query

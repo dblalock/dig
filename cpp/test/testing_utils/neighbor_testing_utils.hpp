@@ -11,6 +11,8 @@
 #include "euclidean.hpp"
 #include "nn_utils.hpp"
 
+using dist_t = Neighbor::dist_t;
+
 //void require_neighbors_same(const Neighbor& nn, const Neighbor& trueNN) {
 //    REQUIRE(nn.idx == trueNN.idx);
 //    REQUIRE(std::abs(nn.dist - trueNN.dist) < .0001);
@@ -63,7 +65,7 @@ inline vector<Neighbor> radius_simple(const MatrixT& X, const VectorT& q,
     for (int32_t i = 0; i < X.rows(); i++) {
         DistT d = (X.row(i) - q).squaredNorm();
         if (d < radius_sq) {
-            trueKnn.emplace_back(Neighbor{.dist = d, .idx = i});
+			trueKnn.emplace_back(i, d);
         }
     }
     return trueKnn;
@@ -74,13 +76,13 @@ inline Neighbor onenn_simple(const MatrixT& X, const VectorT& q) {
     Neighbor trueNN;
     double d_bsf = INFINITY;
     for (int32_t i = 0; i < X.rows(); i++) {
-        double dist1 = (X.row(i) - q).squaredNorm();
+        double d = (X.row(i) - q).squaredNorm();
 //      double dist2 = dist_sq(X.row(i).data(), q.data(), q.size());
         // double dist2 = dist::dist_sq(X.row(i), q);
 //      REQUIRE(approxEq(dist1, dist2));
-        if (dist1 < d_bsf) {
-            d_bsf = dist1;
-            trueNN = Neighbor{.idx = i, .dist = dist1};
+        if (d < d_bsf) {
+            d_bsf = d;
+			trueNN = Neighbor{i, d};
         }
     }
     return trueNN;
@@ -93,7 +95,7 @@ inline vector<Neighbor> knn_simple(const MatrixT& X, const VectorT& q, int k) {
     vector<Neighbor> trueKnn;
     for (int32_t i = 0; i < k; i++) {
         auto dist = (X.row(i) - q).squaredNorm();
-        trueKnn.push_back(Neighbor{.idx = i, .dist = dist});
+        trueKnn.emplace_back(i, dist);
     }
     nn::sort_neighbors_ascending_distance(trueKnn);
 
