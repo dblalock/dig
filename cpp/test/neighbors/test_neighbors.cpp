@@ -11,6 +11,7 @@
 
 #include "neighbor_testing_utils.hpp"
 #include "nn_search.hpp"
+#include "timing_utils.hpp"
 
 // template<class IndexT>
 // struct index_traits {
@@ -23,8 +24,9 @@
 
 template<class MatrixT, class IndexT, class QueryT>
 inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
-    QueryT& q)
+    QueryT& q, const char* msg="")
 {
+    PrintTimer t(msg);
     for (int i = 0; i < 100; i++) {
     // for (int i = 0; i < 10; i++) {
     // for (int i = 0; i < 1; i++) {
@@ -58,45 +60,63 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
 
 
 template<class IndexT>
-void _test_wrapper_index(int64_t N=100, int64_t D=16) {
+void _test_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="") {
     using Scalar = typename IndexT::Scalar;
     RowMatrix<Scalar> X(N, D);
     X.setRandom();
 
     IndexT index(X);
     RowVector<Scalar> q(D);
-    _test_wrapper_index_with_query(X, index, q);
+    _test_wrapper_index_with_query(X, index, q, msg);
 }
 
-TEST_CASE("MatmulIndex", "neighbors") {
-    _test_wrapper_index<MatmulIndex>();
-    _test_wrapper_index<MatmulIndex>(100, 10);
-    _test_wrapper_index<MatmulIndex>(64, 19);
-}
-TEST_CASE("MatmulIndexF", "neighbors") {
-    _test_wrapper_index<MatmulIndexF>();
-    _test_wrapper_index<MatmulIndexF>(100, 10);
-    _test_wrapper_index<MatmulIndexF>(64, 19);
-}
+#define TEST_WRAPPER_INDEX_ONCE(CLS, N, D) \
+    _test_wrapper_index<CLS>(N, D, "\t" #N "x" #D);
+
+#define TEST_WRAPPER_INDEX(CLS) \
+    std::cout << #CLS << ":\n"; \
+    TEST_WRAPPER_INDEX_ONCE(CLS, 100, 16); \
+    TEST_WRAPPER_INDEX_ONCE(CLS, 100, 10); \
+    TEST_WRAPPER_INDEX_ONCE(CLS, 64, 19);
+
+// TEST_CASE("MatmulIndex", "neighbors") {
+//     TEST_WRAPPER_INDEX(MatmulIndex);
+//     // _test_wrapper_index<MatmulIndex>();
+//     // _test_wrapper_index<MatmulIndex>(100, 10, "MatmulIndex_100x10");
+//     // _test_wrapper_index<MatmulIndex>(64, 19, "MatmulIndex_100x10");
+//     // TEST_WRAPPER_INDEX(MatmulIndex, 100, 16)
+//     // TEST_WRAPPER_INDEX(MatmulIndex, 100, 10)
+//     // TEST_WRAPPER_INDEX(MatmulIndex, 64, 19)
+// }
+// TEST_CASE("MatmulIndexF", "neighbors") {
+//     TEST_WRAPPER_INDEX(MatmulIndexF);
+//     // _test_wrapper_index<MatmulIndexF>();
+//     // _test_wrapper_index<MatmulIndexF>(100, 10);
+//     // _test_wrapper_index<MatmulIndexF>(64, 19);
+// }
 
 TEST_CASE("AbandonIndex", "neighbors") {
-    _test_wrapper_index<AbandonIndex>();
-    _test_wrapper_index<AbandonIndex>(100, 10);
-    _test_wrapper_index<AbandonIndex>(64, 19);
+    TEST_WRAPPER_INDEX(AbandonIndex);
+    // _test_wrapper_index<AbandonIndex>();
+    // _test_wrapper_index<AbandonIndex>(100, 10);
+    // _test_wrapper_index<AbandonIndex>(64, 19);
 }
 TEST_CASE("AbandonIndexF", "neighbors") {
-    _test_wrapper_index<AbandonIndexF>();
-    _test_wrapper_index<AbandonIndexF>(100, 10);
-    _test_wrapper_index<AbandonIndexF>(64, 19);
+    TEST_WRAPPER_INDEX(AbandonIndexF);
+    // _test_wrapper_index<AbandonIndexF>();
+    // _test_wrapper_index<AbandonIndexF>(100, 10);
+    // _test_wrapper_index<AbandonIndexF>(64, 19);
 }
 
 TEST_CASE("SimpleIndex", "neighbors") {
-    _test_wrapper_index<SimpleIndex>();
-    _test_wrapper_index<SimpleIndex>(100, 10);
-    _test_wrapper_index<SimpleIndex>(64, 19);
+    TEST_WRAPPER_INDEX(SimpleIndex);
+    // _test_wrapper_index<SimpleIndex>();
+    // _test_wrapper_index<SimpleIndex>(100, 10);
+    // _test_wrapper_index<SimpleIndex>(64, 19);
 }
 TEST_CASE("SimpleIndexF", "neighbors") {
-    _test_wrapper_index<SimpleIndexF>();
-    _test_wrapper_index<SimpleIndexF>(100, 10);
-    _test_wrapper_index<SimpleIndexF>(64, 19);
+    TEST_WRAPPER_INDEX(SimpleIndexF);
+    // _test_wrapper_index<SimpleIndexF>();
+    // _test_wrapper_index<SimpleIndexF>(100, 10);
+    // _test_wrapper_index<SimpleIndexF>(64, 19);
 }

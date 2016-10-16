@@ -10,6 +10,7 @@
 #define _TIMING_UTILS_HPP
 
 #include <chrono>
+#include <iostream>
 
 namespace {
 
@@ -33,6 +34,21 @@ private:
     double* _write_here;
     cputime_t _tstart;
 };
+
+class PrintTimer {
+public:
+    PrintTimer(const std::string& msg): _msg(msg), _tstart(timeNow()) {}
+    ~PrintTimer() {
+        if (_msg.size()) {
+            auto elapsed = durationMs(_tstart, timeNow());
+            std::cout << _msg << ":\t" << elapsed << "\n";
+        }
+    }
+private:
+    std::string _msg;
+    cputime_t _tstart;
+};
+
 
 } // anon namespace
 #endif // _TIMING_UTILS_HPP
