@@ -13,12 +13,20 @@
 
 #if defined(__GNUC__) && ((__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1))
 	#define RESTRICT __restrict__
+	#define likely(x)    __builtin_expect (!!(x), 1)
+	#define unlikely(x)  __builtin_expect (!!(x), 0)
 #elif defined(__clang__)
 	#define RESTRICT __restrict__
+	#define likely(x)    __builtin_expect (!!(x), 1)
+	#define unlikely(x)  __builtin_expect (!!(x), 0)
 #elif defined(_MSC_VER) && _MSC_VER >= 1400
 	#define RESTRICT __restrict
+	#define likely(x)    (x)
+	#define unlikely(x)  (x)
 #else
 	#define RESTRICT
+	#define likely(x)    (x)
+	#define unlikely(x)  (x)
 #endif
 
 // count the number of arguments in a varargs list
