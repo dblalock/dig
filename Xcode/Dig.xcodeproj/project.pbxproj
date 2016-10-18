@@ -30,6 +30,7 @@
 		72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE91C90DC0100639302 /* shape_features.cpp */; };
 		72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BF01C93629D00639302 /* test_subseq.cpp */; };
 		72CFE90C1CD464890085FB1B /* test_bit_ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */; };
+		72DED75A1DB546FC00F3301F /* test_distance_speed.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72DED7591DB546FC00F3301F /* test_distance_speed.cpp */; };
 		72E714791DAFE6DB00CE06EC /* test_neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E714781DAFE6DB00CE06EC /* test_neighbors.cpp */; };
 		72E7147B1DB04BE000CE06EC /* test_euclidean.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */; };
 		72F66F441CA4B0F900EDB8E7 /* test_flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */; };
@@ -435,6 +436,7 @@
 		72C81BEF1C93621300639302 /* pimpl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = pimpl.hpp; sourceTree = "<group>"; };
 		72C81BF01C93629D00639302 /* test_subseq.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_subseq.cpp; sourceTree = "<group>"; };
 		72CFE90B1CD464890085FB1B /* test_bit_ops.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_bit_ops.cpp; sourceTree = "<group>"; };
+		72DED7591DB546FC00F3301F /* test_distance_speed.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_distance_speed.cpp; sourceTree = "<group>"; };
 		72E714781DAFE6DB00CE06EC /* test_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_neighbors.cpp; sourceTree = "<group>"; };
 		72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_euclidean.cpp; sourceTree = "<group>"; };
 		72F66F431CA4B0F900EDB8E7 /* test_flock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_flock.cpp; sourceTree = "<group>"; };
@@ -1256,6 +1258,7 @@
 		72C4194D1C5337AD004689A2 /* distance */ = {
 			isa = PBXGroup;
 			children = (
+				72DED7591DB546FC00F3301F /* test_distance_speed.cpp */,
 				72A789D31DA1F372004F2D18 /* test_cluster.cpp */,
 				72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */,
 				72C4194E1C5337AD004689A2 /* test_distance_utils.cpp */,
@@ -1382,6 +1385,7 @@
 				72A789D41DA1F372004F2D18 /* test_cluster.cpp in Sources */,
 				72C4195D1C5337AD004689A2 /* distance_utils.cpp in Sources */,
 				72C4195C1C5337AD004689A2 /* deque.c in Sources */,
+				72DED75A1DB546FC00F3301F /* test_distance_speed.cpp in Sources */,
 				72C419661C5337AD004689A2 /* test_dtw.cpp in Sources */,
 				72E7147B1DB04BE000CE06EC /* test_euclidean.cpp in Sources */,
 				728F85E01C55B565004E4AA0 /* tree.cpp in Sources */,
@@ -1429,7 +1433,7 @@
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_ENABLE_CPP_EXCEPTIONS = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 1;
+				GCC_OPTIMIZATION_LEVEL = 3;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -1447,6 +1451,7 @@
 				OTHER_CPLUSPLUSFLAGS = (
 					"$(OTHER_CFLAGS)",
 					"-mavx",
+					"-march=native",
 				);
 				SDKROOT = macosx;
 			};
@@ -1492,6 +1497,7 @@
 				OTHER_CPLUSPLUSFLAGS = (
 					"$(OTHER_CFLAGS)",
 					"-mavx",
+					"-march=native",
 				);
 				SDKROOT = macosx;
 			};

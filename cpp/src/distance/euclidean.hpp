@@ -128,10 +128,7 @@ template<class VectorT1, class VectorT2>
 inline auto dist_sq(const VectorT1& x, const VectorT2& y)
 	-> typename mat_product_traits<VectorT1, VectorT2>::Scalar
 {
-	constexpr auto static_mismatch = (VectorT1::IsRowMajor != VectorT2::IsRowMajor);
-	// auto runtime_mismatch = (x.IsRowMajor != y.IsRowMajor);
-    // if (static_mismatch || runtime_mismatch) {
-	if (static_mismatch) {
+	if (VectorT1::IsRowMajor != VectorT2::IsRowMajor) {
         return (x - y.transpose()).squaredNorm();
     }
 	assert(x.rows() == y.rows());
@@ -163,44 +160,152 @@ namespace abandon {
 //			   typename TTypes<T>::VectorCRef y, dist_t thresh=kMaxDist) {
 
 
-template<int BlockSize=8, class VectorT1, class VectorT2, class dist_t>
-inline dist_t dist_sq(const VectorT1& x, const VectorT2& y, dist_t thresh=kMaxDist) {
-    // typedef decltype(x.data()[0] * y.data()[0]) dist_t;
+template<int BlockSize=32, class VectorT1, class VectorT2,
+	class dist_t=typename VectorT1::Scalar>
+inline dist_t dist_sq(const VectorT1& x, const VectorT2& y,
+    dist_t thresh=kMaxDist, int64_t* num_abandons=nullptr,
+    int64_t* abandon_iters=nullptr)
+{
+    using Scalar = typename VectorT1::Scalar;
+    // using FixedVectorT = Eigen::Matrix<Scalar, 1, BlockSize, Eigen::RowMajor>;
+    // using FixedVectorT = Eigen::Matrix<Scalar, BlockSize, 1>;
+	using FixedVectorT = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+	using FixedMapT = Eigen::Map<const FixedVectorT, Eigen::Aligned>;
 
-//	STATIC_ASSERT_SAME_SHAPE(VectorT1, VectorT2);
+    // using DynamicVectorT = typename scalar_traits<Scalar>::RowVectorT;
+    using DynamicVectorT = typename scalar_traits<Scalar>::ColVectorT;
+    using DynamicMapT = Eigen::Map<const DynamicVectorT, Eigen::Aligned>;
+    // using DynamicMapT = Eigen::Map<const DynamicVectorT>;
 
-//	PRINT_STATIC_TYPE(y);
-//	PRINT_STATIC_TYPE(x);
+	static_assert(std::is_same<Scalar, typename VectorT2::Scalar>::value,
+		"Received vectors of different types!");
+	static_assert((BlockSize * sizeof(Scalar)) % 32 == 0, // TODO use kDefaultAlignBytes
+		"BlockSize * sizeof(Scalar) must be a multiple of default Alignment");
+    assert(x.size() == y.size());
 
-//	Eigen::Matrix<typename VectorT1::Scalar, 1, -1> x_ = x;
-//	Eigen::Matrix<typename VectorT2::Scalar, 1, -1> y_ = y;
+    // return (x - y).squaredNorm(); // significantly faster than anything below
 
+    // SELF: see if we can match eigen performance if we take out the abandoning
+    //     -and if that doesn't do it, try doing mul, then add, instead of fma
+
+
+    // same speed as above under Ofast
+    // return (x.segment(0, x.size()) - y.segment(0, x.size())).squaredNorm();
+
+    // Same as orig squaredNorm, or maybe like 5% slower
+    // DynamicMapT x_map0(x.data(), x.size());
+    // DynamicMapT y_map0(y.data(), x.size());
+    // dist_t dist1 = (x_map0 - y_map0).squaredNorm();
+    // return dist1;
+
+    // // maybe 10% slower than orig squaredNorm()
+    // dist_t dist2 = 0;
+    // FixedMapT x_map1(x.data(), BlockSize);
+    // FixedMapT y_map1(y.data(), BlockSize);
+    // dist2 += (x_map1 - y_map1).squaredNorm();
+    // DynamicMapT x_map2(x.data() + BlockSize, x.size() - BlockSize);
+    // DynamicMapT y_map2(y.data() + BlockSize, x.size() - BlockSize);
+    // dist2 += (x_map2 - y_map2).squaredNorm();
+    // return dist2;
+
+	// assert(std::abs(dist1 - dist2) < .0001 );
+    // return dist2;
+
+    // this impl is at least 20% slower than just computing the squared norm
+    // on random data, which it shouldn't be...but seems about the same on
+    // random walks, suggesting that very occasionally it abandons
+    // EIGEN_ASM_COMMENT("abandon_dist_sq_start");
+    __asm__ volatile ("# abandon_dist_sq_start");
     auto n = x.size();
-    dist_t dist = 0;
-    int32_t i = 0;
-    for (; i < (n - BlockSize) ; i += BlockSize) {
-//		auto tmp_x = x_.segment<BlockSize>(i); // ref to non-static member func must be called
-//		auto tmp_x = x_.segment(i, 8); // okay
-//		auto tmp_y = y_.segment<BlockSize>(i, BlockSize);
+    Scalar dist = 0;
 
-//		auto tmp_x = x.segment(i, 8); // okay
-//		auto tmp_y = y.segment<BlockSize>(i, BlockSize);
-//		auto tmp = tmp_x - tmp_y;
-//		auto tmp = (x.segment<BlockSize>(i, BlockSize) - y.segment<BlockSize>(i, BlockSize));
-//		dist += tmp.squaredNorm();
+    namespace ei = Eigen::internal;
 
-//        dist += (x_.segment<BlockSize>(i, BlockSize) - y_.segment<BlockSize>(i, BlockSize)).squaredNorm();
+    static constexpr int packet_size = ei::packet_traits<Scalar>::size;
+	using packet_t = typename ei::packet_traits<Scalar>::type;
+    alignas(32) Scalar dist_packet_ar[packet_size] = {0};
+	packet_t dist_packet = ei::pload<packet_t>(dist_packet_ar);
 
-		// TODO get static segment lengths to work
-		dist += (x.segment(i, BlockSize) - y.segment(i, BlockSize)).squaredNorm();
-        if (dist > thresh) {
+	// ------------------------ version without early abandoning
+	// yes, this is basically just as fast as the direct (x-y).squaredNorm()
+	
+    for (int i = 0; i <= (n - packet_size); i += packet_size) {
+        const packet_t x_pkt = ei::pload<packet_t>(x.data() + i);
+        const packet_t y_pkt = ei::pload<packet_t>(y.data() + i);
+        const packet_t diff = ei::psub(x_pkt, y_pkt);
+        dist_packet = ei::pmadd(diff, diff, dist_packet);
+    }
+    dist = ei::predux<packet_t>(dist_packet);
+
+    auto num_stragglers = n % packet_size;
+    Scalar single_dist = 0;
+    for (size_t i = n - num_stragglers; i < n; i++) {
+        auto diff = x(i) - y(i);
+        single_dist += diff * diff;
+    }
+    return dist + single_dist;
+
+    // ------------------------ version with early abandoning
+
+    for (int i = 0; i <= (n - BlockSize); i += BlockSize) { // TODO uncomment below
+
+#define USE_PACKETS
+#ifdef USE_PACKETS
+        for (int j = 0; j < BlockSize; j += packet_size) {
+			const packet_t x_pkt = ei::pload<packet_t>(x.data() + i + j);
+			const packet_t y_pkt = ei::pload<packet_t>(y.data() + i + j);
+            const packet_t diff = ei::psub(x_pkt, y_pkt);
+            dist_packet = ei::pmadd(diff, diff, dist_packet);
+        }
+        dist = ei::predux<packet_t>(dist_packet);
+        // const packet_t dist_packet_copy = dist; // different register
+        // dist = ei::predux<packet_t>(dist_packet_copy);
+#else
+        // // 20% slower for no clear reason
+        // FixedMapT x_map(x.data() + i, BlockSize);
+        // FixedMapT y_map(y.data() + i, BlockSize);
+        // dist += (x_map - y_map).squaredNorm();
+#endif
+        // dist += (FixedVectorT::MapAligned(x.data() + i, BlockSize) -
+        //     FixedVectorT::MapAligned(y.data() + i, BlockSize)).squaredNorm();
+        if (UNLIKELY(dist >= thresh)) {
+            // even on rand unif data, this abandons 98%+ of the time,
+            // typically after looking at like 2/3 of each one in 64D space;
+            // on rand walks, abandons after .5-2.1 blocks with blocksz = 16
+
+            // if (num_abandons != nullptr) { ++(*num_abandons); }
+            // if (abandon_iters != nullptr) { *abandon_iters += (i / BlockSize); }
             return dist;
         }
     }
-    for (; i < n; i++) {
-		auto diff = x(i) - y(i);
-        dist += diff * diff;
+    auto end_len = n % BlockSize;
+    // auto end_blocks = end_len / BlockSize;
+    auto end_stragglers = end_len % BlockSize;
+    if (end_len > 0) {
+        for (size_t j = n - end_len; j <= (end_len - packet_size) ; j += packet_size) {
+            const packet_t x_pkt = ei::pload<packet_t>(x.data() + j);
+            const packet_t y_pkt = ei::pload<packet_t>(y.data() + j);
+            const packet_t diff = ei::psub(x_pkt, y_pkt);
+            dist_packet = ei::pmadd(diff, diff, dist_packet);
+        }
+        dist = ei::predux<packet_t>(dist_packet);
+
+        Scalar other_dist = 0;
+        // for (int j; j < end_stragglers; j++) {
+        for (size_t j = n - end_stragglers; j < n; j++) {
+            auto diff = (x.data() + j) - (y.data() + j);
+            other_dist += diff * diff;
+        }
+
+        dist += other_dist;
+    // if (dist < thresh && end_len > 0) {
+        // DynamicMapT x_map(x.data() + n - end_len, end_len);
+        // DynamicMapT y_map(y.data() + n - end_len, end_len);
+        // dist += (x_map - y_map).squaredNorm();
     }
+    // EIGEN_ASM_COMMENT("abandon_dist_sq_end");
+    __asm__ volatile ("# abandon_dist_sq_end");
+    // assert(std::abs(dist1 - dist) < .0001 || dist >= thresh );
 	return dist;
 }
 

@@ -359,7 +359,7 @@ protected: // default impls for derived
     {
         vector<vector<Neighbor> > ret;
         for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(_derived()->_radius(queries.row(j).eval(), d_max));
+            ret.emplace_back(_derived()->_radius(queries.row(j), d_max));
         }
         return ret;
     }
@@ -368,7 +368,7 @@ protected: // default impls for derived
     vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, int k) {
         vector<vector<Neighbor> > ret;
         for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(_derived()->_knn(queries.row(j).eval(), k));
+            ret.emplace_back(_derived()->_knn(queries.row(j), k));
         }
         return ret;
     }
@@ -377,7 +377,7 @@ protected: // default impls for derived
     vector<Neighbor> _onenn_batch(const RowMatrixT& queries) {
         vector<Neighbor> ret;
         for (idx_t j = 0; j < queries.rows(); j++) {
-            ret.emplace_back(_derived()->_onenn(queries.row(j).eval()));
+            ret.emplace_back(_derived()->_onenn(queries.row(j)));
         }
         return ret;
     }
@@ -590,16 +590,19 @@ protected:
     template<class VectorT>
     vector<Neighbor> _radius(const VectorT& query, DistT d_max) {
         return simple::radius(_data, query, d_max, rows());
+        // return abandon::radius(_data, query, d_max, rows());
     }
 
     template<class VectorT>
     Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist) {
         return simple::onenn(_data, query, rows());
+        // return abandon::onenn(_data, query, d_max, rows());
     }
 
     template<class VectorT>
     vector<Neighbor> _knn(const VectorT& query, int k, DistT d_max=kMaxDist) {
-        return simple::knn(_data, query, k, rows());
+        return simple::knn(_data, query, k, rows()); // 5ms
+        // return abandon::knn(_data, query, k, d_max, rows()); // 12ms...wat?
     }
 
     // SELF: the problem is that _data.cols() is 16 cuz of alignment, while the

@@ -14,8 +14,9 @@
 
 #include "Dense"
 
-#include "nn_utils.hpp"
 #include "array_utils.hpp"
+#include "memory.hpp"
+#include "nn_utils.hpp"
 
 namespace nn {
 

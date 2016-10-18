@@ -13,20 +13,49 @@
 
 #if defined(__GNUC__) && ((__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1))
 	#define RESTRICT __restrict__
-	#define likely(x)    __builtin_expect (!!(x), 1)
-	#define unlikely(x)  __builtin_expect (!!(x), 0)
+
+	#define LIKELY(x)    __builtin_expect (!!(x), 1)
+	#define UNLIKELY(x)  __builtin_expect (!!(x), 0)
+
+	#define PREFETCH_WITH_STICKINESS(ADDR, INT) \
+		__builtin_prefetch(ADDR, 0, INT)
+	#define PREFETCH_RW_WITH_STICKINESS(ADDR, INT) \
+		__builtin_prefetch(ADDR, 0, INT)
+	#define PREFETCH_TRANSIENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 0)
+	#define PREFETCH_PERSISTENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 3)
+	#define PREFETCH_RW_TRANSIENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 0)
+	#define PREFETCH_RW_PERSISTENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 3)
 #elif defined(__clang__)
 	#define RESTRICT __restrict__
-	#define likely(x)    __builtin_expect (!!(x), 1)
-	#define unlikely(x)  __builtin_expect (!!(x), 0)
-#elif defined(_MSC_VER) && _MSC_VER >= 1400
-	#define RESTRICT __restrict
-	#define likely(x)    (x)
-	#define unlikely(x)  (x)
+
+	#define LIKELY(x)    __builtin_expect (!!(x), 1)
+	#define UNLIKELY(x)  __builtin_expect (!!(x), 0)
+
+	#define PREFETCH_WITH_STICKINESS(ADDR, INT) \
+		__builtin_prefetch(ADDR, 0, INT)
+	#define PREFETCH_RW_WITH_STICKINESS(ADDR, INT) \
+		__builtin_prefetch(ADDR, 0, INT)
+	#define PREFETCH_TRANSIENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 0)
+	#define PREFETCH_PERSISTENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 3)
+	#define PREFETCH_RW_TRANSIENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 0)
+	#define PREFETCH_RW_PERSISTENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 3)
 #else
-	#define RESTRICT
-	#define likely(x)    (x)
-	#define unlikely(x)  (x)
+	#if defined(_MSC_VER) && _MSC_VER >= 1400
+		#define RESTRICT
+	#else
+		#define RESTRICT __restrict
+	#endif
+
+	#define LIKELY(x)    (x)
+	#define UNLIKELY(x)  (x)
+
+	#define PREFETCH_WITH_STICKINESS(ADDR, INT)
+	#define PREFETCH_RW_WITH_STICKINESS(ADDR, INT)
+	#define PREFETCH_TRANSIENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 0)
+	#define PREFETCH_PERSISTENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 3)
+	#define PREFETCH_RW_TRANSIENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 0)
+	#define PREFETCH_RW_PERSISTENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 3)
+
 #endif
 
 // count the number of arguments in a varargs list

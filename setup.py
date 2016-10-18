@@ -65,6 +65,7 @@ extra_args = ['-std=c++14',
               '-stdlib=libc++',
               '-march=native',
               '-ffast-math']
+              # '-march=native']
 if sys.platform == 'darwin':
     extra_args.append('-mmacosx-version-min=10.9')
     os.environ['LDFLAGS'] = '-mmacosx-version-min=10.9 -stdlib=libc++'

@@ -9,6 +9,7 @@
 #ifndef __NN_SEARCH_HPP
 #define __NN_SEARCH_HPP
 
+// #include "array_utils.hpp" // just for min()
 #include "nn_utils.hpp"
 #include "euclidean.hpp"
 
@@ -47,35 +48,6 @@ namespace internal {
         assert(nrows_hint > 0);
         return static_cast<idx_t>(nrows_hint);
     }
-
- //    	// class _ = typename std::enable_if<!std::is_integral< decltype(std::declval<RowMatrixT>().rows()) >::value >::type>
- //    // template<class RowMatrixT, class _=void>
- //    template<class RowMatrixT>
-	// idx_t _num_rows<RowMatrixT, void>(const RowMatrixT& X, int64_t nrows_hint) {
-	// 	assert(nrows_hint > 0);
-	// 	return static_cast<idx_t>(nrows_hint);
-	// }
-
-    // template<class RowMatrixT, class _=decltype(std::declval<RowMatrixT>().rows())>
-    // struct _num_rows_struct {
-    //     idx_t operator()(const RowMatrixT& X, int64_t nrows_hint) {
-    //         if (nrows_hint > 0) { return nrows_hint; }
-    //         return X.rows();
-    //     }
-    // };
-
-    // template<class RowMatrixT>
-    // struct _num_rows_struct<RowMatrixT, void> {
-    //     idx_t operator()(const RowMatrixT& X, int64_t nrows_hint) {
-    //         assert(nrows_hint > 0);
-    //         return static_cast<idx_t>(nrows_hint);
-    //     }
-    // };
-
-    // template<class RowMatrixT>
-    // idx_t _num_rows(const RowMatrixT& X, int64_t nrows_hint) {
-    //     return _num_rows_struct<RowMatrixT>{}(X, nrows_hint);
-    // }
 
     // either return vector of neighbors or just indices
     template<class Ret> struct emplace_neighbor {
@@ -292,7 +264,7 @@ vector<Ret> radius(const RowMatrixT& X, const VectorT& query,
 {
     vector<Ret> ret;
     for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
-        auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, radius_sq);
+        auto dist = dist::abandon::dist_sq(X.row(i), query, radius_sq);
         if (dist < radius_sq) {
             internal::emplace_neighbor<Ret>{}(ret, dist, i);
         }
@@ -367,12 +339,12 @@ Neighbor onenn(const RowMatrixT& X, const VectorT& query,
 {
     Neighbor ret{kInvalidIdx, d_bsf};
 	for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
-        auto dist = dist::abandon::dist_sq(X.row(i).eval(), query, d_bsf);
+        auto d = dist::abandon::dist_sq(X.row(i), query, d_bsf);
 		// auto d = dist::dist_sq(X.row(i).eval(), query);
-        assert(dist >= 0);
-        if (dist < d_bsf) {
-            d_bsf = dist;
-            ret = Neighbor{i, dist};
+        assert(d >= 0);
+        if (d < d_bsf) {
+            d_bsf = d;
+            ret = Neighbor{i, d};
         }
     }
     return ret;
@@ -414,19 +386,65 @@ Neighbor onenn(const RowMatrixT& X, const VectorT& query,
 
 // ------------------------ knn
 
+// #define TRACK_ABANDON_STATS
+
 template<class RowMatrixT, class VectorT, class DistT=dist_t>
 vector<Neighbor> knn(const RowMatrixT& X,
     const VectorT& query, int k, DistT d_bsf=kMaxDist, idx_t nrows=-1)
     // const VectorT& query, idx_t num_rows, int k, DistT d_bsf=kMaxDist)
 {
+	auto num_rows = internal::_num_rows(X, nrows);
     assert(k > 0);
-    assert(k <= internal::_num_rows(X, nrows));
+    assert(k <= num_rows);
+    // PRINT("------------------------ abandon knn: starting a new knn query")
 
-	vector<Neighbor> ret(k, Neighbor{kInvalidIdx, d_bsf});
-	for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
-		auto d = dist::abandon::dist_sq(X.row(i).eval(), query, d_bsf);
+	// static_assert(!std::is_integral<DistT>::value, "");
+
+    vector<Neighbor> ret;
+    for (int32_t i = 0; i < k; i++) {
+        auto d = dist::simple::dist_sq(X.row(i), query);
+        ret.emplace_back(i, d);
+    }
+    sort_neighbors_ascending_distance(ret);
+	d_bsf = ret[k-1].dist < d_bsf ? ret[k-1].dist : d_bsf;
+
+#ifdef TRACK_ABANDON_STATS
+    int64_t num_abandons = 0;
+    int64_t abandon_iters = 0;
+#endif
+
+	// because we abandon, we don't prefetch
+	constexpr int num_prefetch_rows = 16;// <= num_rows ? 16 : num_rows;
+    for (int i = 0; i < num_prefetch_rows; i++) {
+		PREFETCH_TRANSIENT(X.row(i).data());
+    }
+
+	// vector<Neighbor> ret(k, Neighbor{kInvalidIdx, d_bsf});
+	for (idx_t i = k; i < num_rows; i++) {
+        if (num_prefetch_rows > 0 && i < (num_rows - num_prefetch_rows)) {
+            PREFETCH_TRANSIENT(X.row(i + num_prefetch_rows).data());
+        }
+#ifdef TRACK_ABANDON_STATS
+        dist_t d = dist::abandon::dist_sq(X.row(i), query, d_bsf,
+            &num_abandons, &abandon_iters);
+#else
+		dist_t d = dist::abandon::dist_sq(X.row(i), query, d_bsf);
+#endif
+        // if (d_bsf < ret[k-1].dist) {
+            // PRINT("found new best neighbor: ");
+            // printf("new best neighbor: %lld, %g\n", i, d);
+            // PRINT_VAR(num_abandons);
+            // PRINT_VAR(i);
+            // PRINT_VAR(d);
+        // }
         d_bsf = maybe_insert_neighbor(ret, d, i); // figures out whether dist is lower
     }
+
+#ifdef TRACK_ABANDON_STATS
+    // PRINT_VAR(num_abandons);
+    printf("abandoned %lld / %lld dist computations (%g blocks avg)\n",
+        num_abandons, num_rows, abandon_iters / (double)num_rows);
+#endif
     return ret;
 }
 
