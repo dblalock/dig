@@ -160,7 +160,7 @@ namespace abandon {
 //			   typename TTypes<T>::VectorCRef y, dist_t thresh=kMaxDist) {
 
 
-template<int BlockSize=32, class VectorT1, class VectorT2,
+template<int BlockSize=64, class VectorT1, class VectorT2,
 	class dist_t=typename VectorT1::Scalar>
 inline dist_t dist_sq(const VectorT1& x, const VectorT2& y,
     dist_t thresh=kMaxDist, int64_t* num_abandons=nullptr,
@@ -169,144 +169,131 @@ inline dist_t dist_sq(const VectorT1& x, const VectorT2& y,
     using Scalar = typename VectorT1::Scalar;
     // using FixedVectorT = Eigen::Matrix<Scalar, 1, BlockSize, Eigen::RowMajor>;
     // using FixedVectorT = Eigen::Matrix<Scalar, BlockSize, 1>;
-	using FixedVectorT = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-	using FixedMapT = Eigen::Map<const FixedVectorT, Eigen::Aligned>;
+	// using FixedVectorT = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+	// using FixedMapT = Eigen::Map<const FixedVectorT, Eigen::Aligned>;
 
     // using DynamicVectorT = typename scalar_traits<Scalar>::RowVectorT;
-    using DynamicVectorT = typename scalar_traits<Scalar>::ColVectorT;
-    using DynamicMapT = Eigen::Map<const DynamicVectorT, Eigen::Aligned>;
+    // using DynamicVectorT = typename scalar_traits<Scalar>::ColVectorT;
+    // using DynamicMapT = Eigen::Map<const DynamicVectorT, Eigen::Aligned>;
     // using DynamicMapT = Eigen::Map<const DynamicVectorT>;
 
 	static_assert(std::is_same<Scalar, typename VectorT2::Scalar>::value,
 		"Received vectors of different types!");
 	static_assert((BlockSize * sizeof(Scalar)) % 32 == 0, // TODO use kDefaultAlignBytes
-		"BlockSize * sizeof(Scalar) must be a multiple of default Alignment");
+		"BlockSize * sizeof(Scalar) must be a multiple of 32B");
     assert(x.size() == y.size());
+    assert((x.size() * sizeof(Scalar)) % 32 == 0); // assume ends padded
 
-    // return (x - y).squaredNorm(); // significantly faster than anything below
+    // return (x - y).squaredNorm();
 
-    // SELF: see if we can match eigen performance if we take out the abandoning
-    //     -and if that doesn't do it, try doing mul, then add, instead of fma
-
-
-    // same speed as above under Ofast
-    // return (x.segment(0, x.size()) - y.segment(0, x.size())).squaredNorm();
-
-    // Same as orig squaredNorm, or maybe like 5% slower
-    // DynamicMapT x_map0(x.data(), x.size());
-    // DynamicMapT y_map0(y.data(), x.size());
-    // dist_t dist1 = (x_map0 - y_map0).squaredNorm();
-    // return dist1;
-
-    // // maybe 10% slower than orig squaredNorm()
-    // dist_t dist2 = 0;
-    // FixedMapT x_map1(x.data(), BlockSize);
-    // FixedMapT y_map1(y.data(), BlockSize);
-    // dist2 += (x_map1 - y_map1).squaredNorm();
-    // DynamicMapT x_map2(x.data() + BlockSize, x.size() - BlockSize);
-    // DynamicMapT y_map2(y.data() + BlockSize, x.size() - BlockSize);
-    // dist2 += (x_map2 - y_map2).squaredNorm();
-    // return dist2;
-
-	// assert(std::abs(dist1 - dist2) < .0001 );
-    // return dist2;
-
-    // this impl is at least 20% slower than just computing the squared norm
-    // on random data, which it shouldn't be...but seems about the same on
-    // random walks, suggesting that very occasionally it abandons
-    // EIGEN_ASM_COMMENT("abandon_dist_sq_start");
-    __asm__ volatile ("# abandon_dist_sq_start");
+    __asm__("## abandon_dist_sq_start");
     auto n = x.size();
-    Scalar dist = 0;
+
+    // TODO could we tile thresh into a packet and then abandon if anything
+    // is above the thresh?
+        // not really, because d_bsf is sum of stuff in the dist packet
+
+
+	// ------------------------ scalar version with early abandoning
+    // about 90% slower than brute force simd on 40d randunif, but 1.5-3x
+    // as fast on 500k 100d-randwalks
+
+	// Scalar d = 0;
+	// for (int i = 0; i < n; i++) {
+	// 	Scalar diff = x(i) - y(i);
+	// 	d += diff * diff; // with no abondoning, takes like 2x as long
+ //        // if (d > thresh) { // with abandoning, also like 2x as long
+	// 	if (UNLIKELY(d >= thresh)) { // with abandoning, also like 2x as long
+	// 		return d;
+	// 	}
+	// }
+	// return d;
+
+    // ------------------------ stuff for both simd versions
 
     namespace ei = Eigen::internal;
 
     static constexpr int packet_size = ei::packet_traits<Scalar>::size;
-	using packet_t = typename ei::packet_traits<Scalar>::type;
-    alignas(32) Scalar dist_packet_ar[packet_size] = {0};
-	packet_t dist_packet = ei::pload<packet_t>(dist_packet_ar);
+    static constexpr int packets_per_block = BlockSize / packet_size;
+    static_assert(packets_per_block >= 1,
+        "block size must be at least packet size!");
 
-	// ------------------------ version without early abandoning
+    using packet_t = typename ei::packet_traits<Scalar>::type;
+    // alignas(32) Scalar dist_packet_ar[packet_size] = {0};
+    // packet_t dist_packet = ei::pload<packet_t>(dist_packet_ar);
+    packet_t dist_packet = ei::pset1<packet_t>(0);
+    // static const packet_t zero_packet = ei::pset1<packet_t>(0);
+    // packet_t dist_packet_copy;// = ei::pset1<packet_t>(0);
+
+	// ------------------------ simd version without early abandoning
 	// yes, this is basically just as fast as the direct (x-y).squaredNorm()
-	
-    for (int i = 0; i <= (n - packet_size); i += packet_size) {
-        const packet_t x_pkt = ei::pload<packet_t>(x.data() + i);
-        const packet_t y_pkt = ei::pload<packet_t>(y.data() + i);
-        const packet_t diff = ei::psub(x_pkt, y_pkt);
-        dist_packet = ei::pmadd(diff, diff, dist_packet);
-    }
-    dist = ei::predux<packet_t>(dist_packet);
 
-    auto num_stragglers = n % packet_size;
-    Scalar single_dist = 0;
-    for (size_t i = n - num_stragglers; i < n; i++) {
-        auto diff = x(i) - y(i);
-        single_dist += diff * diff;
-    }
-    return dist + single_dist;
+    // for (int i = 0; i <= (n - packet_size); i += packet_size) {
+    //     const packet_t x_pkt = ei::pload<packet_t>(x.data() + i);
+    //     const packet_t y_pkt = ei::pload<packet_t>(y.data() + i);
+    //     const packet_t diff = ei::psub(x_pkt, y_pkt);
+    //     dist_packet = ei::pmadd(diff, diff, dist_packet);
+    // }
+    // Scalar dist = ei::predux<packet_t>(dist_packet);
+    // auto num_stragglers = n % packet_size;
+    // Scalar single_dist = 0;
+    // for (size_t i = n - num_stragglers; i < n; i++) {
+    //     auto diff = x(i) - y(i);
+    //     single_dist += diff * diff;
+    // }
+    // return dist + single_dist;
 
-    // ------------------------ version with early abandoning
+    // ------------------------ simd version with early abandoning
 
-    for (int i = 0; i <= (n - BlockSize); i += BlockSize) { // TODO uncomment below
+    // alignas(32) static Scalar dist_packet_ar[packet_size] = {0};
 
-#define USE_PACKETS
-#ifdef USE_PACKETS
-        for (int j = 0; j < BlockSize; j += packet_size) {
-			const packet_t x_pkt = ei::pload<packet_t>(x.data() + i + j);
-			const packet_t y_pkt = ei::pload<packet_t>(y.data() + i + j);
+    size_t num_blocks = n / BlockSize;
+    size_t last_block_end = num_blocks * BlockSize;
+    size_t num_trailing_packets = (n - last_block_end) / packet_size;
+    size_t last_packet_end = last_block_end + num_trailing_packets * packet_size;
+    for (int i = 0; i < last_block_end; ) {
+        for (int count = 0; count < packets_per_block; count++) {
+            const packet_t x_pkt = ei::pload<packet_t>(x.data() + i);
+            const packet_t y_pkt = ei::pload<packet_t>(y.data() + i);
             const packet_t diff = ei::psub(x_pkt, y_pkt);
             dist_packet = ei::pmadd(diff, diff, dist_packet);
+            i += packet_size;
         }
-        dist = ei::predux<packet_t>(dist_packet);
-        // const packet_t dist_packet_copy = dist; // different register
-        // dist = ei::predux<packet_t>(dist_packet_copy);
-#else
-        // // 20% slower for no clear reason
-        // FixedMapT x_map(x.data() + i, BlockSize);
-        // FixedMapT y_map(y.data() + i, BlockSize);
-        // dist += (x_map - y_map).squaredNorm();
-#endif
-        // dist += (FixedVectorT::MapAligned(x.data() + i, BlockSize) -
-        //     FixedVectorT::MapAligned(y.data() + i, BlockSize)).squaredNorm();
+        // dist_packet_copy = ei::padd<packet_t>(zero_packet, dist_packet);
+        Scalar dist = ei::predux<packet_t>(dist_packet);
+        // Scalar dist = ei::predux<packet_t>(dist_packet_copy);
+		// if (dist >= thresh) { // no effect on randwalks; worse on randunif
         if (UNLIKELY(dist >= thresh)) {
-            // even on rand unif data, this abandons 98%+ of the time,
-            // typically after looking at like 2/3 of each one in 64D space;
-            // on rand walks, abandons after .5-2.1 blocks with blocksz = 16
+    		return dist;
+		}
 
-            // if (num_abandons != nullptr) { ++(*num_abandons); }
-            // if (abandon_iters != nullptr) { *abandon_iters += (i / BlockSize); }
-            return dist;
-        }
+        // // manual accumulating just makes it like 20% slower for everything
+        // Scalar dist = 0;
+        // ei::pstore(dist_packet_ar, dist_packet);
+        // for (int i = 0; i < packet_size; i++) {
+        //     dist += dist_packet_ar[i];
+        //     if (UNLIKELY(dist >= thresh)) {
+        //         return dist;
+        //     }
+        // }
     }
-    auto end_len = n % BlockSize;
-    // auto end_blocks = end_len / BlockSize;
-    auto end_stragglers = end_len % BlockSize;
-    if (end_len > 0) {
-        for (size_t j = n - end_len; j <= (end_len - packet_size) ; j += packet_size) {
-            const packet_t x_pkt = ei::pload<packet_t>(x.data() + j);
-            const packet_t y_pkt = ei::pload<packet_t>(y.data() + j);
-            const packet_t diff = ei::psub(x_pkt, y_pkt);
-            dist_packet = ei::pmadd(diff, diff, dist_packet);
-        }
-        dist = ei::predux<packet_t>(dist_packet);
-
-        Scalar other_dist = 0;
-        // for (int j; j < end_stragglers; j++) {
-        for (size_t j = n - end_stragglers; j < n; j++) {
-            auto diff = (x.data() + j) - (y.data() + j);
-            other_dist += diff * diff;
-        }
-
-        dist += other_dist;
-    // if (dist < thresh && end_len > 0) {
-        // DynamicMapT x_map(x.data() + n - end_len, end_len);
-        // DynamicMapT y_map(y.data() + n - end_len, end_len);
-        // dist += (x_map - y_map).squaredNorm();
+    for (size_t i = last_block_end; i < last_packet_end; i += packet_size) {
+		const packet_t x_pkt = ei::pload<packet_t>(x.data() + i);
+		const packet_t y_pkt = ei::pload<packet_t>(y.data() + i);
+		const packet_t diff = ei::psub(x_pkt, y_pkt);
+		dist_packet = ei::pmadd(diff, diff, dist_packet);
     }
-    // EIGEN_ASM_COMMENT("abandon_dist_sq_end");
-    __asm__ volatile ("# abandon_dist_sq_end");
-    // assert(std::abs(dist1 - dist) < .0001 || dist >= thresh );
-	return dist;
+	return ei::predux<packet_t>(dist_packet);
+
+    // uncomment this block if we remove the assert enforcing padding
+	// Scalar dist = ei::predux<packet_t>(dist_packet);
+ //    auto num_stragglers = n % packet_size;
+ //    Scalar single_dist = 0;
+ //    for (size_t i = n - num_stragglers; i < n; i++) {
+ //        auto diff = x(i) - y(i);
+ //        single_dist += diff * diff;
+ //    }
+ //    return dist + single_dist;
 }
 
 template<int BlockSize=8, class VectorT1, class VectorT2, class IdxVectorT,

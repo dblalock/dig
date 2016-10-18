@@ -48,7 +48,8 @@ for path in paths:
             globStr = "%s/*.c*" % absPath
             files = glob(globStr)
             print(files)
-            includeDirs.append(absPath)
+            if 'eigen/src' not in absPath:  # just include top level
+                includeDirs.append(absPath)
             srcFiles += files
 
 print("includeDirs:")
@@ -68,7 +69,7 @@ extra_args = ['-std=c++14',
               # '-march=native']
 if sys.platform == 'darwin':
     extra_args.append('-mmacosx-version-min=10.9')
-    os.environ['LDFLAGS'] = '-mmacosx-version-min=10.9 -stdlib=libc++'
+    os.environ['LDFLAGS'] = '-mmacosx-version-min=10.9 -stdlib=libc++ -framework Accelerate'
 
 os.environ["CC"] = "g++"  # force compiling c as c++
 

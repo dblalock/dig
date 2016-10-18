@@ -1,7 +1,5 @@
 #!/bin/env python
 
-print("------------------------ running MatmulIndex tests")
-
 import time
 import numpy as np
 import dig
@@ -71,18 +69,26 @@ def test_radius_batch_query(index, queries, dists, name, r2):
 
 
 def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
-               dtype=np.float64):
-    N = 100 * 1000
-    D = 100
-    if r2 <= 0:
-        r2 = 1. * D
+               dtype=np.float64, X=None, q=None, trueDists=None):
+    print("------------------------ {}".format(name))
 
     # ------------------------ data and index construction
 
-    X = np.random.randn(N, D).astype(dtype)
-    X = np.cumsum(X, axis=1)
+    if X is None:
+        N = 500 * 1000 if N < 1 else N
+        D = 100 if D < 1 else D
+        X = np.random.randn(N, D).astype(dtype)
+        X = np.cumsum(X, axis=1)
+    N, D = X.shape
 
-    q = np.cumsum(np.random.randn(D).astype(dtype))
+    if q is None:
+        q = np.cumsum(np.random.randn(D).astype(dtype))
+
+    if r2 <= 0:
+        diff = (X[0] - q)
+        r2 = np.sum(diff * diff) / 2
+        if dtype == np.float32:
+            r2 = float(r2)
 
     index = idx_func(X)
     t = index.getIndexConstructionTimeMs()
@@ -90,25 +96,26 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 
     # ------------------------ dists for ground truth
 
-    t0 = time.clock()
-    diffs = X - q
-    trueDists = np.sum(diffs * diffs, axis=1)
-    t_python = (time.clock() - t0) * 1000
-    print "-> python full dists time\t= {}".format(t_python)
+    if trueDists is None:
+        t0 = time.clock()
+        diffs = X - q
+        trueDists = np.sum(diffs * diffs, axis=1)
+        t_python = (time.clock() - t0) * 1000
+        print "-> python full dists time\t= {}".format(t_python)
 
     # ------------------------------------------------ single query
 
     # ------------------------ range query
 
-    neighborIdxs = index.radius(q, np.sqrt(r2))
+    neighborIdxs = index.radius(q, r2)
     t = index.getQueryTimeMs()
     neighborIdxs = np.sort(neighborIdxs)
 
-    trueNeighborIdxs = np.where(trueDists <= r2)[0]
+    trueNeighborIdxs = np.where(trueDists < r2)[0]
 
-    if len(trueNeighborIdxs < 100):
-        print "neighborIdxs: ", neighborIdxs
-        print "trueNeighborIdxs: ", trueNeighborIdxs
+    # if len(trueNeighborIdxs < 100):
+    #     print "neighborIdxs: ", neighborIdxs
+    #     print "trueNeighborIdxs: ", trueNeighborIdxs
     print "-> {} range query time\t= {}".format(name, t)
 
     assert(len(neighborIdxs) == len(trueNeighborIdxs))
@@ -120,30 +127,33 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     t = index.getQueryTimeMs()
     trueNN10 = np.argsort(trueDists)[:10]
     # print "nn10, true nn10 =\n{}\n{}".format(nn10, trueNN10)
-    print "sorted nn10, true nn10 =\n{}\n{}".format(
-        sorted(nn10), sorted(trueNN10))
+    # print "sorted nn10, true nn10 =\n{}\n{}".format(
+    #     sorted(nn10), sorted(trueNN10))
     print "-> {} knn time\t\t= {}".format(name, t)
     assert(all_eq(nn10, trueNN10))
 
+    knn_dists = trueDists[trueNN10]
+    print "knn dists: ", [float("%.1f" % d) for d in knn_dists]
+
     # ------------------------------------------------ batch of queries
 
-    # ------------------------ dists for ground truth
+    # Q = 128
+    # queries = np.random.randn(Q, D).astype(dtype)
+    # queries = np.cumsum(queries, axis=1)
+    # queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
 
-    Q = 128
-    queries = np.random.randn(Q, D).astype(dtype)
-    queries = np.cumsum(queries, axis=1)
-    queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
+    # # ------------------------ dists for ground truth
 
-    dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
+    # dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
-    # ------------------------ knn query
+    # # ------------------------ knn query
 
-    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3)
-    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10)
+    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3)
+    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10)
 
-    # ------------------------ radius
+    # # ------------------------ radius
 
-    test_radius_batch_query(index, queries, dists, name=name, r2=r2)
+    # test_radius_batch_query(index, queries, dists, name=name, r2=r2)
 
 
 def debug():
@@ -168,11 +178,43 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
-    # test_index(dig.MatmulIndex, "matmul")
-    # test_index(dig.MatmulIndexF, "matmulf", dtype=np.float32)
+    # opts = {'N': 500 * 1000, 'D': 100, 'X': X}
+    N = 100 * 1000
+    D = 100
 
-    # test_index(dig.AbandonIndex, "abandon")
-    # test_index(dig.AbandonIndexF, "abandonf", dtype=np.float32)
+    X = np.random.randn(N, D)
+    X = np.cumsum(X, axis=1)
+    # X -= np.mean(X, axis=1, keepdims=True) # rel contrast of 1.2
+    X /= np.std(X, axis=1, keepdims=True) # rel contrast of ~4
+    Xfloat = X.astype(np.float32)
 
-    test_index(dig.SimpleIndex, "simple")
-    test_index(dig.SimpleIndexF, "simplef", dtype=np.float32)
+    q = np.cumsum(np.random.randn(D))
+    qfloat = q.astype(np.float32)
+
+    t0 = time.clock()
+    diffs = X - q
+    trueDists = np.sum(diffs * diffs, axis=1)
+    t_python = (time.clock() - t0) * 1000
+    print "-> python full dists time double\t= {}".format(t_python)
+
+    t0 = time.clock()
+    diffs = Xfloat - qfloat
+    trueDistsF = np.sum(diffs * diffs, axis=1)
+    t_python = (time.clock() - t0) * 1000
+    print "-> python full dists time float\t= {}".format(t_python)
+
+    minDist = np.min(trueDistsF)
+    avgDist = np.mean(trueDistsF)
+    print "relative contrast: ", avgDist / minDist
+
+    opts_dbl = dict(X=X, q=q, dtype=None, trueDists=trueDists)
+    opts_flt = dict(X=Xfloat, q=qfloat, dtype=np.float32, trueDists=trueDistsF)
+
+    test_index(dig.MatmulIndex, "matmul", **opts_dbl)
+    test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
+
+    test_index(dig.AbandonIndex, "abandon", **opts_dbl)
+    test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
+
+    test_index(dig.SimpleIndex, "simple", **opts_dbl)
+    test_index(dig.SimpleIndexF, "simplef", **opts_flt)

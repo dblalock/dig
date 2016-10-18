@@ -260,7 +260,6 @@ template<class Ret=Neighbor, class RowMatrixT=char, class VectorT=char,
     class DistT=char>
 vector<Ret> radius(const RowMatrixT& X, const VectorT& query,
     DistT radius_sq, idx_t nrows=-1)
-    // const VectorT& query, idx_t num_rows, DistT radius_sq)
 {
     vector<Ret> ret;
     for (idx_t i = 0; i < internal::_num_rows(X, nrows); i++) {
@@ -408,13 +407,16 @@ vector<Neighbor> knn(const RowMatrixT& X,
     sort_neighbors_ascending_distance(ret);
 	d_bsf = ret[k-1].dist < d_bsf ? ret[k-1].dist : d_bsf;
 
+    // auto initial_d_bsf = d_bsf;
+    // PRINT_VAR(initial_d_bsf);
+
 #ifdef TRACK_ABANDON_STATS
     int64_t num_abandons = 0;
     int64_t abandon_iters = 0;
 #endif
 
 	// because we abandon, we don't prefetch
-	constexpr int num_prefetch_rows = 16;// <= num_rows ? 16 : num_rows;
+	constexpr int num_prefetch_rows = 4;// <= num_rows ? 16 : num_rows;
     for (int i = 0; i < num_prefetch_rows; i++) {
 		PREFETCH_TRANSIENT(X.row(i).data());
     }
@@ -437,6 +439,7 @@ vector<Neighbor> knn(const RowMatrixT& X,
             // PRINT_VAR(i);
             // PRINT_VAR(d);
         // }
+        // if (d < d_bsf) { PRINT_VAR(d_bsf); } // TODO remove
         d_bsf = maybe_insert_neighbor(ret, d, i); // figures out whether dist is lower
     }
 
