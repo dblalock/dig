@@ -13,6 +13,11 @@
 #include "nn_search.hpp"
 #include "timing_utils.hpp"
 
+
+// SELF: this is breaking because we're passing in search_frac after k, which
+// is getting interpreted as the number of rows.
+
+
 template<class MatrixT, class IndexT, class QueryT, class... Args>
 inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
     QueryT& q, const char* msg, Args&&... args)
@@ -112,10 +117,10 @@ void _test_cluster_wrapper_index(int64_t N=100, int64_t D=16, const char* msg=""
 	TEST_WRAPPER_INDEX_ONCE(CLS, 10000, 64, __VA_ARGS__);
 
 
-// TEST_CASE("KmeansIndex", "neighbors") {
-//     // TEST_WRAPPER_INDEX(KmeansIndex, 100);
-// 	_test_cluster_wrapper_index<KmeansIndex>(100, 16, "foo", 50);
-// }
+TEST_CASE("KmeansIndex", "neighbors") {
+    // TEST_WRAPPER_INDEX(KmeansIndex, 100);
+	_test_cluster_wrapper_index<KmeansIndex>(100, 16, "foo", 50);
+}
 // TEST_CASE("KmeansIndexF", "neighbors") {
 //     TEST_WRAPPER_INDEX(KmeansIndexF);
 // }
@@ -126,7 +131,6 @@ TEST_CASE("MatmulIndex", "neighbors") {
 TEST_CASE("MatmulIndexF", "neighbors") {
     TEST_WRAPPER_INDEX(MatmulIndexF);
 }
-
 
 TEST_CASE("SimpleIndex", "neighbors") {
     TEST_WRAPPER_INDEX(SimpleIndex);

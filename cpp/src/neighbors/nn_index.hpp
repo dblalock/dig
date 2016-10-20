@@ -735,11 +735,9 @@ protected:
     Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist,
         float search_frac=-1)
     {
-        // PRINT_VAR(_num_centroids);
         _update_order_for_query(query, search_frac); // update _order
 
         Neighbor ret{kInvalidIdx, d_max};
-        // PRINT_VAR(_order.size());
         for (int i = 0; i < _order.size(); i++) {
             auto& index = _indexes[_order[i]];
             if (index.rows() < 1) { continue; }
@@ -766,11 +764,6 @@ protected:
             if (index.rows() < 1) continue;
 
             auto neighbors = index.knn(query, k);
-
-            // // convert to orig idxs TODO rm once idxs do this themselves
-            // for (auto& n : neighbors) {
-            //     n.idx = index.ids()[n.idx];
-            // }
 
             d_max = maybe_insert_neighbors(ret, neighbors);
         }

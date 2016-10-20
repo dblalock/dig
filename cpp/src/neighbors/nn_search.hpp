@@ -103,16 +103,17 @@ inline vector<Neighbor> knn(const MatrixT& X, const VectorT& q, int k,
     idx_t nrows=-1)
 {
     assert(k > 0);
-    assert(k <= internal::_num_rows(X, nrows));
+    // assert(k <= internal::_num_rows(X, nrows));
+	auto num_rows = internal::_num_rows(X, nrows);
 
     vector<Neighbor> trueKnn;
-    for (int32_t i = 0; i < k; i++) {
+	for (int32_t i = 0; i < ar::min(k, num_rows); i++) {
         auto d = dist::simple::dist_sq(X.row(i), q);
 		trueKnn.emplace_back(i, d);
     }
     sort_neighbors_ascending_distance(trueKnn);
 
-    for (int32_t i = k; i < internal::_num_rows(X, nrows); i++) {
+    for (int32_t i = k; i < num_rows; i++) {
 		auto d = dist::simple::dist_sq(X.row(i), q);
         maybe_insert_neighbor(trueKnn, d, i);
     }
@@ -394,13 +395,13 @@ vector<Neighbor> knn(const RowMatrixT& X,
 {
 	auto num_rows = internal::_num_rows(X, nrows);
     assert(k > 0);
-    assert(k <= num_rows);
+    // assert(k <= num_rows);
     // PRINT("------------------------ abandon knn: starting a new knn query")
 
 	// static_assert(!std::is_integral<DistT>::value, "");
 
     vector<Neighbor> ret;
-    for (int32_t i = 0; i < k; i++) {
+    for (int32_t i = 0; i < ar::min(k, num_rows); i++) {
         auto d = dist::simple::dist_sq(X.row(i), query);
         ret.emplace_back(i, d);
     }

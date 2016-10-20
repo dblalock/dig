@@ -102,7 +102,7 @@ TEST_CASE("NNIndex_ReorderPreproc", "neighbors") {
 	}
 }
 
-TEST_CASE("KmeansIndex", "neighbors") {
+TEST_CASE("L2KmeansIndex", "neighbors") {
 	SECTION("L2IndexBrute+IdentityPreproc") {
 		using Scalar = float;
 		using ClusterIndexT = nn::L2IndexBrute<Scalar>;
