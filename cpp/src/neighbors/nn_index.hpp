@@ -252,73 +252,85 @@ public:
 
     // ------------------------------------------------ single queries
 
-    template<class VectorT>
-    vector<Neighbor> radius(const VectorT& query,
-                                           DistT d_max)
+    template<class VectorT, class... Args>
+    vector<Neighbor> radius(const VectorT& query, DistT d_max, Args&&... args)
     {
-        auto neighbors = _derived()->_radius(_derived()->preprocess(query), d_max);
+        auto neighbors = _derived()->_radius(_derived()->preprocess(query),
+            d_max, std::forward<Args>(args)...);
         return _derived()->postprocess(neighbors);
     }
 
-    template<class VectorT>
-    Neighbor onenn(const VectorT& query) {
-        auto neighbors = _derived()->_onenn(_derived()->preprocess(query));
+    template<class VectorT, class... Args>
+    Neighbor onenn(const VectorT& query, Args&&... args) {
+        auto neighbors = _derived()->_onenn(_derived()->preprocess(query),
+            std::forward<Args>(args)...);
         return _derived()->postprocess(neighbors);
     }
 
-    template<class VectorT>
-    vector<Neighbor> knn(const VectorT& query, int k) {
-        auto neighbors = _derived()->_knn(_derived()->preprocess(query), k);
+    template<class VectorT, class... Args>
+    vector<Neighbor> knn(const VectorT& query, int k, Args&&... args) {
+        auto neighbors = _derived()->_knn(_derived()->preprocess(query), k,
+            std::forward<Args>(args)...);
         return _derived()->postprocess(neighbors);
     }
 
     // ------------------------------------------------ batch of queries
     // TODO allow vector of d_max values for each of these
 
-    template<class RowMatrixT>
+    template<class RowMatrixT, class... Args>
     vector<vector<Neighbor> > radius_batch(const RowMatrixT& queries,
-                                           DistT d_max)
+        DistT d_max, Args&&... args)
     {
         const auto& queries_proc = _derived()->preprocess_batch(queries);
-        auto neighbors = _derived()->_radius_batch(queries_proc, d_max);
+        auto neighbors = _derived()->_radius_batch(queries_proc, d_max,
+            std::forward<Args>(args)...);
         return _derived()->postprocess(neighbors);
     }
 
-    template<class RowMatrixT>
-    vector<Neighbor> onenn_batch(const RowMatrixT& queries) {
+    template<class RowMatrixT, class... Args>
+    vector<Neighbor> onenn_batch(const RowMatrixT& queries, Args&&... args) {
         const auto& queries_proc = Derived::preprocess_batch(queries);
-        auto neighbors = Derived::_onenn_batch(queries_proc);
+        auto neighbors = Derived::_onenn_batch(queries_proc,
+            std::forward<Args>(args)...);
         return Derived::postprocess(neighbors);
     }
 
-    template<class RowMatrixT>
-    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k) {
+    template<class RowMatrixT, class... Args>
+    vector<vector<Neighbor> > knn_batch(const RowMatrixT& queries, int k,
+        Args&&... args)
+    {
         const auto& queries_proc = _derived()->preprocess_batch(queries);
-        auto neighbors = _derived()->_knn_batch(queries_proc, k);
+        auto neighbors = _derived()->_knn_batch(queries_proc, k,
+            std::forward<Args>(args)...);
         return _derived()->postprocess(neighbors);
     }
 
     // ------------------------------------------------ return only idxs
 
-    template<class VectorT>
-    vector<idx_t> radius_idxs(const VectorT& query, DistT d_max) {
-        auto neighbors = Derived::radius(query, d_max);
+    template<class VectorT, class... Args>
+    vector<idx_t> radius_idxs(const VectorT& query, DistT d_max,
+        Args&&... args)
+    {
+        auto neighbors = Derived::radius(query, d_max,
+            std::forward<Args>(args)...);
         return ar::map([](const Neighbor& n) {
             return n.idx;
         }, neighbors);
     }
 
-    template<class VectorT>
-    idx_t onenn_idxs(const VectorT& query, DistT d_max=kMaxDist) {
-        auto neighbor = Derived::onenn(query);
+    template<class VectorT, class... Args>
+    idx_t onenn_idxs(const VectorT& query, DistT d_max=kMaxDist,
+        Args&&... args)
+    {
+        auto neighbor = Derived::onenn(query, std::forward<Args>(args)...);
         return neighbor.idx;
     }
 
-    template<class VectorT>
+    template<class VectorT, class... Args>
     vector<idx_t> knn_idxs(const VectorT& query, int k,
-        DistT d_max=kMaxDist)
+        DistT d_max=kMaxDist, Args&&... args)
     {
-        auto neighbors = Derived::knn(query, k);
+        auto neighbors = Derived::knn(query, k, std::forward<Args>(args)...);
         return map([](const Neighbor& n) { return static_cast<idx_t>(n.idx); },
                    neighbors);
     }
@@ -326,25 +338,28 @@ public:
     // ------------------------------------------------ batch return only idxs
     // TODO allow vector of d_max values for each of these
 
-    template<class RowMatrixT>
+    template<class RowMatrixT, class... Args>
     vector<vector<idx_t> > radius_batch_idxs(const RowMatrixT& queries,
-                                             DistT d_max)
+        DistT d_max, Args&&... args)
     {
-        auto neighbors = Derived::radius_batch(queries, d_max);
+        auto neighbors = Derived::radius_batch(queries, d_max, std::forward<Args>(args)...);
         return idxs_from_nested_neighbors(neighbors);
     }
 
-    template<class RowMatrixT>
-    vector<idx_t> onenn_batch_idxs(const RowMatrixT& queries) {
-        auto neighbors = Derived::onenn_batch(queries);
+    template<class RowMatrixT, class... Args>
+    vector<idx_t> onenn_batch_idxs(const RowMatrixT& queries, Args&&... args) {
+        auto neighbors = Derived::onenn_batch(queries,
+			std::forward<Args>(args)...);
         return map([](const Neighbor& n) {
             return n.idx;
         }, neighbors);
     }
 
-    template<class RowMatrixT>
-    vector<vector<idx_t> > knn_batch_idxs(const RowMatrixT& queries, int k) {
-        auto neighbors = Derived::knn_batch(queries, k);
+    template<class RowMatrixT, class... Args>
+    vector<vector<idx_t> > knn_batch_idxs(const RowMatrixT& queries, int k,
+        Args&&... args)
+    {
+        auto neighbors = Derived::knn_batch(queries, k, std::forward<Args>(args)...);
         return idxs_from_nested_neighbors(neighbors);
     }
 
@@ -695,9 +710,9 @@ public:
 protected:
     template<class VectorT>
     vector<Neighbor> _radius(const VectorT& query, DistT d_max,
-        CentroidIndex centroids_limit=-1)
+        float search_frac=-1)
     {
-        _update_order_for_query(query, centroids_limit); // update _order
+        _update_order_for_query(query, search_frac); // update _order
 
         vector<Neighbor> ret;
         for (int i = 0; i < _order.size(); i++) {
@@ -717,11 +732,11 @@ protected:
     }
 
     template<class VectorT>
-    Neighbor _onenn(const VectorT& query, CentroidIndex centroids_limit=-1,
-        DistT d_max=kMaxDist)
+    Neighbor _onenn(const VectorT& query, DistT d_max=kMaxDist,
+        float search_frac=-1)
     {
         // PRINT_VAR(_num_centroids);
-        _update_order_for_query(query, centroids_limit); // update _order
+        _update_order_for_query(query, search_frac); // update _order
 
         Neighbor ret{kInvalidIdx, d_max};
         // PRINT_VAR(_order.size());
@@ -740,10 +755,10 @@ protected:
     }
 
     template<class VectorT>
-    vector<Neighbor> _knn(const VectorT& query, int k, CentroidIndex centroids_limit=-1,
-        DistT d_max=kMaxDist)
+    vector<Neighbor> _knn(const VectorT& query, int k, DistT d_max=kMaxDist,
+        float search_frac=-1)
     {
-        _update_order_for_query(query, centroids_limit); // update _order
+        _update_order_for_query(query, search_frac); // update _order
 
         vector<Neighbor> ret(k, Neighbor{kInvalidIdx, d_max});
         for (int i = 0; i < _order.size(); i++) {
@@ -766,15 +781,15 @@ protected:
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > _radius_batch(const RowMatrixT& queries,
-        DistT d_max, CentroidIndex centroids_limit=-1)
+        DistT d_max, float search_frac=-1)
     {
-        _update_idxs_for_centroids(queries, centroids_limit);
+        _update_idxs_for_centroids(queries, search_frac);
         vector<vector<Neighbor> > ret(queries.rows());
 
         for (int kk = 0; kk < _num_centroids; kk++) { // for each centroid
             auto& query_idxs = _idxs_for_centroids[kk];
             auto nrows = query_idxs.size();
-            _update_query_storate(query_idxs, queries);
+            _update_query_storage(query_idxs, queries);
 
             // get the neighbors for each query around this centroid, and
             // append them to the master list of neighbors for each query
@@ -791,14 +806,14 @@ protected:
 
     template<class RowMatrixT>
     vector<Neighbor> _onenn_batch(const RowMatrixT& queries,
-        CentroidIndex centroids_limit=-1)
+        float search_frac=-1)
     {
-        _update_idxs_for_centroids(queries, centroids_limit);
+        _update_idxs_for_centroids(queries, search_frac);
         vector<Neighbor> ret(queries.rows());
         for (int kk = 0; kk < _num_centroids; kk++) {
             auto& query_idxs = _idxs_for_centroids[kk];
             auto nrows = query_idxs.size();
-            _update_query_storate(query_idxs, queries);
+            _update_query_storage(query_idxs, queries);
 
             auto neighbors = _indexes[kk].onenn_batch(_queries_storage);
             assert(nrows == neighbors.size());
@@ -812,15 +827,15 @@ protected:
 
     template<class RowMatrixT>
     vector<vector<Neighbor> > _knn_batch(const RowMatrixT& queries, int k,
-        CentroidIndex centroids_limit=-1)
+        float search_frac=-1)
     {
-        _update_idxs_for_centroids(queries, centroids_limit);
+        _update_idxs_for_centroids(queries, search_frac);
         vector<vector<Neighbor> > ret(queries.rows());
 
         for (int kk = 0; kk < _num_centroids; kk++) { // for each centroid
             auto& query_idxs = _idxs_for_centroids[kk];
             auto nrows = query_idxs.size();
-            _update_query_storate(query_idxs, queries);
+            _update_query_storage(query_idxs, queries);
 
             auto nested_neighbors = _indexes[kk].knn_batch(_queries_storage, k);
             assert(nrows == nested_neighbors.size());
@@ -849,20 +864,24 @@ private:
         if (centroids_limit < 1) { return _num_centroids; }
         return ar::min(_num_centroids, centroids_limit);
     }
+    CentroidIndex _clamp_centroid_limit(float search_frac) {
+        return _clamp_centroid_limit(
+            static_cast<CentroidIndex>(search_frac * _num_centroids));
+    }
 
     template<class VectorT>
-    void _update_order_for_query(const VectorT& query, CentroidIndex centroids_limit=-1) {
+    void _update_order_for_query(const VectorT& query, float search_frac=-1) {
         _centroid_dists = dist::squared_dists_to_vector(_centroids, query);
         ar::argsort(_centroid_dists.data(), _num_centroids, _order.data());
-        centroids_limit = _clamp_centroid_limit(centroids_limit);
+        auto centroids_limit = _clamp_centroid_limit(search_frac);
         _order.resize(centroids_limit);
     }
 
     template<class RowMatrixT>
     void _update_idxs_for_centroids(const RowMatrixT& queries,
-        CentroidIndex centroids_limit=-1)
+        float search_frac=-1)
     {
-        centroids_limit = _clamp_centroid_limit(centroids_limit);
+        auto centroids_limit = _clamp_centroid_limit(search_frac);
         _order.resize(centroids_limit);
 		auto k = _num_centroids;
 
@@ -873,17 +892,17 @@ private:
         auto dists = dist::squared_dists_to_vectors<Eigen::ColMajor>(
             _centroids, queries);
 
-        for (int j = 0; j < queries.size; j++) { // for each query
+        for (int j = 0; j < queries.size(); j++) { // for each query
             Scalar* dists_col = dists.col(j).data();
-            ar::argsort(dists_col, k, _order);
+            ar::argsort(dists_col, k, _order.data());
             for (auto idx : _order) { // for each centroid for this query
                 _idxs_for_centroids[idx].push_back(j);
             }
         }
     }
 
-    template<class RowMatrixT>
-    void _update_query_storate(const vector<Index>& query_idxs,
+    template<class RowMatrixT, class idx_t=Index>
+    void _update_query_storage(const vector<idx_t>& query_idxs,
         const RowMatrixT& queries)
     {
         assert(_queries_storage.cols() == queries.cols());

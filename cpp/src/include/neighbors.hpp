@@ -108,6 +108,37 @@ DECLARE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf);
 DECLARE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd);
 DECLARE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf);
 
+// #define DECLARE_KNN_INDEX(NAME, ScalarT, VectorT, RowMatrixT) \
+// class NAME { \
+// public: \
+// 	typedef ScalarT Scalar; \
+// 	DECLARE_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
+// 	DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
+// 	DECLARE_INDEX_STATS_FUNCS \
+// 	DECLARE_INDEX_PIMPL(NAME) \
+// };
+
+class KmeansIndex {
+public:
+	typedef double ScalarT; // TODO remove once in a macro
+	typedef ScalarT Scalar;
+	typedef RowMatrixXd RowMatrixT;
+	typedef VectorXd VectorT;
+	KmeansIndex(const RowMatrixT & X, int k);
+	KmeansIndex(ScalarT* X, int m, int n, int k);
+
+	vector<int64_t> radius(const VectorT & q, double radiusL2,
+		float search_frac=-1);
+	vector<int64_t> knn(const VectorT & q, int k, float search_frac=-1);
+	MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2,
+		float search_frac=-1);
+	MatrixXi knn_batch(const RowMatrixT & queries, int k, float search_frac=-1);
+
+	NO_COPYING_AND_DEFAULT_DTOR(KmeansIndex);
+	DECLARE_INDEX_STATS_FUNCS;
+	DECLARE_INDEX_PIMPL(KmeansIndex);
+};
+
 // ------------------------------------------------ BinTree
 
 // TODO these shouldn't be in this header; probably use pimpl idiom

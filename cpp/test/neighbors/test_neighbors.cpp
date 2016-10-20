@@ -13,9 +13,9 @@
 #include "nn_search.hpp"
 #include "timing_utils.hpp"
 
-template<class MatrixT, class IndexT, class QueryT>
+template<class MatrixT, class IndexT, class QueryT, class... Args>
 inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
-    QueryT& q, const char* msg="")
+    QueryT& q, const char* msg, Args&&... args)
 {
     PrintTimer t(msg);
     for (int i = 0; i < 100; i++) {
@@ -25,7 +25,8 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
 
         // ------------------------ radius
         auto reasonable_dist = (X.row(0) - q).squaredNorm() + .00001;
-        auto allnn_idxs = index.radius(q, reasonable_dist);
+        auto allnn_idxs = index.radius(q, reasonable_dist,
+            std::forward<Args>(args)...);
         auto trueNN = radius_simple(X, q, reasonable_dist);
         auto trueNN_idxs = idxs_from_neighbors(trueNN);
 
@@ -35,7 +36,7 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
 
         // ------------------------ knn
         for (int k = 1; k <= 5; k += 2) {
-            auto knn_idxs = index.knn(q, k);
+            auto knn_idxs = index.knn(q, k, std::forward<Args>(args)...);
 			auto trueKnn = nn::simple::knn(X, q, k);
 			auto trueKnn_idxs = idxs_from_neighbors(trueKnn);
 
@@ -49,17 +50,48 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
     }
 }
 
+// nope, separating the defaults into a declaration doesn't fix the err...
+// template<class IndexT, class... Args>
+// void _test_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="",
+// 						 Args&&... args);
+// template<class IndexT, class... Args>
+// void _test_wrapper_index(int64_t N, int64_t D, const char* msg,
+//                          Args&&... args)
+
+
+
+// template<class IndexT, class F>
+// void _test_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="",
+// 	F&& index_func)
+
+// SELF: add option to pass in a lambda that builds the index given X, since clang
+// is apparently dumb and wont let us use a param pack
 
 template<class IndexT>
-void _test_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="") {
+void _test_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="")
+{
     using Scalar = typename IndexT::Scalar;
     RowMatrix<Scalar> X(N, D);
     X.setRandom();
 
-    IndexT index(X);
+	IndexT index(X);
     RowVector<Scalar> q(D);
     _test_wrapper_index_with_query(X, index, q, msg);
 }
+
+template<class IndexT>
+void _test_cluster_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="",
+    int num_clusters=-1, float search_frac=-1)
+{
+    using Scalar = typename IndexT::Scalar;
+    RowMatrix<Scalar> X(N, D);
+    X.setRandom();
+
+    IndexT index(X, num_clusters);
+    RowVector<Scalar> q(D);
+    _test_wrapper_index_with_query(X, index, q, msg, search_frac);
+}
+
 
 #define TEST_WRAPPER_INDEX_ONCE(CLS, N, D) \
     _test_wrapper_index<CLS>(N, D, "\t" #N "x" #D);
@@ -69,6 +101,24 @@ void _test_wrapper_index(int64_t N=100, int64_t D=16, const char* msg="") {
     TEST_WRAPPER_INDEX_ONCE(CLS, 100, 10); \
     TEST_WRAPPER_INDEX_ONCE(CLS, 1000, 40); \
     TEST_WRAPPER_INDEX_ONCE(CLS, 10000, 64);
+
+#define TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, N, D, ...) \
+	_test_wrapper_index<CLS>(N, D, "\t" #N "x" #D, __VA_ARGS__);
+
+#define TEST_CLUSTER_WRAPPER_INDEX(CLS, ...) \
+	std::cout << #CLS << ":\n"; \
+	TEST_WRAPPER_INDEX_ONCE(CLS, 100, 10, __VA_ARGS__); \
+	TEST_WRAPPER_INDEX_ONCE(CLS, 1000, 40, __VA_ARGS__); \
+	TEST_WRAPPER_INDEX_ONCE(CLS, 10000, 64, __VA_ARGS__);
+
+
+// TEST_CASE("KmeansIndex", "neighbors") {
+//     // TEST_WRAPPER_INDEX(KmeansIndex, 100);
+// 	_test_cluster_wrapper_index<KmeansIndex>(100, 16, "foo", 50);
+// }
+// TEST_CASE("KmeansIndexF", "neighbors") {
+//     TEST_WRAPPER_INDEX(KmeansIndexF);
+// }
 
 TEST_CASE("MatmulIndex", "neighbors") {
     TEST_WRAPPER_INDEX(MatmulIndex);

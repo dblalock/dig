@@ -137,21 +137,21 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 
     # ------------------------------------------------ batch of queries
 
-    # Q = 128
-    # queries = np.random.randn(Q, D).astype(dtype)
-    # queries = np.cumsum(queries, axis=1)
-    # queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
+    Q = 32
+    queries = np.random.randn(Q, D).astype(dtype)
+    queries = np.cumsum(queries, axis=1)
+    queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
 
-    # # ------------------------ dists for ground truth
+    # ------------------------ dists for ground truth
 
-    # dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
+    dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
-    # # ------------------------ knn query
+    # ------------------------ knn query
 
-    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3)
-    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10)
+    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3)
+    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10)
 
-    # # ------------------------ radius
+    # ------------------------ radius
 
     # test_radius_batch_query(index, queries, dists, name=name, r2=r2)
 
@@ -209,6 +209,8 @@ if __name__ == '__main__':
 
     opts_dbl = dict(X=X, q=q, dtype=None, trueDists=trueDists)
     opts_flt = dict(X=Xfloat, q=qfloat, dtype=np.float32, trueDists=trueDistsF)
+
+    # test_index(dig.KmeansIndex, 'knn', **opts_dbl)
 
     test_index(dig.MatmulIndex, "matmul", **opts_dbl)
     test_index(dig.MatmulIndexF, "matmulf", **opts_flt)

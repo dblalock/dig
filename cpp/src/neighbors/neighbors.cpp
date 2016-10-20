@@ -47,7 +47,7 @@ MatrixXi idx_mat_from_nested_neighbor_idxs(
 }
 
 // ================================================================
-// Classes
+// Helper Classes
 // ================================================================
 
 // ------------------------------------------------ IndexImpl
@@ -60,33 +60,44 @@ public:
     using RowMatrixT = typename scalar_traits<Scalar>::RowMatrixT;
 
     // ------------------------ ctors
-    IndexImpl(const RowMatrixT& X):
+    template<class... Args>
+    IndexImpl(const RowMatrixT& X, Args&&... args):
         _indexStartTimeMs(timeNow()),
-        _index(X),
+        _index(X, std::forward<Args>(args)...),
         _indexTimeMs(durationMs(_indexStartTimeMs, timeNow()))
     {}
-    IndexImpl(Scalar* X, int m, int n):
-        IndexImpl(eigenWrap2D_aligned(X, m, n)) {}
+    template<class... Args>
+    IndexImpl(Scalar* X, int m, int n, Args&&... args):
+        IndexImpl(eigenWrap2D_aligned(X, m, n), std::forward<Args>(args)...) {}
 
     // ------------------------ single queries
-    vector<int64_t> radius(const VectorT& q, double radiusL2) {
+    template<class... Args>
+    vector<int64_t> radius(const VectorT& q, double radiusL2, Args&&... args) {
         EasyTimer t(&_queryTimeMs);
-        return _index.radius_idxs(q.transpose(), radiusL2);
+        return _index.radius_idxs(q.transpose(), radiusL2,
+            std::forward<Args>(args)...);
     }
-    vector<int64_t> knn(const VectorT& q, int k) {
+    template<class... Args>
+    vector<int64_t> knn(const VectorT& q, int k, Args&&... args) {
         EasyTimer t(&_queryTimeMs);
-        return _index.knn_idxs(q.transpose(), k);
+        return _index.knn_idxs(q.transpose(), k, std::forward<Args>(args)...);
     }
 
     // ------------------------ batch queries
-    MatrixXi radius_batch(const RowMatrixT& queries, double radiusL2) {
+    template<class... Args>
+    MatrixXi radius_batch(const RowMatrixT& queries, double radiusL2,
+        Args&&... args)
+    {
         EasyTimer t(&_queryTimeMs);
-        auto nested_neighbors = _index.radius_batch_idxs(queries, radiusL2);
+        auto nested_neighbors = _index.radius_batch_idxs(
+            queries, radiusL2, std::forward<Args>(args)...);
         return idx_mat_from_nested_neighbor_idxs(nested_neighbors);
     }
-    MatrixXi knn_batch(const RowMatrixT& queries, int k) {
+    template<class... Args>
+    MatrixXi knn_batch(const RowMatrixT& queries, int k, Args&&... args) {
         EasyTimer t(&_queryTimeMs);
-        auto nested_neighbors = _index.knn_batch_idxs(queries, k);
+        auto nested_neighbors = _index.knn_batch_idxs(
+            queries, k, std::forward<Args>(args)...);
         return idx_mat_from_nested_neighbor_idxs(nested_neighbors);
     }
 
@@ -97,7 +108,9 @@ protected:
     double _queryTimeMs;
 };
 
-// ------------------------------------------------ Index creation macros
+// ================================================================
+// Index creation macros
+// ================================================================
 
 // ------------------------ pimpl
 
@@ -147,22 +160,103 @@ double INDEX_NAME ::getQueryTimeMs() { return _this->_queryTimeMs; }
     INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
     INDEX_STATS_FUNCS(NAME)
 
-// ------------------------------------------------ MatmulIndex
+// ================================================================
+// Index Impls
+// ================================================================
+
+// ------------------------------------------------ Matmul, Abandon, Simple
 
 DEFINE_INDEX(MatmulIndex, double, VectorXd, RowMatrixXd, nn::L2IndexBrute<double>)
 DEFINE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf, nn::L2IndexBrute<float>);
 
-
-// TODO use reorder preproc once we verify that this is working
 template<class T>
 using InnerIndexAbandonT = nn::L2IndexAbandon<T, nn::ReorderPreproc<T> >;
 DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
 DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
-// template<class T> using InnerIndexAbandonT = nn::L2IndexAbandon<T>;
-// DEFINE_INDEX(AbandonIndex, double, VectorXd, RowMatrixXd, InnerIndexAbandonT<double>);
-// DEFINE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf, InnerIndexAbandonT<float>);
 
 template<class T>
 using InnerIndexSimpleT = nn::L2IndexSimple<T>;
 DEFINE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd, InnerIndexSimpleT<double>);
 DEFINE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf, InnerIndexSimpleT<float>);
+
+// ------------------------------------------------ KmeansIndex
+
+// ------------------------ type aliases
+
+template<class T>
+using KnnInnerIndexT = nn::L2IndexSimple<T>;
+template<class T>
+using KmeansIndexT = nn::L2KmeansIndex<T, KnnInnerIndexT<T> >;
+// TODO remove these once using a macro
+using Scalar = double;
+using VectorT = VectorXd;
+using RowMatrixT = RowMatrixXd;
+
+// ------------------------ custom ctors (and dtor impl)
+
+class KmeansIndex::Impl: public IndexImpl<KmeansIndexT<double> > {
+    using Super = IndexImpl<KmeansIndexT<double> >;
+    using Scalar = Super::Scalar;
+    using VectorT = Super::VectorT;
+    using RowMatrixT = Super::RowMatrixT;
+    friend class KmeansIndex;
+    // using Super::Super;
+
+    Impl(const RowMatrixT& X, int k):
+        Super(X, k) {}
+    Impl(Scalar* X, int m, int n, int k):
+        Super(X, m, n, k) {}
+};
+
+// ------------------------ macro invocations
+
+// INDEX_PIMPL(KmeansIndex, KmeansIndexT<Scalar>)
+// INDEX_CTORS_DTOR(KmeansIndex, Scalar, RowMatrixT)
+// INDEX_QUERY_FUNCS(KmeansIndex, VectorT, RowMatrixT)
+INDEX_STATS_FUNCS(KmeansIndex)
+
+// ------------------------ ctors
+// template<class... Args>
+// IndexImpl(const RowMatrixT& X, Args&&... args):
+// _indexStartTimeMs(timeNow()),
+// _index(X, std::forward<Args>(args)...),
+// _indexTimeMs(durationMs(_indexStartTimeMs, timeNow()))
+// {}
+// template<class... Args>
+// IndexImpl(Scalar* X, int m, int n, Args&&... args):
+// IndexImpl(eigenWrap2D_aligned(X, m, n), std::forward<Args>(args)...) {}
+
+KmeansIndex ::KmeansIndex(const RowMatrixT & X, int k):
+    _this{new KmeansIndex ::Impl{X, k}} {}
+
+KmeansIndex ::KmeansIndex(Scalar* X, int m, int n, int k):
+    _this{new KmeansIndex ::Impl{X, m, n, k}} {}
+
+KmeansIndex ::~KmeansIndex() = default;
+
+// ------------------------ custom ctors (and dtor impl)
+
+vector<int64_t> KmeansIndex ::radius(const VectorT & q, double radiusL2,
+    float search_frac)
+{
+	return _this->radius(q, radiusL2, search_frac);
+}
+
+vector<int64_t> KmeansIndex ::knn(const VectorT & q, int k, float search_frac) {
+	return _this->knn(q, k, search_frac);
+}
+
+MatrixXi KmeansIndex ::radius_batch(const RowMatrixT & queries, double radiusL2,
+    float search_frac)
+{
+	return _this->radius_batch(queries, radiusL2, search_frac);
+}
+
+MatrixXi KmeansIndex ::knn_batch(const RowMatrixT & queries, int k,
+    float search_frac)
+{
+	return _this->knn_batch(queries, k, search_frac);
+}
+
+// DEFINE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd, InnerIndexSimpleT<double>);
+// DEFINE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf, InnerIndexSimpleT<float>);
