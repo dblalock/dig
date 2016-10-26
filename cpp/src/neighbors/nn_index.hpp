@@ -236,20 +236,6 @@ class IndexBase {
 public:
     using DistT = ScalarT;
 
-//    // ------------------------------------------------ insert and erase
-//
-//	template<class Id>
-//	auto insert(const ScalarT* row_start, Id id)
-//        -> decltype(Derived::_data.insert(row_start, id))
-//    {
-//		return Derived::_data.insert(row_start, id);
-//    }
-//
-//	template<class Id>
-//	auto erase(Id id) -> decltype(Derived::_data.erase(id)) {
-//        return Derived::_data.erase(id);
-//    }
-
     // ------------------------------------------------ single queries
 
     template<class VectorT, class... Args>
@@ -308,8 +294,7 @@ public:
     // ------------------------------------------------ return only idxs
 
     template<class VectorT, class... Args>
-    vector<idx_t> radius_idxs(const VectorT& query, DistT d_max,
-        Args&&... args)
+    vector<idx_t> radius_idxs(const VectorT& query, DistT d_max, Args&&... args)
     {
         auto neighbors = Derived::radius(query, d_max,
             std::forward<Args>(args)...);
@@ -319,17 +304,13 @@ public:
     }
 
     template<class VectorT, class... Args>
-    idx_t onenn_idxs(const VectorT& query, DistT d_max=kMaxDist,
-        Args&&... args)
-    {
+    idx_t onenn_idxs(const VectorT& query, Args&&... args) {
         auto neighbor = Derived::onenn(query, std::forward<Args>(args)...);
         return neighbor.idx;
     }
 
     template<class VectorT, class... Args>
-    vector<idx_t> knn_idxs(const VectorT& query, int k,
-        DistT d_max=kMaxDist, Args&&... args)
-    {
+    vector<idx_t> knn_idxs(const VectorT& query, int k, Args&&... args) {
         auto neighbors = Derived::knn(query, k, std::forward<Args>(args)...);
         return map([](const Neighbor& n) { return static_cast<idx_t>(n.idx); },
                    neighbors);
@@ -652,14 +633,15 @@ public:
 	L2KmeansIndex(L2KmeansIndex&& rhs) = delete;
 
     template<class RowMatrixT>
-    L2KmeansIndex(const RowMatrixT& X, int k):
+    L2KmeansIndex(const RowMatrixT& X, int k, float default_search_frac=-1):
         PreprocT(X),
         _order(k),
         _indexes(new InnerIndex[k]),
         _centroid_dists(k),
         _idxs_for_centroids(k),
         _queries_storage(32, PreprocT::preprocess_data(X).cols()), // 32 query capacity
-        _num_centroids(k)
+        _num_centroids(k),
+        _default_search_frac(default_search_frac)
     {
         // _indexes.reserve(k);
         auto X_ = PreprocT::preprocess_data(X);
@@ -720,11 +702,6 @@ protected:
             if (index.rows() < 1) { continue; }
             auto neighbors = index.radius(query, d_max);
 
-            // // convert to orig idxs TODO rm once idxs do this themselves
-            // for (auto& n : neighbors) {
-            //     n.idx = index.ids()[n.idx];
-            // }
-
             ar::concat_inplace(ret, neighbors);
         }
         sort_neighbors_ascending_idx(ret);
@@ -745,8 +722,6 @@ protected:
             Neighbor n = index.onenn(query);
             if (n.dist < ret.dist) {
                 ret = n;
-                // ret.dist = n.dist;
-                // ret.idx = index.ids()[n.idx];
             }
         }
         return ret;
@@ -757,6 +732,8 @@ protected:
         float search_frac=-1)
     {
         _update_order_for_query(query, search_frac); // update _order
+
+        PRINT_VAR(_order.size());
 
         vector<Neighbor> ret(k, Neighbor{kInvalidIdx, d_max});
         for (int i = 0; i < _order.size(); i++) {
@@ -852,9 +829,17 @@ private:
     std::vector<std::vector<CentroidIndex> > _idxs_for_centroids;
     ColMatrix<Scalar> _queries_storage;
     CentroidIndex _num_centroids;
+    float _default_search_frac;
 
     CentroidIndex _clamp_centroid_limit(CentroidIndex centroids_limit) {
-        if (centroids_limit < 1) { return _num_centroids; }
+        if (centroids_limit < 1) {
+            int default_num_centroids = static_cast<CentroidIndex>(
+                _default_search_frac * _num_centroids);
+            if (default_num_centroids > 0) {
+                return default_num_centroids;
+            }
+            return _num_centroids;
+        }
         return ar::min(_num_centroids, centroids_limit);
     }
     CentroidIndex _clamp_centroid_limit(float search_frac) {

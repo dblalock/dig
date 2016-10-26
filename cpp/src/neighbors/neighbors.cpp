@@ -206,6 +206,8 @@ class KmeansIndex::Impl: public IndexImpl<KmeansIndexT<double> > {
         Super(X, k) {}
     Impl(Scalar* X, int m, int n, int k):
         Super(X, m, n, k) {}
+	Impl(Scalar* X, int m, int n, int k, float default_search_frac):
+		Super(X, m, n, k, default_search_frac) {}
 };
 
 // ------------------------ macro invocations
@@ -229,31 +231,39 @@ INDEX_STATS_FUNCS(KmeansIndex)
 KmeansIndex ::KmeansIndex(const RowMatrixT & X, int k):
     _this{new KmeansIndex ::Impl{X, k}} {}
 
+KmeansIndex ::KmeansIndex(double* X, int m, int n, int k, float default_search_frac):
+    _this{new KmeansIndex ::Impl{X, m, n, k, default_search_frac}} {}
+
 KmeansIndex ::KmeansIndex(Scalar* X, int m, int n, int k):
-    _this{new KmeansIndex ::Impl{X, m, n, k}} {}
+    KmeansIndex(X, m, n, k, -1) {}
+
+KmeansIndex ::KmeansIndex(double* X, int m, int n): // TODO rm after debug
+    KmeansIndex(X, m, n, 100) {}
 
 KmeansIndex ::~KmeansIndex() = default;
 
 // ------------------------ custom ctors (and dtor impl)
 
 vector<int64_t> KmeansIndex ::radius(const VectorT & q, double radiusL2,
-    float search_frac)
+    float search_frac=-1)
 {
 	return _this->radius(q, radiusL2, search_frac);
 }
 
-vector<int64_t> KmeansIndex ::knn(const VectorT & q, int k, float search_frac) {
-	return _this->knn(q, k, search_frac);
+vector<int64_t> KmeansIndex ::knn(const VectorT & q, int k,
+    float search_frac=-1)
+{
+	return _this->knn(q, k, -1, search_frac);  // -1 is d_max
 }
 
 MatrixXi KmeansIndex ::radius_batch(const RowMatrixT & queries, double radiusL2,
-    float search_frac)
+    float search_frac=-1)
 {
 	return _this->radius_batch(queries, radiusL2, search_frac);
 }
 
 MatrixXi KmeansIndex ::knn_batch(const RowMatrixT & queries, int k,
-    float search_frac)
+    float search_frac=-1)
 {
 	return _this->knn_batch(queries, k, search_frac);
 }

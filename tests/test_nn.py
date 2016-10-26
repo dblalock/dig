@@ -1,7 +1,9 @@
 #!/bin/env python
 
+import functools
 import time
 import numpy as np
+
 import dig
 
 
@@ -68,9 +70,14 @@ def test_radius_batch_query(index, queries, dists, name, r2):
         assert(all_eq(returned_idxs, true_idxs))
 
 
-def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
-               dtype=np.float64, X=None, q=None, trueDists=None):
+def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
+               dtype=np.float64, X=None, q=None, trueDists=None,
+               **search_kwargs):
     print("------------------------ {}".format(name))
+
+    print "start of X: ", X[0, :5]
+    # print "search_kwargs", search_kwargs
+    # return
 
     # ------------------------ data and index construction
 
@@ -90,7 +97,9 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
         if dtype == np.float32:
             r2 = float(r2)
 
-    index = idx_func(X)
+    if not hasattr(index, 'radius'):  # not passed in an index
+        index = index(X)
+
     t = index.getIndexConstructionTimeMs()
     print "{} index time: {}".format(name, t)
 
@@ -107,7 +116,7 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 
     # ------------------------ range query
 
-    neighborIdxs = index.radius(q, r2)
+    neighborIdxs = index.radius(q, r2, **search_kwargs)
     t = index.getQueryTimeMs()
     neighborIdxs = np.sort(neighborIdxs)
 
@@ -118,42 +127,49 @@ def test_index(idx_func=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     #     print "trueNeighborIdxs: ", trueNeighborIdxs
     print "-> {} range query time\t= {}".format(name, t)
 
-    assert(len(neighborIdxs) == len(trueNeighborIdxs))
-    assert(all_eq(neighborIdxs, trueNeighborIdxs))
+    # assert(len(neighborIdxs) == len(trueNeighborIdxs))
+    # assert(all_eq(neighborIdxs, trueNeighborIdxs))
 
     # ------------------------ knn query
 
-    nn10 = index.knn(q, 10)
+    nn10 = index.knn(q, 10, **search_kwargs)
     t = index.getQueryTimeMs()
     trueNN10 = np.argsort(trueDists)[:10]
     # print "nn10, true nn10 =\n{}\n{}".format(nn10, trueNN10)
     # print "sorted nn10, true nn10 =\n{}\n{}".format(
     #     sorted(nn10), sorted(trueNN10))
     print "-> {} knn time\t\t= {}".format(name, t)
-    assert(all_eq(nn10, trueNN10))
+    # assert(all_eq(nn10, trueNN10))
 
-    knn_dists = trueDists[trueNN10]
+    knn_dists = trueDists[nn10]
+    # true_knn_dists = trueDists[trueNN10]
+    # note that this will repeat the last dist for each idx that's -1
     print "knn dists: ", [float("%.1f" % d) for d in knn_dists]
+    print "knn idxs: ", nn10
+    # print "true knn dists: ", [float("%.1f" % d) for d in true_knn_dists]
 
     # ------------------------------------------------ batch of queries
 
-    Q = 32
-    queries = np.random.randn(Q, D).astype(dtype)
-    queries = np.cumsum(queries, axis=1)
-    queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
+    # Q = 32
+    # queries = np.random.randn(Q, D).astype(dtype)
+    # queries = np.cumsum(queries, axis=1)
+    # queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
 
-    # ------------------------ dists for ground truth
+    # # ------------------------ dists for ground truth
 
-    dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
+    # dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
     # ------------------------ knn query
 
-    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3)
-    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10)
+    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3,
+    #     **search_kwargs)
+    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10,
+    #     **search_kwargs)
 
     # ------------------------ radius
 
-    # test_radius_batch_query(index, queries, dists, name=name, r2=r2)
+    # test_radius_batch_query(index, queries, dists, name=name, r2=r2,
+    #     **search_kwargs)
 
 
 def debug():
@@ -178,14 +194,15 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
-    # opts = {'N': 500 * 1000, 'D': 100, 'X': X}
-    N = 100 * 1000
+    # N = 100 * 1000
+    N = 500 * 1000
+    # N = 1000
     D = 100
 
     X = np.random.randn(N, D)
     X = np.cumsum(X, axis=1)
     # X -= np.mean(X, axis=1, keepdims=True) # rel contrast of 1.2
-    X /= np.std(X, axis=1, keepdims=True) # rel contrast of ~4
+    X /= np.std(X, axis=1, keepdims=True)  # rel contrast of ~4
     Xfloat = X.astype(np.float32)
 
     q = np.cumsum(np.random.randn(D))
@@ -210,13 +227,56 @@ if __name__ == '__main__':
     opts_dbl = dict(X=X, q=q, dtype=None, trueDists=trueDists)
     opts_flt = dict(X=Xfloat, q=qfloat, dtype=np.float32, trueDists=trueDistsF)
 
-    # test_index(dig.KmeansIndex, 'knn', **opts_dbl)
+    # index = dig.KmeansIndex(X, 10)
+    # index.radius(q, 5., -1.)
+    # index.knn(q, 1, -1.)
+    # index.knn(q, 5, -1.)
 
-    test_index(dig.MatmulIndex, "matmul", **opts_dbl)
-    test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
+    # ctor_func = functools.partial(dig.KmeansIndex, k=64,
+    #     default_search_frac=.1)
+    # k = 512
+    k = int(np.sqrt(N))
+    print "building index with {} centroids...".format(k)
+    ctor_func = dig.KmeansIndex(X, k)  # pass in index directly
+    # ctor_func = functools.partial(dig.KmeansIndex, k=k)
+    kmean_opts_dbl = opts_dbl.copy()
 
-    test_index(dig.AbandonIndex, "abandon", **opts_dbl)
-    test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
+    # k = 128, 100k x 100
+    # kmean_opts_dbl['search_frac'] = -1.  # 7.4, 6.8
+    # kmean_opts_dbl['search_frac'] = .5  # 2.9, 4.8
+    # kmean_opts_dbl['search_frac'] = .2  # 1.7, 2.8
+    # kmean_opts_dbl['search_frac'] = .1  # 1.2, 2.4
+    # kmean_opts_dbl['search_frac'] = .05  # .29, 2.3
 
-    test_index(dig.SimpleIndex, "simple", **opts_dbl)
-    test_index(dig.SimpleIndexF, "simplef", **opts_flt)
+    # # k = 1024, 100k x 100
+    # # kmean_opts_dbl['search_frac'] = -1.  # 5.7, 4.9
+    # # kmean_opts_dbl['search_frac'] = .5  # 3.1, 3.5
+    # # kmean_opts_dbl['search_frac'] = .2  # 2.0, 2.5
+    # # kmean_opts_dbl['search_frac'] = .1  # .87, 2.2
+    # kmean_opts_dbl['search_frac'] = .05  # .466, 2.3
+
+    # k = 512, 500k x 100
+    # search_fracs = [-1., .5, .2, .1, .05]
+    # search_fracs = [.01, 2. / k, 1. / k]
+    # search_fracs = [.01, .005]
+    search_fracs = [-1., .5, .2, .1, .05, .01, .005]
+    for frac in search_fracs:
+        print '================================ search_frac: ', frac
+        kmean_opts_dbl['search_frac'] = frac
+        test_index(ctor_func, 'kmeans', **kmean_opts_dbl)
+        # -1: 31.0, 33.6, 100% acc
+        # .5:
+        # .2:
+        # .1:
+        # .05:
+
+    # test_index(dig.KmeansIndex, 'kmeans', **kmean_opts_dbl)
+
+    # test_index(dig.MatmulIndex, "matmul", **opts_dbl)
+    # test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
+
+    # test_index(dig.AbandonIndex, "abandon", **opts_dbl)
+    # test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
+
+    # test_index(dig.SimpleIndex, "simple", **opts_dbl)
+    # test_index(dig.SimpleIndexF, "simplef", **opts_flt)

@@ -32,25 +32,32 @@ typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
 
 namespace nn {
 	using idx_t = int64_t;
+	using dist_t = float;
+	namespace {
+		static constexpr dist_t kMaxDist = std::numeric_limits<dist_t>::max();
+	}
 }
 
 double swigEigenTest(double* X, int m, int n);
 
 // ------------------------------------------------ Neighbor
 typedef struct Neighbor {
-	typedef float dist_t;
-	// typedef double dist_t;
 	typedef nn::idx_t idx_t;
+	typedef nn::dist_t dist_t;
 
 	idx_t idx;
 	dist_t dist;
 
 	Neighbor() = default;
 	Neighbor(const Neighbor& rhs) = default;
-	Neighbor(float d, idx_t i):  idx(i), dist(static_cast<dist_t>(d)) {}
-	Neighbor(idx_t i, float d):  idx(i), dist(static_cast<dist_t>(d)) {}
-	Neighbor(double d, idx_t i): idx(i), dist(static_cast<dist_t>(d)) {}
-	Neighbor(idx_t i, double d): idx(i), dist(static_cast<dist_t>(d)) {}
+	// Neighbor(float d, idx_t i):  idx(i), dist(static_cast<dist_t>(d)) {}
+	Neighbor(idx_t i, float d):  idx(i), dist(static_cast<dist_t>(d)) {
+		if (dist <= 0) { dist = nn::kMaxDist; }
+	}
+	// Neighbor(double d, idx_t i): idx(i), dist(static_cast<dist_t>(d)) {}
+	Neighbor(idx_t i, double d): idx(i), dist(static_cast<dist_t>(d)) {
+		if (dist <= 0) { dist = nn::kMaxDist; }
+	}
 
 } Neighbor;
 
@@ -123,16 +130,25 @@ public:
 	typedef double ScalarT; // TODO remove once in a macro
 	typedef ScalarT Scalar;
 	typedef RowMatrixXd RowMatrixT;
-	typedef VectorXd VectorT;
-	KmeansIndex(const RowMatrixT & X, int k);
-	KmeansIndex(ScalarT* X, int m, int n, int k);
+	// typedef VectorXd VectorT;
+	KmeansIndex(const RowMatrixXd & X, int k);
+	KmeansIndex(double* X, int m, int n, int k, float default_search_frac);
+	KmeansIndex(double* X, int m, int n, int k);
+	KmeansIndex(double* X, int m, int n);
 
-	vector<int64_t> radius(const VectorT & q, double radiusL2,
-		float search_frac=-1);
-	vector<int64_t> knn(const VectorT & q, int k, float search_frac=-1);
-	MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2,
-		float search_frac=-1);
-	MatrixXi knn_batch(const RowMatrixT & queries, int k, float search_frac=-1);
+	vector<int64_t> radius(const VectorXd & q, double radiusL2, float search_frac);
+	// vector<int64_t> radius(const VectorXd & q, double radiusL2,
+	// 	float search_frac=-1.0);
+	// vector<int64_t> knn(const VectorT & q, int k, float search_frac=-1);
+	// vector<int64_t> knn(const VectorXd & q, int k, float search_frac=-1.0);
+	vector<int64_t> knn(const VectorXd & q, int k, float search_frac);
+	// MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2,
+	// MatrixXi radius_batch(const RowMatrixXd & queries, double radiusL2,
+	// 	float search_frac=-1.0);
+	MatrixXi radius_batch(const RowMatrixXd & queries, double radiusL2,
+		float search_frac);
+	// MatrixXi knn_batch(const RowMatrixT & queries, int k, float search_frac=-1);
+	MatrixXi knn_batch(const RowMatrixXd & queries, int k, float search_frac);
 
 	NO_COPYING_AND_DEFAULT_DTOR(KmeansIndex);
 	DECLARE_INDEX_STATS_FUNCS;

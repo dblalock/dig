@@ -11,6 +11,7 @@
 		721FC9CE1DAC00AE00EF824F /* neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 721FC9CD1DAC00AE00EF824F /* neighbors.cpp */; };
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
+		727207DD1DBFEF520014F72B /* profile_neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727207DC1DBFEF520014F72B /* profile_neighbors.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
 		72A789D41DA1F372004F2D18 /* test_cluster.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72A789D31DA1F372004F2D18 /* test_cluster.cpp */; };
 		72B610E91CA5B3E1008B50D3 /* test_filter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B610E81CA5B3E1008B50D3 /* test_filter.cpp */; };
@@ -63,6 +64,7 @@
 		72247DB01C87A5F600B74A64 /* neighbors.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = neighbors.hpp; sourceTree = "<group>"; };
 		72247DB11C87A5F600B74A64 /* dist.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = dist.hpp; sourceTree = "<group>"; };
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
+		727207DC1DBFEF520014F72B /* profile_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_neighbors.cpp; sourceTree = "<group>"; };
 		727A342F1CB35D0B009A54CE /* circular.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = circular.hpp; sourceTree = "<group>"; };
 		727A34301CB35D26009A54CE /* flock_batch.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = flock_batch.hpp; sourceTree = "<group>"; };
 		728F85DE1C55B565004E4AA0 /* tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tree.cpp; sourceTree = "<group>"; };
@@ -456,6 +458,7 @@
 		72247DA91C600AA300B74A64 /* neighbors */ = {
 			isa = PBXGroup;
 			children = (
+				727207DC1DBFEF520014F72B /* profile_neighbors.cpp */,
 				72E714781DAFE6DB00CE06EC /* test_neighbors.cpp */,
 				721403B51D8B535100F8658F /* test_nn_index.cpp */,
 				72247DAD1C71087F00B74A64 /* test_intmap.cpp */,
@@ -1375,6 +1378,7 @@
 				72CFE90C1CD464890085FB1B /* test_bit_ops.cpp in Sources */,
 				72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */,
 				72C419641C5337AD004689A2 /* math_utils.c in Sources */,
+				727207DD1DBFEF520014F72B /* profile_neighbors.cpp in Sources */,
 				72E714791DAFE6DB00CE06EC /* test_neighbors.cpp in Sources */,
 				72C81BE81C90B6EE00639302 /* flock.cpp in Sources */,
 				721403B61D8B535100F8658F /* test_nn_index.cpp in Sources */,
@@ -1432,8 +1436,9 @@
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 3;
+				GCC_OPTIMIZATION_LEVEL = fast;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -1486,7 +1491,8 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_ENABLE_CPP_EXCEPTIONS = NO;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = fast;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

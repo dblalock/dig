@@ -19,7 +19,7 @@
 namespace cluster {
 
 template<class assignment_t=int32_t, class MatrixT=char>
-auto kmeans(const MatrixT& X, assignment_t k)
+auto kmeans(const MatrixT& X, assignment_t k, assignment_t max_iters=10)
     -> std::pair<typename mat_traits<MatrixT>::RowMatrixT,
         std::vector<assignment_t> >
 {
@@ -51,7 +51,8 @@ auto kmeans(const MatrixT& X, assignment_t k)
     // lloyd's algorithm to optimize the centroids + assignments
     RowMatrixT dists(X.rows(), k);
     Scalar prev_dist = -1;
-    while (true) {
+    if (max_iters < 1) { max_iters = 9999; } // huge number
+    for(int i = 0; i < max_iters; i++) {
         // compute dists via ||x-y||^2 = ||x||^2 + ||y||^2 - 2x.y
         dists = static_cast<Scalar>(-2.) * (X * centroids.transpose());
         dists.colwise() += row_norms;

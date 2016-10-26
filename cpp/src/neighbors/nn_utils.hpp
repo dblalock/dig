@@ -49,10 +49,6 @@ static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");
 
 namespace nn {
 
-namespace {
-using dist_t = typename Neighbor::dist_t;
-static constexpr dist_t kMaxDist = dist::max_dist<dist_t>();
-}
 // wrapper subclasses to allow only specifying type
 // template<class T, int Dim1=Dynamic, int Dim2=Dynamic>
 // class MatrixX: public Matrix<T, Dynamic, Dynamic> {};
@@ -193,7 +189,7 @@ inline vector<Neighbor> neighbors_in_radius(const T* dists, size_t len, R radius
     for (idx_t i = 0; i < len; i++) {
         auto dist = dists[i];
         if (dists[i] < radius_sq) {
-			neighbors.emplace_back(Neighbor{static_cast<dist_t>(dist), i});
+			neighbors.emplace_back(i, dist);
         }
     }
     return neighbors;

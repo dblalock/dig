@@ -28,11 +28,21 @@ static inline double durationMs(cputime_t t1, cputime_t t0) {
 
 class EasyTimer {
 public:
-    EasyTimer(double* write_to): _write_here(write_to), _tstart(timeNow()) {}
-    ~EasyTimer() { *_write_here = durationMs(_tstart, timeNow()); }
+    using TimeT = double;
+    EasyTimer(TimeT* write_to, bool add=false):
+        _write_here(write_to), _tstart(timeNow()), _add(add) {}
+    ~EasyTimer() {
+        TimeT duration = static_cast<TimeT>(durationMs(_tstart, timeNow()));
+        if (_add) {
+            *_write_here += duration;
+        } else {
+            *_write_here = duration;
+        }
+    }
 private:
-    double* _write_here;
+    TimeT* _write_here;
     cputime_t _tstart;
+    bool _add;
 };
 
 class PrintTimer {
@@ -48,7 +58,6 @@ private:
     std::string _msg;
     cputime_t _tstart;
 };
-
 
 } // anon namespace
 #endif // _TIMING_UTILS_HPP
