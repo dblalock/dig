@@ -32,10 +32,10 @@ TEST_CASE("L2IndexBrute", "[neighbors]") {
 	_test_index<nn::L2IndexBrute<double> >();
 	_test_index<nn::L2IndexBrute<float> >();
 }
-TEST_CASE("L2IndexAbandon", "[neighbors]") {
-	_test_index<nn::L2IndexAbandon<double> >();
-	_test_index<nn::L2IndexAbandon<float> >();
-}
+// TEST_CASE("L2IndexAbandon", "[neighbors]") {
+// 	_test_index<nn::L2IndexAbandon<double> >();
+// 	_test_index<nn::L2IndexAbandon<float> >();
+// }
 TEST_CASE("L2IndexSimple", "[neighbors]") {
 	_test_index<nn::L2IndexSimple<double> >();
 	_test_index<nn::L2IndexSimple<float> >();

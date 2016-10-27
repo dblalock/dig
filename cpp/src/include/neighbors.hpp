@@ -65,7 +65,7 @@ typedef struct Neighbor {
 // Classes
 // ================================================================
 
-// ------------------------------------------------ MatmulIndex
+// ------------------------------------------------ Normal Indexes
 
 #define NO_COPYING_AND_DEFAULT_DTOR(NAME) \
 	NAME(const NAME & other) = delete; \
@@ -115,7 +115,7 @@ DECLARE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf);
 DECLARE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd);
 DECLARE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf);
 
-// ------------------------------------------------ Kmeans Index Wrappers
+// ------------------------------------------------ Kmeans Index
 
 #define DECLARE_KMEANS_INDEX(NAME, ScalarT, VectorT, RowMatrixT) \
 class NAME { \
@@ -138,7 +138,10 @@ public: \
 	DECLARE_INDEX_PIMPL(NAME); \
 };
 
+// ------------------------------------------------ Kmeans Index Wrappers
+
 DECLARE_KMEANS_INDEX(KmeansIndex, double, VectorXd, RowMatrixXd);
+DECLARE_KMEANS_INDEX(KmeansIndexF, float, VectorXf, RowMatrixXf);
 
 // class KmeansIndex {
 // public:

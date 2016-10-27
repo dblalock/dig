@@ -197,7 +197,8 @@ if __name__ == '__main__':
     # N = 100 * 1000
     N = 500 * 1000
     # N = 1000
-    D = 100
+    # D = 100
+    D = 200
 
     X = np.random.randn(N, D)
     X = np.cumsum(X, axis=1)
@@ -227,49 +228,6 @@ if __name__ == '__main__':
     opts_dbl = dict(X=X, q=q, dtype=None, trueDists=trueDists)
     opts_flt = dict(X=Xfloat, q=qfloat, dtype=np.float32, trueDists=trueDistsF)
 
-    # index = dig.KmeansIndex(X, 10)
-    # index.radius(q, 5., -1.)
-    # index.knn(q, 1, -1.)
-    # index.knn(q, 5, -1.)
-
-    # ctor_func = functools.partial(dig.KmeansIndex, k=64,
-    #     default_search_frac=.1)
-    # k = 512
-    k = int(np.sqrt(N))
-    print "building index with {} centroids...".format(k)
-    ctor_func = dig.KmeansIndex(X, k)  # pass in index directly
-    # ctor_func = functools.partial(dig.KmeansIndex, k=k)
-    kmean_opts_dbl = opts_dbl.copy()
-
-    # k = 128, 100k x 100
-    # kmean_opts_dbl['search_frac'] = -1.  # 7.4, 6.8
-    # kmean_opts_dbl['search_frac'] = .5  # 2.9, 4.8
-    # kmean_opts_dbl['search_frac'] = .2  # 1.7, 2.8
-    # kmean_opts_dbl['search_frac'] = .1  # 1.2, 2.4
-    # kmean_opts_dbl['search_frac'] = .05  # .29, 2.3
-
-    # # k = 1024, 100k x 100
-    # # kmean_opts_dbl['search_frac'] = -1.  # 5.7, 4.9
-    # # kmean_opts_dbl['search_frac'] = .5  # 3.1, 3.5
-    # # kmean_opts_dbl['search_frac'] = .2  # 2.0, 2.5
-    # # kmean_opts_dbl['search_frac'] = .1  # .87, 2.2
-    # kmean_opts_dbl['search_frac'] = .05  # .466, 2.3
-
-    # k = 512, 500k x 100
-    # search_fracs = [-1., .5, .2, .1, .05]
-    # search_fracs = [.01, 2. / k, 1. / k]
-    # search_fracs = [.01, .005]
-    search_fracs = [-1., .5, .2, .1, .05, .01, .005]
-    for frac in search_fracs:
-        print '================================ search_frac: ', frac
-        kmean_opts_dbl['search_frac'] = frac
-        test_index(ctor_func, 'kmeans', **kmean_opts_dbl)
-        # -1: 31.0, 33.6, 100% acc
-        # .5:
-        # .2:
-        # .1:
-        # .05:
-
     # test_index(dig.KmeansIndex, 'kmeans', **kmean_opts_dbl)
 
     # test_index(dig.MatmulIndex, "matmul", **opts_dbl)
@@ -280,3 +238,45 @@ if __name__ == '__main__':
 
     # test_index(dig.SimpleIndex, "simple", **opts_dbl)
     # test_index(dig.SimpleIndexF, "simplef", **opts_flt)
+
+    # ------------------------ KmeansIndex stuff
+
+    # index = dig.KmeansIndex(X, 10)
+    # index.radius(q, 5., -1.)
+    # index.knn(q, 1, -1.)
+    # index.knn(q, 5, -1.)
+
+    # ctor_func = functools.partial(dig.KmeansIndex, k=64,
+    #     default_search_frac=.1)
+    # k = 512
+    k = int(np.sqrt(N))
+    print "building index with {} centroids...".format(k)
+
+    run_dbl = False
+    run_flt = True
+
+    if run_dbl:
+        ctor_func = dig.KmeansIndex(X, k)  # pass in index directly
+        kmean_opts_dbl = opts_dbl.copy()
+    if run_flt:
+        ctor_funcF = dig.KmeansIndexF(Xfloat, k)  # pass in index directly
+        kmean_opts_flt = opts_flt.copy()
+
+    # k = 512, 500k x 100
+    # search_fracs = [-1., .5, .2, .1, .05]
+    # search_fracs = [.01, 2. / k, 1. / k]
+    # search_fracs = [.01, .005]
+    search_fracs = [-1., .5, .2, .1, .05, .01, .005]
+    for frac in search_fracs:
+        print '================================ search_frac: ', frac
+        if run_dbl:
+            kmean_opts_dbl['search_frac'] = frac
+            test_index(ctor_func, 'kmeans', **kmean_opts_dbl)
+            # -1: 31.0, 33.6, 100% acc
+            # .5:
+            # .2:
+            # .1:
+            # .05:
+        if run_flt:
+            kmean_opts_flt['search_frac'] = frac
+            test_index(ctor_funcF, 'kmeans', **kmean_opts_flt)

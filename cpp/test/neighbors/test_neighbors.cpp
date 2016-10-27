@@ -115,20 +115,14 @@ void _test_cluster_wrapper_index(int64_t N=100, int64_t D=16, const char* msg=""
     for (int i = 0; i < 10; i++) { \
         TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 10*1000, 100, __VA_ARGS__); \
     }
-	// TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 100, 10, __VA_ARGS__); \
-	// TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 250, 40, __VA_ARGS__); \
-	// TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 1000, 64, __VA_ARGS__);
-
-
-
 
 TEST_CASE("KmeansIndex", "[neighbors_wrappers]") {
-    TEST_CLUSTER_WRAPPER_INDEX(KmeansIndex, 100);
+    TEST_CLUSTER_WRAPPER_INDEX(KmeansIndex, 53); // weird number of clusters
 	// _test_cluster_wrapper_index<KmeansIndex>(100, 16, "foo", 50);
 }
-// TEST_CASE("KmeansIndexF", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(KmeansIndexF);
-// }
+TEST_CASE("KmeansIndexF", "[neighbors_wrappers]") {
+    TEST_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 47); // weird number of clusters
+}
 
 TEST_CASE("MatmulIndex", "[neighbors_wrappers]") {
     TEST_WRAPPER_INDEX(MatmulIndex);
@@ -144,9 +138,9 @@ TEST_CASE("SimpleIndexF", "[neighbors_wrappers]") {
     TEST_WRAPPER_INDEX(SimpleIndexF);
 }
 
-TEST_CASE("AbandonIndex", "[neighbors_wrappers]") {
-    TEST_WRAPPER_INDEX(AbandonIndex);
-}
-TEST_CASE("AbandonIndexF", "[neighbors_wrappers]") {
-    TEST_WRAPPER_INDEX(AbandonIndexF);
-}
+// TEST_CASE("AbandonIndex", "[neighbors_wrappers]") {
+//     TEST_WRAPPER_INDEX(AbandonIndex);
+// }
+// TEST_CASE("AbandonIndexF", "[neighbors_wrappers]") {
+//     TEST_WRAPPER_INDEX(AbandonIndexF);
+// }

@@ -214,20 +214,20 @@ class NAME::Impl: public IndexImpl<KmeansIndexT<ScalarT> > {                \
 
 // ------------------------ custom ctors (and dtor impl)
 
-#define KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
-\
-NAME ::NAME(const RowMatrixT & X, int k): \
-    _this{new NAME ::Impl{X, k}} {} \
-\
-NAME ::NAME(double* X, int m, int n, int k, float default_search_frac): \
-    _this{new NAME ::Impl{X, m, n, k, default_search_frac}} {} \
-\
-NAME ::NAME(Scalar* X, int m, int n, int k): \
-    NAME(X, m, n, k, -1) {} \
-\
-NAME ::NAME(double* X, int m, int n): \
-    NAME(X, m, n, 100) {} \
-\
+#define KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT)                  \
+                                                                            \
+NAME ::NAME(const RowMatrixT & X, int k):                                   \
+    _this{new NAME ::Impl{X, k}} {}                                         \
+                                                                            \
+NAME ::NAME(ScalarT* X, int m, int n, int k, float default_search_frac):    \
+    _this{new NAME ::Impl{X, m, n, k, default_search_frac}} {}              \
+                                                                            \
+NAME ::NAME(ScalarT* X, int m, int n, int k):                               \
+    NAME(X, m, n, k, -1) {}                                                 \
+                                                                            \
+NAME ::NAME(ScalarT* X, int m, int n):                                      \
+    NAME(X, m, n, 100) {}                                                   \
+                                                                            \
 NAME ::~NAME() = default;
 
 // KMEANS_INDEX_CTORS_DTOR(KmeansIndex, double, RowMatrixXd);
@@ -266,9 +266,9 @@ MatrixXi NAME ::knn_batch(const RowMatrixT & queries, int k,                \
 // ------------------------ top-level macro for convenience
 
 #define DEFINE_KMEANS_INDEX(NAME, ScalarT, VectorT, RowMatrixT, KmeansIndexT) \
-    KMEANS_INDEX_PIMPL(NAME, ScalarT, RowMatrixT, KmeansIndexT) \
-    KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
-    KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
+    KMEANS_INDEX_PIMPL(NAME, ScalarT, RowMatrixT, KmeansIndexT)             \
+    KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT)                      \
+    KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                     \
     INDEX_STATS_FUNCS(NAME)
 
 // ------------------------ type aliases
@@ -279,6 +279,7 @@ template<class T> using KmeansIndexT = nn::L2KmeansIndex<T, KnnInnerIndexT<T> >;
 // ------------------------ macro invocations
 
 DEFINE_KMEANS_INDEX(KmeansIndex, double, VectorXd, RowMatrixXd, KmeansIndexT);
+DEFINE_KMEANS_INDEX(KmeansIndexF, float, VectorXf, RowMatrixXf, KmeansIndexT);
 
 // #define NAME KmeansIndex
 
