@@ -15,7 +15,8 @@
 #include "nn_search.hpp"
 #include "timing_utils.hpp"
 
-constexpr int kDefaultN = 100 * 1000;
+// constexpr int kDefaultN = 100 * 1000;
+constexpr int kDefaultN = 500;
 constexpr int kDefaultD = 100;
 
 template<class MatrixT, class IndexT, class QueryT, class... Args>
@@ -25,8 +26,8 @@ inline void _prof_wrapper_index_with_query(MatrixT& X, IndexT& index,
     // std::cout << "running stuff... with msg: " << msg << "\n";
     PrintTimer t(msg);
     // for (int i = 0; i < 100; i++) {
-    // for (int i = 0; i < 10; i++) {
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 10; i++) {
+    // for (int i = 0; i < 1; i++) {
         q.setRandom();
 
         EasyTimer _(total_time, true); // true = add to value

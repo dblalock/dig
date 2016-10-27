@@ -181,92 +181,111 @@ DEFINE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf, InnerIndexSimpleT<float
 
 // ------------------------------------------------ KmeansIndex
 
-// ------------------------ type aliases
+// ------------------------ custom ctors (and dtor impl)
 
-template<class T>
-using KnnInnerIndexT = nn::L2IndexSimple<T>;
-template<class T>
-using KmeansIndexT = nn::L2KmeansIndex<T, KnnInnerIndexT<T> >;
-// TODO remove these once using a macro
-using Scalar = double;
-using VectorT = VectorXd;
-using RowMatrixT = RowMatrixXd;
+#define KMEANS_INDEX_PIMPL(NAME, ScalarT, RowMatrixT, KmeansIndexT)         \
+class NAME::Impl: public IndexImpl<KmeansIndexT<ScalarT> > {                \
+    using Super = IndexImpl<KmeansIndexT<ScalarT> >;                        \
+    friend class NAME;                                                      \
+                                                                            \
+    Impl(const RowMatrixT& X, int k):                                       \
+        Super(X, k) {}                                                      \
+    Impl(ScalarT* X, int m, int n, int k):                                  \
+        Super(X, m, n, k) {}                                                \
+    Impl(ScalarT* X, int m, int n, int k, float default_search_frac):       \
+        Super(X, m, n, k, default_search_frac) {}                           \
+};
+
+// KMEANS_INDEX_PIMPL(KmeansIndex, KmeansIndexT, double, RowMatrixXd);
+
+// class KmeansIndex::Impl: public IndexImpl<KmeansIndexT<double> > {
+//     using Super = IndexImpl<KmeansIndexT<double> >;
+//     using Scalar = Super::Scalar;
+//     using RowMatrixT = Super::RowMatrixT;
+//     friend class KmeansIndex;
+
+//     Impl(const RowMatrixT& X, int k):
+//         Super(X, k) {}
+//     Impl(Scalar* X, int m, int n, int k):
+//         Super(X, m, n, k) {}
+// 	Impl(Scalar* X, int m, int n, int k, float default_search_frac):
+// 		Super(X, m, n, k, default_search_frac) {}
+// };
 
 // ------------------------ custom ctors (and dtor impl)
 
-class KmeansIndex::Impl: public IndexImpl<KmeansIndexT<double> > {
-    using Super = IndexImpl<KmeansIndexT<double> >;
-    using Scalar = Super::Scalar;
-    using VectorT = Super::VectorT;
-    using RowMatrixT = Super::RowMatrixT;
-    friend class KmeansIndex;
-    // using Super::Super;
+#define KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
+\
+NAME ::NAME(const RowMatrixT & X, int k): \
+    _this{new NAME ::Impl{X, k}} {} \
+\
+NAME ::NAME(double* X, int m, int n, int k, float default_search_frac): \
+    _this{new NAME ::Impl{X, m, n, k, default_search_frac}} {} \
+\
+NAME ::NAME(Scalar* X, int m, int n, int k): \
+    NAME(X, m, n, k, -1) {} \
+\
+NAME ::NAME(double* X, int m, int n): \
+    NAME(X, m, n, 100) {} \
+\
+NAME ::~NAME() = default;
 
-    Impl(const RowMatrixT& X, int k):
-        Super(X, k) {}
-    Impl(Scalar* X, int m, int n, int k):
-        Super(X, m, n, k) {}
-	Impl(Scalar* X, int m, int n, int k, float default_search_frac):
-		Super(X, m, n, k, default_search_frac) {}
-};
+// KMEANS_INDEX_CTORS_DTOR(KmeansIndex, double, RowMatrixXd);
+
+// ------------------------ search funcs
+
+#define KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                 \
+                                                                            \
+vector<int64_t> NAME ::radius(const VectorT & q, double radiusL2,           \
+    float search_frac=-1)                                                   \
+{                                                                           \
+	return _this->radius(q, radiusL2, search_frac);                         \
+}                                                                           \
+                                                                            \
+vector<int64_t> NAME ::knn(const VectorT & q, int k,                        \
+    float search_frac=-1)                                                   \
+{                                                                           \
+    int d_max = -1;                                                         \
+	return _this->knn(q, k, d_max, search_frac);                            \
+}                                                                           \
+                                                                            \
+MatrixXi NAME ::radius_batch(const RowMatrixT & queries,                    \
+    double radiusL2, float search_frac=-1)                                  \
+{                                                                           \
+	return _this->radius_batch(queries, radiusL2, search_frac);             \
+}                                                                           \
+                                                                            \
+MatrixXi NAME ::knn_batch(const RowMatrixT & queries, int k,                \
+    float search_frac=-1)                                                   \
+{                                                                           \
+	return _this->knn_batch(queries, k, search_frac);                       \
+}
+
+// KMEANS_INDEX_QUERY_FUNCS(KmeansIndex, VectorXd, RowMatrixXd);
+
+// ------------------------ top-level macro for convenience
+
+#define DEFINE_KMEANS_INDEX(NAME, ScalarT, VectorT, RowMatrixT, KmeansIndexT) \
+    KMEANS_INDEX_PIMPL(NAME, ScalarT, RowMatrixT, KmeansIndexT) \
+    KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
+    KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
+    INDEX_STATS_FUNCS(NAME)
+
+// ------------------------ type aliases
+
+template<class T> using KnnInnerIndexT = nn::L2IndexSimple<T>;
+template<class T> using KmeansIndexT = nn::L2KmeansIndex<T, KnnInnerIndexT<T> >;
 
 // ------------------------ macro invocations
 
-// INDEX_PIMPL(KmeansIndex, KmeansIndexT<Scalar>)
-// INDEX_CTORS_DTOR(KmeansIndex, Scalar, RowMatrixT)
-// INDEX_QUERY_FUNCS(KmeansIndex, VectorT, RowMatrixT)
-INDEX_STATS_FUNCS(KmeansIndex)
+DEFINE_KMEANS_INDEX(KmeansIndex, double, VectorXd, RowMatrixXd, KmeansIndexT);
 
-// ------------------------ ctors
-// template<class... Args>
-// IndexImpl(const RowMatrixT& X, Args&&... args):
-// _indexStartTimeMs(timeNow()),
-// _index(X, std::forward<Args>(args)...),
-// _indexTimeMs(durationMs(_indexStartTimeMs, timeNow()))
-// {}
-// template<class... Args>
-// IndexImpl(Scalar* X, int m, int n, Args&&... args):
-// IndexImpl(eigenWrap2D_aligned(X, m, n), std::forward<Args>(args)...) {}
+// #define NAME KmeansIndex
 
-KmeansIndex ::KmeansIndex(const RowMatrixT & X, int k):
-    _this{new KmeansIndex ::Impl{X, k}} {}
+// KMEANS_INDEX_PIMPL(NAME, double, RowMatrixXd, KmeansIndexT);
 
-KmeansIndex ::KmeansIndex(double* X, int m, int n, int k, float default_search_frac):
-    _this{new KmeansIndex ::Impl{X, m, n, k, default_search_frac}} {}
+// KMEANS_INDEX_CTORS_DTOR(NAME, double, RowMatrixXd);
 
-KmeansIndex ::KmeansIndex(Scalar* X, int m, int n, int k):
-    KmeansIndex(X, m, n, k, -1) {}
+// KMEANS_INDEX_QUERY_FUNCS(NAME, VectorXd, RowMatrixXd);
 
-KmeansIndex ::KmeansIndex(double* X, int m, int n): // TODO rm after debug
-    KmeansIndex(X, m, n, 100) {}
-
-KmeansIndex ::~KmeansIndex() = default;
-
-// ------------------------ custom ctors (and dtor impl)
-
-vector<int64_t> KmeansIndex ::radius(const VectorT & q, double radiusL2,
-    float search_frac=-1)
-{
-	return _this->radius(q, radiusL2, search_frac);
-}
-
-vector<int64_t> KmeansIndex ::knn(const VectorT & q, int k,
-    float search_frac=-1)
-{
-	return _this->knn(q, k, -1, search_frac);  // -1 is d_max
-}
-
-MatrixXi KmeansIndex ::radius_batch(const RowMatrixT & queries, double radiusL2,
-    float search_frac=-1)
-{
-	return _this->radius_batch(queries, radiusL2, search_frac);
-}
-
-MatrixXi KmeansIndex ::knn_batch(const RowMatrixT & queries, int k,
-    float search_frac=-1)
-{
-	return _this->knn_batch(queries, k, search_frac);
-}
-
-// DEFINE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd, InnerIndexSimpleT<double>);
-// DEFINE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf, InnerIndexSimpleT<float>);
+// INDEX_STATS_FUNCS(NAME)

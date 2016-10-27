@@ -104,7 +104,7 @@ public: \
 	DECLARE_INDEX_PIMPL(NAME) \
 };
 
-// ------------------------------------------------ Index Wrappers
+// ------------------------------------------------ Normal Index Wrappers
 
 DECLARE_INDEX(MatmulIndex, double, VectorXd, RowMatrixXd);
 DECLARE_INDEX(MatmulIndexF, float, VectorXf, RowMatrixXf);
@@ -115,45 +115,60 @@ DECLARE_INDEX(AbandonIndexF, float, VectorXf, RowMatrixXf);
 DECLARE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd);
 DECLARE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf);
 
-// #define DECLARE_KNN_INDEX(NAME, ScalarT, VectorT, RowMatrixT) \
-// class NAME { \
-// public: \
-// 	typedef ScalarT Scalar; \
-// 	DECLARE_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT) \
-// 	DECLARE_INDEX_QUERY_FUNCS(VectorT, RowMatrixT) \
-// 	DECLARE_INDEX_STATS_FUNCS \
-// 	DECLARE_INDEX_PIMPL(NAME) \
-// };
+// ------------------------------------------------ Kmeans Index Wrappers
 
-class KmeansIndex {
-public:
-	typedef double ScalarT; // TODO remove once in a macro
-	typedef ScalarT Scalar;
-	typedef RowMatrixXd RowMatrixT;
-	// typedef VectorXd VectorT;
-	KmeansIndex(const RowMatrixXd & X, int k);
-	KmeansIndex(double* X, int m, int n, int k, float default_search_frac);
-	KmeansIndex(double* X, int m, int n, int k);
-	KmeansIndex(double* X, int m, int n);
-
-	vector<int64_t> radius(const VectorXd & q, double radiusL2, float search_frac);
-	// vector<int64_t> radius(const VectorXd & q, double radiusL2,
-	// 	float search_frac=-1.0);
-	// vector<int64_t> knn(const VectorT & q, int k, float search_frac=-1);
-	// vector<int64_t> knn(const VectorXd & q, int k, float search_frac=-1.0);
-	vector<int64_t> knn(const VectorXd & q, int k, float search_frac);
-	// MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2,
-	// MatrixXi radius_batch(const RowMatrixXd & queries, double radiusL2,
-	// 	float search_frac=-1.0);
-	MatrixXi radius_batch(const RowMatrixXd & queries, double radiusL2,
-		float search_frac);
-	// MatrixXi knn_batch(const RowMatrixT & queries, int k, float search_frac=-1);
-	MatrixXi knn_batch(const RowMatrixXd & queries, int k, float search_frac);
-
-	NO_COPYING_AND_DEFAULT_DTOR(KmeansIndex);
-	DECLARE_INDEX_STATS_FUNCS;
-	DECLARE_INDEX_PIMPL(KmeansIndex);
+#define DECLARE_KMEANS_INDEX(NAME, ScalarT, VectorT, RowMatrixT) \
+class NAME { \
+public: \
+	typedef ScalarT Scalar; \
+	NAME(const RowMatrixT & X, int k); \
+	NAME(ScalarT* X, int m, int n, int k, float default_search_frac); \
+	NAME(ScalarT* X, int m, int n, int k); \
+	NAME(ScalarT* X, int m, int n); \
+\
+	vector<int64_t> radius(const VectorT & q, double radiusL2, \
+		float search_frac); \
+	vector<int64_t> knn(const VectorT & q, int k, float search_frac); \
+	MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2, \
+		float search_frac); \
+	MatrixXi knn_batch(const RowMatrixT & queries, int k, float search_frac); \
+\
+	NO_COPYING_AND_DEFAULT_DTOR(NAME); \
+	DECLARE_INDEX_STATS_FUNCS; \
+	DECLARE_INDEX_PIMPL(NAME); \
 };
+
+DECLARE_KMEANS_INDEX(KmeansIndex, double, VectorXd, RowMatrixXd);
+
+// class KmeansIndex {
+// public:
+// 	typedef double ScalarT; // TODO remove once in a macro
+// 	typedef ScalarT Scalar;
+// 	typedef RowMatrixXd RowMatrixT;
+// 	// typedef VectorXd VectorT;
+// 	KmeansIndex(const RowMatrixXd & X, int k);
+// 	KmeansIndex(double* X, int m, int n, int k, float default_search_frac);
+// 	KmeansIndex(double* X, int m, int n, int k);
+// 	KmeansIndex(double* X, int m, int n);
+
+// 	vector<int64_t> radius(const VectorXd & q, double radiusL2, float search_frac);
+// 	// vector<int64_t> radius(const VectorXd & q, double radiusL2,
+// 	// 	float search_frac=-1.0);
+// 	// vector<int64_t> knn(const VectorT & q, int k, float search_frac=-1);
+// 	// vector<int64_t> knn(const VectorXd & q, int k, float search_frac=-1.0);
+// 	vector<int64_t> knn(const VectorXd & q, int k, float search_frac);
+// 	// MatrixXi radius_batch(const RowMatrixT & queries, double radiusL2,
+// 	// MatrixXi radius_batch(const RowMatrixXd & queries, double radiusL2,
+// 	// 	float search_frac=-1.0);
+// 	MatrixXi radius_batch(const RowMatrixXd & queries, double radiusL2,
+// 		float search_frac);
+// 	// MatrixXi knn_batch(const RowMatrixT & queries, int k, float search_frac=-1);
+// 	MatrixXi knn_batch(const RowMatrixXd & queries, int k, float search_frac);
+
+// 	NO_COPYING_AND_DEFAULT_DTOR(KmeansIndex);
+// 	DECLARE_INDEX_STATS_FUNCS;
+// 	DECLARE_INDEX_PIMPL(KmeansIndex);
+// };
 
 // ------------------------------------------------ BinTree
 

@@ -133,20 +133,20 @@ TEST_CASE("KmeansIndex", "[neighbors_wrappers]") {
 TEST_CASE("MatmulIndex", "[neighbors_wrappers]") {
     TEST_WRAPPER_INDEX(MatmulIndex);
 }
-// TEST_CASE("MatmulIndexF", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(MatmulIndexF);
-// }
+TEST_CASE("MatmulIndexF", "[neighbors_wrappers]") {
+    TEST_WRAPPER_INDEX(MatmulIndexF);
+}
 
-// TEST_CASE("SimpleIndex", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(SimpleIndex);
-// }
-// TEST_CASE("SimpleIndexF", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(SimpleIndexF);
-// }
+TEST_CASE("SimpleIndex", "[neighbors_wrappers]") {
+    TEST_WRAPPER_INDEX(SimpleIndex);
+}
+TEST_CASE("SimpleIndexF", "[neighbors_wrappers]") {
+    TEST_WRAPPER_INDEX(SimpleIndexF);
+}
 
-// TEST_CASE("AbandonIndex", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(AbandonIndex);
-// }
-// TEST_CASE("AbandonIndexF", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(AbandonIndexF);
-// }
+TEST_CASE("AbandonIndex", "[neighbors_wrappers]") {
+    TEST_WRAPPER_INDEX(AbandonIndex);
+}
+TEST_CASE("AbandonIndexF", "[neighbors_wrappers]") {
+    TEST_WRAPPER_INDEX(AbandonIndexF);
+}

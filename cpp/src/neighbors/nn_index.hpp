@@ -733,7 +733,7 @@ protected:
     {
         _update_order_for_query(query, search_frac); // update _order
 
-        PRINT_VAR(_order.size());
+        // PRINT_VAR(_order.size());
 
         vector<Neighbor> ret(k, Neighbor{kInvalidIdx, d_max});
         for (int i = 0; i < _order.size(); i++) {
