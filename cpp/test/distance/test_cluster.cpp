@@ -22,7 +22,8 @@ template<class Scalar>
 void _test_kmeans(int64_t N, int64_t D, int k) {
     Eigen::Matrix<float, Eigen::Dynamic, Dynamic, RowMajor> X(N, D);
     X.setRandom();
-    auto centroids_assignments = kmeans(X, k);
+    int max_iters = 999; // only runs like 10 by default
+    auto centroids_assignments = kmeans(X, k, max_iters);
     auto centroids = centroids_assignments.first;
     auto assignments = centroids_assignments.second;
 

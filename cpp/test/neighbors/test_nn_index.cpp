@@ -16,30 +16,31 @@
 #include "neighbor_testing_utils.hpp"
 
 
-TEST_CASE("print sizes", "tmp") { // not really a test; just prints sizes
-	printf("sizeof(float vector) = %ld\n", sizeof(std::vector<float>));
-	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
-	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
-	printf("sizeof(eigen ArrayXXd) = %ld\n", sizeof(Eigen::ArrayXXd));
-	printf("sizeof(DynamicRowArray<float>) = %ld\n", sizeof(nn::DynamicRowArray<float>));
-	printf("sizeof(FixedRowArray<float, 8>) = %ld\n", sizeof(nn::FixedRowArray<float, 8>));
-	printf("sizeof(FixedRowArray<float, 16>) = %ld\n", sizeof(nn::FixedRowArray<float, 16>));
-	printf("sizeof(L2IndexBrute<float>) = %ld\n", sizeof(nn::L2IndexBrute<float>));
-	// printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
-}
-
-TEST_CASE("L2IndexBrute", "[neighbors]") {
-	_test_index<nn::L2IndexBrute<double> >();
-	_test_index<nn::L2IndexBrute<float> >();
-}
-// TEST_CASE("L2IndexAbandon", "[neighbors]") {
-// 	_test_index<nn::L2IndexAbandon<double> >();
-// 	_test_index<nn::L2IndexAbandon<float> >();
+// TEST_CASE("print sizes", "tmp") { // not really a test; just prints sizes
+// 	printf("sizeof(float vector) = %ld\n", sizeof(std::vector<float>));
+// 	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
+// 	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
+// 	printf("sizeof(eigen ArrayXXd) = %ld\n", sizeof(Eigen::ArrayXXd));
+// 	printf("sizeof(DynamicRowArray<float>) = %ld\n", sizeof(nn::DynamicRowArray<float>));
+// 	printf("sizeof(FixedRowArray<float, 8>) = %ld\n", sizeof(nn::FixedRowArray<float, 8>));
+// 	printf("sizeof(FixedRowArray<float, 16>) = %ld\n", sizeof(nn::FixedRowArray<float, 16>));
+// 	printf("sizeof(L2IndexBrute<float>) = %ld\n", sizeof(nn::L2IndexBrute<float>));
+// 	// printf("sizeof(L2IndexAbandon<float>) = %ld\n", sizeof(nn::L2IndexAbandon<float>));
 // }
-TEST_CASE("L2IndexSimple", "[neighbors]") {
-	_test_index<nn::L2IndexSimple<double> >();
-	_test_index<nn::L2IndexSimple<float> >();
+
+// TEST_CASE("L2IndexBrute", "[neighbors]") {
+// 	_test_index<nn::L2IndexBrute<double> >();
+// 	_test_index<nn::L2IndexBrute<float> >();
+// }
+TEST_CASE("L2IndexAbandon", "[neighbors]") {
+	// PRINT("running this...");
+	_test_index<nn::L2IndexAbandon<double> >();
+	_test_index<nn::L2IndexAbandon<float> >();
 }
+// TEST_CASE("L2IndexSimple", "[neighbors]") {
+// 	_test_index<nn::L2IndexSimple<double> >();
+// 	_test_index<nn::L2IndexSimple<float> >();
+// }
 
 TEST_CASE("NNIndex_IdentityPreproc", "[neighbors]") {
 	using PreprocT = nn::IdentityPreproc;

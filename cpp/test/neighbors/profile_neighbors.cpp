@@ -158,32 +158,32 @@ void _prof_cluster_wrapper_index(search_config& cfg)
     // PROF_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 1000, 64, __VA_ARGS__);
 
 
-TEST_CASE("Prof_KmeansIndex", "[profile][neighbors]") {
+TEST_CASE("Prof_KmeansIndex", "[profile][neighbors_wrappers]") {
     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, -1);
     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .5);
     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .25);
 }
-// TEST_CASE("KmeansIndexF", "[profile][neighbors]") {
+// TEST_CASE("KmeansIndexF", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(KmeansIndexF);
 // }
 
-// TEST_CASE("Prof_MatmulIndex", "[profile][neighbors]") {
+// TEST_CASE("Prof_MatmulIndex", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(MatmulIndex);
 // }
-// TEST_CASE("MatmulIndexF", "[profile][neighbors]") {
+// TEST_CASE("MatmulIndexF", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(MatmulIndexF);
 // }
 
-// TEST_CASE("SimpleIndex", "[profile][neighbors]") {
+// TEST_CASE("SimpleIndex", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(SimpleIndex);
 // }
-// TEST_CASE("SimpleIndexF", "[profile][neighbors]") {
+// TEST_CASE("SimpleIndexF", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(SimpleIndexF);
 // }
 
-// TEST_CASE("AbandonIndex", "[profile][neighbors]") {
+// TEST_CASE("AbandonIndex", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(AbandonIndex);
 // }
-// TEST_CASE("AbandonIndexF", "[profile][neighbors]") {
+// TEST_CASE("AbandonIndexF", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(AbandonIndexF);
 // }

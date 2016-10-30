@@ -97,7 +97,9 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
         if dtype == np.float32:
             r2 = float(r2)
 
-    if not hasattr(index, 'radius'):  # not passed in an index
+    try:
+        index.getIndexConstructionTimeMs()  # is it an index instance?
+    except TypeError:
         index = index(X)
 
     t = index.getIndexConstructionTimeMs()
@@ -127,8 +129,8 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     #     print "trueNeighborIdxs: ", trueNeighborIdxs
     print "-> {} range query time\t= {}".format(name, t)
 
-    # assert(len(neighborIdxs) == len(trueNeighborIdxs))
-    # assert(all_eq(neighborIdxs, trueNeighborIdxs))
+    assert(len(neighborIdxs) == len(trueNeighborIdxs))
+    assert(all_eq(neighborIdxs, trueNeighborIdxs))
 
     # ------------------------ knn query
 
@@ -139,7 +141,7 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     # print "sorted nn10, true nn10 =\n{}\n{}".format(
     #     sorted(nn10), sorted(trueNN10))
     print "-> {} knn time\t\t= {}".format(name, t)
-    # assert(all_eq(nn10, trueNN10))
+    assert(all_eq(nn10, trueNN10))
 
     knn_dists = trueDists[nn10]
     # true_knn_dists = trueDists[trueNN10]
@@ -150,21 +152,21 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 
     # ------------------------------------------------ batch of queries
 
-    # Q = 32
-    # queries = np.random.randn(Q, D).astype(dtype)
-    # queries = np.cumsum(queries, axis=1)
-    # queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
+    Q = 32
+    queries = np.random.randn(Q, D).astype(dtype)
+    queries = np.cumsum(queries, axis=1)
+    queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
 
-    # # ------------------------ dists for ground truth
+    # ------------------------ dists for ground truth
 
-    # dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
+    dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
     # ------------------------ knn query
 
-    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3,
-    #     **search_kwargs)
-    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10,
-    #     **search_kwargs)
+    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3,
+        **search_kwargs)
+    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10,
+        **search_kwargs)
 
     # ------------------------ radius
 
@@ -194,11 +196,12 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
-    # N = 100 * 1000
-    N = 500 * 1000
+    N = 100 * 1000
+    # N = 500 * 1000
+    # N = 1000 * 1000
     # N = 1000
-    # D = 100
-    D = 200
+    D = 100
+    # D = 200
 
     X = np.random.randn(N, D)
     X = np.cumsum(X, axis=1)
@@ -230,14 +233,16 @@ if __name__ == '__main__':
 
     # test_index(dig.KmeansIndex, 'kmeans', **kmean_opts_dbl)
 
-    # test_index(dig.MatmulIndex, "matmul", **opts_dbl)
-    # test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
+    test_index(dig.MatmulIndex, "matmul", **opts_dbl)
+    test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
 
-    # test_index(dig.AbandonIndex, "abandon", **opts_dbl)
-    # test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
+    test_index(dig.AbandonIndex, "abandon", **opts_dbl)
+    test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
 
-    # test_index(dig.SimpleIndex, "simple", **opts_dbl)
-    # test_index(dig.SimpleIndexF, "simplef", **opts_flt)
+    test_index(dig.SimpleIndex, "simple", **opts_dbl)
+    test_index(dig.SimpleIndexF, "simplef", **opts_flt)
+
+    import sys; sys.exit()
 
     # ------------------------ KmeansIndex stuff
 
