@@ -49,6 +49,24 @@ static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");
 
 namespace nn {
 
+// ------------------------------------------------ Structs
+
+//struct NNIndexConfig {
+//    float thresh;
+//    float search_frac0;
+//    float search_frac1;
+//    float search_frac2;
+//    float search_frac3;
+//};
+
+template<class RowMatrixT>
+struct QueryConfig {
+    const RowMatrixT* q;
+    vector<dist_t>* d_maxs;
+    dist_t d_max;
+    float search_frac;
+};
+
 // wrapper subclasses to allow only specifying type
 // template<class T, int Dim1=Dynamic, int Dim2=Dynamic>
 // class MatrixX: public Matrix<T, Dynamic, Dynamic> {};

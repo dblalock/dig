@@ -63,6 +63,7 @@
 		72247DAF1C87A49F00B74A64 /* eigen_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = eigen_utils.hpp; sourceTree = "<group>"; };
 		72247DB01C87A5F600B74A64 /* neighbors.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = neighbors.hpp; sourceTree = "<group>"; };
 		72247DB11C87A5F600B74A64 /* dist.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = dist.hpp; sourceTree = "<group>"; };
+		722E1C5A1DC7E3AE004BD70A /* preproc.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = preproc.hpp; sourceTree = "<group>"; };
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
 		727207DC1DBFEF520014F72B /* profile_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_neighbors.cpp; sourceTree = "<group>"; };
 		727A342F1CB35D0B009A54CE /* circular.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = circular.hpp; sourceTree = "<group>"; };
@@ -1208,6 +1209,7 @@
 		72C419401C5337AD004689A2 /* neighbors */ = {
 			isa = PBXGroup;
 			children = (
+				722E1C5A1DC7E3AE004BD70A /* preproc.hpp */,
 				721FC9CD1DAC00AE00EF824F /* neighbors.cpp */,
 				721403BA1D8B5AF000F8658F /* nn_search.hpp */,
 				721403BB1D90642900F8658F /* flat_store.hpp */,

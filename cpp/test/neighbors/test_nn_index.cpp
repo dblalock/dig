@@ -103,7 +103,7 @@ TEST_CASE("NNIndex_ReorderPreproc", "[neighbors]") {
 	}
 }
 
-TEST_CASE("L2KmeansIndex", "[neighbors]") {
+TEST_CASE("L2KmeansIndex", "[neighbors][kmeans]") {
 	SECTION("L2IndexBrute+IdentityPreproc") {
 		using Scalar = float;
 		using ClusterIndexT = nn::L2IndexBrute<Scalar>;
@@ -131,4 +131,12 @@ TEST_CASE("L2KmeansIndex", "[neighbors]") {
 		_test_cluster_index<IndexT>(100, 20, 2);
 		_test_cluster_index<IndexT>(100, 10, 7);
 	}
+
+	// SECTION("L2KmeansIndex+L2KmeansIndex+L2IndexSimple+IdentityPreproc") {
+	// 	using Scalar = float;
+	// 	using LeafIndexT = nn::L2IndexSimple<Scalar>;
+	// 	using Level1IndexT = nn::L2KmeansIndex<Scalar, LeafIndexT>;
+	// 	using IndexT = nn::L2KmeansIndex<Scalar, Level1IndexT>;
+	// 	_test_cluster_index<IndexT>(100, 16, 1);
+	// }
 }
