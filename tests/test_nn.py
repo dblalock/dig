@@ -49,7 +49,7 @@ def test_knn_batch_query(index, queries, idxs_sorted, k, name):
     return t_cpp
 
 
-def test_radius_batch_query(index, queries, dists, name, r2):
+def test_radius_batch_query(index, queries, dists, name, r2, **kwargs):
     nested_neighbors = index.radius_batch(queries, r2)
 
     for q in range(queries.shape[0]):
@@ -196,7 +196,7 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
-    N = 100 * 1000
+    N = 10 * 1000
     # N = 500 * 1000
     # N = 1000 * 1000
     # N = 1000
@@ -231,7 +231,6 @@ if __name__ == '__main__':
     opts_dbl = dict(X=X, q=q, dtype=None, trueDists=trueDists)
     opts_flt = dict(X=Xfloat, q=qfloat, dtype=np.float32, trueDists=trueDistsF)
 
-    # test_index(dig.KmeansIndex, 'kmeans', **kmean_opts_dbl)
 
     test_index(dig.MatmulIndex, "matmul", **opts_dbl)
     test_index(dig.MatmulIndexF, "matmulf", **opts_flt)

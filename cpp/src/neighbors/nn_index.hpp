@@ -29,10 +29,121 @@ namespace nn {
 static const int8_t kAlignBytes = 32;
 
 // ================================================================
+// IndexConfig
+// ================================================================
+
+// template<class RowMatrixT>
+// class IndexConfig {
+// public:
+// 	virtual const RowMatrixT& get().data    const;
+// 	virtual int get().num_clusters          const;
+// 	virtual int get().default_search_frac   const;
+
+// 	virtual ~IndexConfig() {};
+// };
+
+// class IndexConfig: public IndexConfig<RowMatrixT> {
+template<class RowMatrixT>
+class IndexConfig {
+public:
+    using IdT = idx_t;
+    using IdVectorT = vector<IdT>;
+    const RowMatrixT& data;
+    int num_clusters;
+    float default_search_frac;
+	IdVectorT* ids;
+
+    // ------------------------ ctors
+    IndexConfig() = default;
+    IndexConfig(const IndexConfig& rhs) = default;
+    ~IndexConfig() = default;
+	IndexConfig(const RowMatrixT& data_, int num_clusters_=-1,
+		        float default_search_frac_=-1, IdVectorT* ids_=nullptr):
+		data(data_),
+        num_clusters(num_clusters_),
+		default_search_frac(default_search_frac_),
+        ids(ids_)
+	{}
+
+    // ------------------------ methods
+    template<class RowMatrixT2>
+    IndexConfig<RowMatrixT2> create_child_config(const RowMatrixT2& data) const {
+        IndexConfig<RowMatrixT2> ret(data);
+        ret.num_clusters = num_clusters;
+        ret.default_search_frac = default_search_frac;
+        ret.ids = ids;
+        return ret;
+    }
+
+    // all classes' get() returns an IndexConfig; this way we don't have
+    // to write accessors for each memer var we add
+    IndexConfig get() const { return IndexConfig(*this); }
+};
+
+//template<class IndexConfigT, class RowMatrixT2>
+//std::unique_ptr<IndexConfig> create_child_config(const RowMatrixT2& data,
+//	vector<idx_t>* ids_=nullptr)
+//{
+//	return std::make_unique<IndexConfig<RowMatrixT2> >(data, num_clusters,
+//        default_search_frac, ids_);
+//}
+
+template<class RowMatrixT, int NumLevels=4>
+//class HierarchicalIndexConfig: public IndexConfig<RowMatrixT> {
+class HierarchicalIndexConfig {
+public:
+    int level;
+    std::array<IndexConfig<RowMatrixT>, NumLevels> configs;
+
+    // ------------------------ ctors
+    HierarchicalIndexConfig() = default;
+    HierarchicalIndexConfig(const HierarchicalIndexConfig& rhs) = default;
+    ~HierarchicalIndexConfig() = default;
+
+    // ------------------------ methods
+    template<class RowMatrixT2>
+    HierarchicalIndexConfig<RowMatrixT2> create_child_config(
+        const RowMatrixT2& data) const
+    {
+        assert(level + 1 < NumLevels);
+        return IndexConfig<RowMatrixT2>{data, level + 1, configs};
+    }
+
+
+    // setter returns a copy for chaining in initializer lists
+    HierarchicalIndexConfig set_level(int new_level) {
+        assert(new_level < NumLevels);
+        HierarchicalIndexConfig cfg(*this);
+        cfg.level = new_level;
+        return cfg;
+    }
+    HierarchicalIndexConfig increment_level() { return set_level(level + 1); }
+
+    IndexConfig<RowMatrixT> get() const { return configs[level]; }
+
+    // const RowMatrixT& get().data const {
+    //     return configs[level].data();
+    // }
+    // int get().num_clusters const {
+    //     return configs[level].num_clusters();
+    // }
+    // int get().default_search_frac const {
+    //     return configs[level].default_search_frac();
+    // }
+
+    // template<class RowMatrixT2>
+    // IndexConfig<RowMatrixT2> set_data(const RowMatrixT2& X) {
+    //     // TODO
+    // }
+};
+
+
+// ================================================================
 // FlatIdStore / Neighbor postprocessing
 // ================================================================
 
 struct IdentityIdStore {
+    template<class... Args> IdentityIdStore(Args&&... args) {};
     template<class T> T postprocess(const T& neighbors) { return neighbors; }
 };
 
@@ -41,9 +152,16 @@ class FlatIdStore {
 public:
     typedef IdT ID;
 
+    FlatIdStore(const std::vector<ID> ids): _ids(ids) {}
     FlatIdStore(size_t len):
-        _ids(ar::range(static_cast<ID>(0), static_cast<ID>(len)))
-    {}
+        // _ids(ar::range(static_cast<ID>(0), static_cast<ID>(len)))
+        FlatIdStore(ar::range(static_cast<ID>(0), static_cast<ID>(len))) {}
+    FlatIdStore(const std::vector<ID>* ids, size_t len):
+        FlatIdStore(len)
+	{
+		if (ids != nullptr) { _ids = *ids; }
+		// else { PRINT("not using ids cuz they were null"); }
+	}
 
     FlatIdStore() = default;
     FlatIdStore(const FlatIdStore& rhs) = delete;
@@ -123,12 +241,12 @@ class IndexBase {
 public:
     using DistT = ScalarT;
 
-    // ------------------------------------------------ factory funcs
+    // // ------------------------------------------------ factory funcs
 
-    template<class ConfigT>
-    static inline Derived construct(const ConfigT& cfg) {
-        return Derived{cfg.get_data()};
-    }
+    // template<class ConfigT>
+    // static inline Derived construct(const ConfigT& cfg) {
+    //     return Derived{cfg.get().data};
+    // }
 
     // ------------------------------------------------ single queries
 
@@ -301,23 +419,28 @@ public:
 
     L2IndexBrute() = default;
 
-	template<class RowMatrixT,
-		typename=decltype(std::declval<RowMatrixT>().rows())>
-    explicit L2IndexBrute(const RowMatrixT& data):
+	template<class RowMatrixT, REQ_HAS_ATTR(RowMatrixT, rows())>
+	explicit L2IndexBrute(const RowMatrixT& data,
+					      const std::vector<idx_t>*ids=nullptr):
         PreprocT(data),
         FlatIdStore(data.rows()),
         _data(PreprocT::preprocess_data(data))
     {
 		assert(data.IsRowMajor);
         _rowNorms = data.rowwise().squaredNorm();
+		if (ids != nullptr) {
+            assert(ids->size() == data.rows());
+            _ids = *ids;
+        }
     }
 
-	// template<class ConfigT>
-	// static inline L2IndexBrute build(const ConfigT& cfg) {
-	// 	return L2IndexBrute{cfg.get_data()};
-	// }
-//    explicit L2IndexBrute(const ConfigT& cfg):
-//		L2IndexBrute{cfg.get_data()} {}
+    template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
+    explicit L2IndexBrute(const ConfigT& cfg) {
+        L2IndexBrute{cfg.get().data, cfg.get().ids};
+    }
+	// template<class RowMatrixT>
+ //    explicit L2IndexBrute(const IndexConfig<RowMatrixT>& cfg):
+	// 	L2IndexBrute{cfg.get().data} {}
 
  //    L2IndexBrute(L2IndexBrute&& rhs) noexcept:
  //        FlatIdStore(std::move(rhs)),
@@ -412,20 +535,31 @@ public:
 
 	L2IndexAbandon() = default;
 
-    template<class RowMatrixT>
-    explicit L2IndexAbandon(const RowMatrixT& data):
+    template<class RowMatrixT, REQ_HAS_ATTR(RowMatrixT, rows())>
+    explicit L2IndexAbandon(const RowMatrixT& data,
+                            const std::vector<idx_t>*ids=nullptr):
         PreprocT(data),
 		FlatIdStore(data.rows()),
 		_data(PreprocT::preprocess_data(data))
-        // _data(data)
     {
         static_assert(RowMatrixT::IsRowMajor, "Data matrix must be row-major");
         assert(_data.cols() ==
 			(aligned_length<Scalar, kAlignBytes>(data.cols())) );
+        if (ids != nullptr) {
+            assert(ids->size() == data.rows());
+            _ids = *ids;
+        }
     }
-    // template<class ConfigT>
-    // static inline L2IndexAbandon build(const ConfigT& cfg) {
-    //     return L2IndexAbandon{cfg.get_data()};
+    template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
+    explicit L2IndexAbandon(const ConfigT& cfg) {
+        L2IndexAbandon{cfg.get().data, cfg.get().ids};
+    }
+    // template<class RowMatrixT>
+    // explicit L2IndexAbandon(const IndexConfig<RowMatrixT>& cfg):
+    //     L2IndexAbandon{cfg.get().data} {}
+    // template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
+    // expL2IndexAbandon build(const ConfigT& cfg) {
+    //     return L2IndexAbandon{cfg.get().data};
     // }
     // L2IndexAbandon(L2IndexAbandon&& rhs) noexcept:
     //     FlatIdStore(std::move(rhs)),
@@ -477,18 +611,26 @@ public:
 
     L2IndexSimple() = default;
 
-    template<class RowMatrixT>
-    explicit L2IndexSimple(const RowMatrixT& data):
+    template<class RowMatrixT, REQ_HAS_ATTR(RowMatrixT, rows())>
+    explicit L2IndexSimple(const RowMatrixT& data,
+                           const std::vector<idx_t>*ids=nullptr):
         PreprocT(data),
         FlatIdStore(data.rows()),
         _data(PreprocT::preprocess_data(data))
     {
         static_assert(RowMatrixT::IsRowMajor, "Data matrix must be row-major");
+        if (ids != nullptr) {
+            assert(ids->size() == data.rows());
+            _ids = *ids;
+        }
     }
-    // template<class ConfigT>
-    // static inline L2IndexSimple build(const ConfigT& cfg) {
-    //     return L2IndexSimple{cfg.get_data()};
-    // }
+    template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
+    explicit L2IndexSimple(const ConfigT& cfg) {
+        L2IndexSimple{cfg.get().data, cfg.get().ids};
+    }
+    // template<class RowMatrixT>
+    // explicit L2IndexSimple(const IndexConfig<RowMatrixT>& cfg):
+    //     L2IndexSimple{cfg.get().data} {}
 
 protected:
     // ------------------------------------------------ single query
@@ -531,7 +673,8 @@ template<class T, class InnerIndex=L2IndexAbandon<T>,
 class L2KmeansIndex:
     public IndexBase<L2KmeansIndex<T, InnerIndex, PreprocT>, T>,
 	public PreprocT,
-    public IdentityIdStore {
+	public FlatIdStore<> {
+//    public IdentityIdStore {
     friend class IndexBase<L2KmeansIndex<T, InnerIndex, PreprocT>, T>;
 public:
     using Scalar = T;
@@ -540,25 +683,25 @@ public:
 	using CentroidIndex = int32_t;
 	using RowMatrixType = RowMatrix<T>;
 
-	// L2KmeansIndex() = delete;
-	L2KmeansIndex() = default; // TODO delete again once using NNIndexConfig
+	L2KmeansIndex() = default;
 	L2KmeansIndex(const L2KmeansIndex& rhs) = delete;
 	L2KmeansIndex(L2KmeansIndex&& rhs) = delete;
 
-    template<class ConfigT>
-    L2KmeansIndex(const ConfigT& cfg):
-        PreprocT(cfg.get_data()),
-        _order(cfg.get_num_clusters()),
-        _indexes(new InnerIndex[cfg.get_num_clusters()]), // TODO InnerIndex better sync up with cfg
-        _centroid_dists(cfg.get_num_clusters()),
-        _idxs_for_centroids(cfg.get_num_clusters()),
-        _queries_storage(32, PreprocT::preprocess_data(cfg.get_data()).cols()), // 32 query capacity
-        _num_centroids(cfg.get_num_clusters()),
-        _default_search_frac(cfg.get_default_search_frac())
+	template<template <class...> class ConfigT, class RowMatrixT>
+    L2KmeansIndex(const ConfigT<RowMatrixT>& cfg):
+        PreprocT(cfg.get().data),
+		FlatIdStore(cfg.get().ids, cfg.get().data.rows()),
+        _order(cfg.get().num_clusters),
+        _indexes(new InnerIndex[cfg.get().num_clusters]), // TODO InnerIndex better sync up with cfg
+        _centroid_dists(cfg.get().num_clusters),
+        _idxs_for_centroids(cfg.get().num_clusters),
+        _queries_storage(32, PreprocT::preprocess_data(cfg.get().data).cols()), // 32 query capacity
+        _num_centroids(cfg.get().num_clusters),
+        _default_search_frac(cfg.get().default_search_frac)
     {
-        auto X_ = PreprocT::preprocess_data(cfg.get_data());
-		using RowMatrixT = typename std::remove_cv<decltype(X_)>::type;
-        auto k = cfg.get_num_clusters();
+        auto X_ = PreprocT::preprocess_data(cfg.get().data);
+		// using RowMatrixT = typename std::remove_cv<decltype(X_)>::type;
+        auto k = cfg.get().num_clusters;
 
 		auto centroids_assignments = cluster::kmeans(X_, k);
         _centroids = centroids_assignments.first;
@@ -589,19 +732,20 @@ public:
 			}
             // create an InnerIndex instance with these rows
             auto nrows = idxs.size();
-            // auto inner_mat = storage.topRows(nrows);
-            // auto inner_cfg = cfg.increment_level();
-            // new (&_indexes[i]) InnerIndex();
-            new (&_indexes[i]) InnerIndex(storage.topRows(nrows));
-
+            auto inner_mat = storage.topRows(nrows);
+            auto inner_cfg = cfg.create_child_config(inner_mat);
+//			auto inner_ids = idxs; // XXX this will be wrong when KMeansIndex isn't at top level
+//			auto inner_ids = ar::at_idxs(_ids, idxs);
+//			 inner_cfg.ids = &inner_ids;
+//            new (&_indexes[i]) InnerIndex(inner_cfg);
+             new (&_indexes[i]) InnerIndex(storage.topRows(nrows));
             _indexes[i].ids() = idxs; // TODO rm direct set of idxs
         }
     }
 
     template<class RowMatrixT>
     L2KmeansIndex(const RowMatrixT& X, int k, float default_search_frac=-1):
-        L2KmeansIndex(IndexConfig<RowMatrixT>{.data = X, .num_clusters = k, // TODO uncomment this version
-            .default_search_frac=default_search_frac}) {}
+		L2KmeansIndex(IndexConfig<RowMatrixT>{X, k, default_search_frac}) {}
 //         PreprocT(X),
 //         _order(k),
 //         _indexes(new InnerIndex[k]),
@@ -614,7 +758,7 @@ public:
 
     template<class ConfigT>
     static inline L2KmeansIndex construct(const ConfigT& cfg) {
-        return L2KmeansIndex{cfg.get_data(), cfg.get_num_clusters(),};
+        return L2KmeansIndex{cfg.get().data, cfg.get().num_clusters,};
     }
 
     // ------------------------------------------------ accessors
@@ -954,60 +1098,6 @@ struct index_traits<L2KmeansIndexK, ScalarT, PreprocT> {
 //     IndexT operator()(const ConfigT& cfg) { return IndexT{cfg}; }
 // };
 
-template<class RowMatrixT>
-struct IndexConfig {
-    const RowMatrixT& data;
-    vector<idx_t> ids;
-    int num_clusters;
-    float default_search_frac;
-
-    const RowMatrixT& get_data()    const { return data; }
-    int get_num_clusters()          const { return num_clusters; }
-    int get_default_search_frac()   const { return default_search_frac; }
-
-    template<class RowMatrixT2>
-    IndexConfig<RowMatrixT2> set_data(const RowMatrixT2 X) {
-        return IndexConfig<RowMatrixT2>{
-            .data = X,
-            .num_clusters = num_clusters,
-            .default_search_frac = default_search_frac};
-    }
-};
-
-template<class RowMatrixT, int NumLevels=4>
-struct HierarchicalIndexConfig {
-    int level;
-    std::array<IndexConfig<RowMatrixT>, NumLevels> configs;
-
-    HierarchicalIndexConfig() = default;
-    HierarchicalIndexConfig(const HierarchicalIndexConfig& rhs) = default;
-
-    // setter returns a copy for chaining in initializer lists
-    HierarchicalIndexConfig set_level(int new_level) {
-        assert(new_level < NumLevels);
-        HierarchicalIndexConfig cfg(*this);
-        cfg.level = new_level;
-        return cfg;
-    }
-    HierarchicalIndexConfig increment_level() { return set_level(level + 1); }
-
-    const RowMatrixT& get_data() const {
-		return configs[level].data();
-	}
-    int get_num_clusters() const {
-		return configs[level].num_clusters();
-	}
-    int get_default_search_frac() const {
-        return configs[level].default_search_frac();
-    }
-
-    template<class RowMatrixT2>
-    IndexConfig<RowMatrixT2> set_data(const RowMatrixT2 X) {
-
-    }
-
-};
-
 // template<class RowMatrixT>
 // NNIndexConfig<RowMatrixT> build_index_config(const RowMatrixT& X,
 //     int num_centroids=64, float default_search_frac=-1) { return }
@@ -1021,6 +1111,16 @@ auto build_index(const ConfigT& cfg)
 	using IndexT = typename index_traits<IndexK, ScalarT, PreprocT>::IndexT;
 	return IndexT(cfg);
 }
+
+//template<int IndexK, class ScalarT,
+//    class PreprocT=typename index_traits<IndexK, ScalarT>::Preproc,
+//    class ConfigT=void>
+//auto build_index(const ConfigT& cfg)
+//    -> typename index_traits<IndexK, ScalarT, PreprocT>::IndexT
+//{
+//    using IndexT = typename index_traits<IndexK, ScalarT, PreprocT>::IndexT;
+//    return IndexT(cfg);
+//}
 
 } // namespace nn
 #endif // __NN_INDEX_HPP

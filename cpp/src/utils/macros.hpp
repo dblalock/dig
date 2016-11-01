@@ -140,6 +140,9 @@
 	#define REQUIRE_PRIMITIVE(T) REQUIRE_TRAIT(is_arithmetic, T)
 	#define REQUIRE_NOT_PTR(T) REQUIRE_NOT_TRAIT(is_pointer, T)
 
+	#define REQ_HAS_ATTR(T, METHOD_INVOCATION) \
+		typename=decltype(std::declval<T>() . METHOD_INVOCATION)
+
 	// ------------------------ is_valid; requires C++14
 	// inspired by https://gist.github.com/Jiwan/7a586c739a30dd90d259
 
