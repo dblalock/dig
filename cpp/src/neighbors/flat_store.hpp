@@ -203,8 +203,9 @@ protected:
         return static_cast<ColIndex>(aligned_length<T, AlignBytes>(ncols));
     }
 
+	//Scalar* _data; // TODO rm after debug
 private:
-    Scalar* _data;
+	Scalar* _data; // TODO uncomment after debug
 
     inline const Derived* _derived() const { return static_cast<const Derived*>(this); }
     // inline auto _cols() -> decltype(Derived::cols()) { return Derived::cols(); }
@@ -226,6 +227,10 @@ public:
 
     // ------------------------ ctors
     DynamicRowArray() = default;
+	// ~DynamicRowArray() {
+	// 	PRINT_VAR(this->data());
+	// 	PRINT_VAR("destroying DynamicRowArray");
+	// };
 
     DynamicRowArray(size_t initial_rows, size_t ncols):
 		Super(initial_rows, Super::_aligned_length(ncols)),

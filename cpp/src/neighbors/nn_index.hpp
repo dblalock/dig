@@ -48,6 +48,7 @@ class IndexConfig {
 public:
     using IdT = idx_t;
     using IdVectorT = vector<IdT>;
+
     const RowMatrixT& data;
     int num_clusters;
     float default_search_frac;
@@ -64,6 +65,8 @@ public:
 		default_search_frac(default_search_frac_),
         ids(ids_)
 	{}
+    //     PRINT_VAR(data.rows());
+    // }
 
     // ------------------------ methods
     template<class RowMatrixT2>
@@ -435,38 +438,11 @@ public:
     }
 
     template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
-    explicit L2IndexBrute(const ConfigT& cfg) {
-        L2IndexBrute{cfg.get().data, cfg.get().ids};
-    }
+    explicit L2IndexBrute(const ConfigT& cfg):
+        L2IndexBrute(cfg.get().data, cfg.get().ids) {}
 	// template<class RowMatrixT>
  //    explicit L2IndexBrute(const IndexConfig<RowMatrixT>& cfg):
 	// 	L2IndexBrute{cfg.get().data} {}
-
- //    L2IndexBrute(L2IndexBrute&& rhs) noexcept:
- //        FlatIdStore(std::move(rhs)),
- //        _data(std::move(rhs._data))
- //    {
-	// 	PRINT_VAR(_ids.size());
-	// }
-
-    // ------------------------------------------------ insert and erase
-
-    // template<class Id>
-    // void insert(const ScalarT* row_start, Id id) {
-    //     auto changed_capacity = IndexBase::insert(row_start, id);
-    //     if (changed_capacity > 0) {
-    //         _rowNorms.conservativeResize(changed_capacity);
-    //     }
-    // }
-
-    // template<class Id>
-    // auto erase(Id id) -> decltype(IndexBase::erase(id)) {
-    //     auto erase_idx = IndexBase::erase(id);
-    //     if (erase_idx >= 0) {
-    //         // auto last_idx = _dat - 1;
-    //         _rowNorms(erase_idx) = _rowNorms(last_idx);
-    //     }
-    // }
 
 protected:
     // ------------------------------------------------ single query
@@ -551,9 +527,9 @@ public:
         }
     }
     template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
-    explicit L2IndexAbandon(const ConfigT& cfg) {
-        L2IndexAbandon{cfg.get().data, cfg.get().ids};
-    }
+    explicit L2IndexAbandon(const ConfigT& cfg):
+        L2IndexAbandon(cfg.get().data, cfg.get().ids) {}
+
     // template<class RowMatrixT>
     // explicit L2IndexAbandon(const IndexConfig<RowMatrixT>& cfg):
     //     L2IndexAbandon{cfg.get().data} {}
@@ -625,9 +601,9 @@ public:
         }
     }
     template<class ConfigT, REQ_HAS_ATTR(ConfigT, get().data)>
-    explicit L2IndexSimple(const ConfigT& cfg) {
-        L2IndexSimple{cfg.get().data, cfg.get().ids};
-    }
+    explicit L2IndexSimple(const ConfigT& cfg):
+        L2IndexSimple(cfg.get().data, cfg.get().ids) {}
+
     // template<class RowMatrixT>
     // explicit L2IndexSimple(const IndexConfig<RowMatrixT>& cfg):
     //     L2IndexSimple{cfg.get().data} {}
@@ -687,8 +663,8 @@ public:
 	L2KmeansIndex(const L2KmeansIndex& rhs) = delete;
 	L2KmeansIndex(L2KmeansIndex&& rhs) = delete;
 
-	template<template <class...> class ConfigT, class RowMatrixT>
-    L2KmeansIndex(const ConfigT<RowMatrixT>& cfg):
+	template<template <class...> class ConfigT, class RowMatrixT_>
+    L2KmeansIndex(const ConfigT<RowMatrixT_>& cfg):
         PreprocT(cfg.get().data),
 		FlatIdStore(cfg.get().ids, cfg.get().data.rows()),
         _order(cfg.get().num_clusters),
@@ -699,8 +675,9 @@ public:
         _num_centroids(cfg.get().num_clusters),
         _default_search_frac(cfg.get().default_search_frac)
     {
+        using RowMatrixT = typename mat_traits<RowMatrixT_>::RowMatrixT;
+
         auto X_ = PreprocT::preprocess_data(cfg.get().data);
-		// using RowMatrixT = typename std::remove_cv<decltype(X_)>::type;
         auto k = cfg.get().num_clusters;
 
 		auto centroids_assignments = cluster::kmeans(X_, k);
@@ -734,12 +711,14 @@ public:
             auto nrows = idxs.size();
             auto inner_mat = storage.topRows(nrows);
             auto inner_cfg = cfg.create_child_config(inner_mat);
-//			auto inner_ids = idxs; // XXX this will be wrong when KMeansIndex isn't at top level
-//			auto inner_ids = ar::at_idxs(_ids, idxs);
-//			 inner_cfg.ids = &inner_ids;
-//            new (&_indexes[i]) InnerIndex(inner_cfg);
-             new (&_indexes[i]) InnerIndex(storage.topRows(nrows));
-            _indexes[i].ids() = idxs; // TODO rm direct set of idxs
+			//auto inner_ids = &idxs; // XXX this will be wrong when KMeansIndex isn't at top level
+			//PRINT_VAR(ar::to_string(idxs));
+			auto inner_ids = ar::at_idxs(_ids, idxs);
+            inner_cfg.ids = &inner_ids;
+            // InnerIndex foo(inner_cfg); // TODO rm
+            new (&_indexes[i]) InnerIndex(inner_cfg);
+//             new (&_indexes[i]) InnerIndex(storage.topRows(nrows));
+//            _indexes[i].ids() = idxs; // TODO rm direct set of idxs
         }
     }
 
@@ -756,10 +735,10 @@ public:
 //         _default_search_frac(default_search_frac)
 //    {}
 
-    template<class ConfigT>
-    static inline L2KmeansIndex construct(const ConfigT& cfg) {
-        return L2KmeansIndex{cfg.get().data, cfg.get().num_clusters,};
-    }
+//    template<class ConfigT>
+//    static inline L2KmeansIndex construct(const ConfigT& cfg) {
+//        return L2KmeansIndex{cfg.get().data, cfg.get().num_clusters,};
+//    }
 
     // ------------------------------------------------ accessors
 
