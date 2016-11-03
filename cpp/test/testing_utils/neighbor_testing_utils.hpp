@@ -11,12 +11,9 @@
 #include "euclidean.hpp"
 #include "nn_utils.hpp"
 
-using dist_t = Neighbor::dist_t;
+#include "debug_utils.hpp"
 
-//void require_neighbors_same(const Neighbor& nn, const Neighbor& trueNN) {
-//    REQUIRE(nn.idx == trueNN.idx);
-//    REQUIRE(std::abs(nn.dist - trueNN.dist) < .0001);
-//}
+using dist_t = Neighbor::dist_t;
 
 // macro so that, if it fails, failing line is within the test
 #define REQUIRE_NEIGHBORS_SAME(nn, trueNN) \
@@ -38,10 +35,29 @@ vector<typename Neighbor::dist_t> dists_from_neighbors(const Container& neighbor
 template<class Container1, class Container2>
 void require_neighbor_lists_same(const Container1& nn, const Container2& trueNN)
 {
-    CAPTURE(ar::to_string(idxs_from_neighbors(nn)));
-    CAPTURE(ar::to_string(idxs_from_neighbors(trueNN)));
-    CAPTURE(ar::to_string(dists_from_neighbors(nn)));
-    CAPTURE(ar::to_string(dists_from_neighbors(trueNN)));
+
+    auto dists = dists_from_neighbors(nn);
+    auto true_dists = dists_from_neighbors(trueNN);
+    auto sorted_dists = ar::sort(dists);
+    auto true_sorted_dists = ar::sort(true_dists);
+
+    CAPTURE(ar::to_string(ar::sort(idxs_from_neighbors( nn ) ) ));
+    CAPTURE(ar::to_string(ar::sort(idxs_from_neighbors(trueNN))));
+    CAPTURE(ar :: to_string ( sorted_dists )); // spacing to align output
+    CAPTURE(ar::to_string(true_sorted_dists));
+
+    // print out last elements to check if failures stem from numerical errors;
+    // we manually check whether there will be a problem because Catch refuses
+    // to catpure these variables for no clear reason
+    if (nn.size() != trueNN.size()) {
+        if (auto sz = sorted_dists.size()) {
+            PRINT_VAR(sorted_dists[sz-1]);
+        }
+        if (auto sz = true_sorted_dists.size()) {
+            PRINT_VAR(true_sorted_dists[sz-1]);
+        }
+    }
+
     REQUIRE(nn.size() == trueNN.size());
     for (int i = 0; i < nn.size(); i++) {
         REQUIRE_NEIGHBORS_SAME(nn[i], trueNN[i]);
@@ -108,8 +124,6 @@ inline vector<Neighbor> knn_simple(const MatrixT& X, const VectorT& q, int k) {
 }
 
 
-// struct undef;
-
 template<class MatrixT, class IndexT, class QueryT>
 inline void _test_index_with_query(MatrixT& X, IndexT& index,
     QueryT& q)
@@ -133,15 +147,21 @@ inline void _test_index_with_query(MatrixT& X, IndexT& index,
         REQUIRE(nn_idx == trueNN_idx);
 
         // ------------------------ radius
-        auto reasonable_dist = (X.row(0) - q).squaredNorm() + .00001;
+        // use the dist to the first point as a radius that should include
+        // about half of the points; we round to a few decimal places to avoid
+        // numerical errors in distance computations causing test failures
+        auto reasonable_dist = (X.row(0) - q).squaredNorm();
+        reasonable_dist = round(reasonable_dist * 1024.f - 1) / 1024.f;
         auto allnn = index.radius(q, reasonable_dist);
         auto all_trueNN = radius_simple(X, q, reasonable_dist);
+
+        CAPTURE(reasonable_dist);
         require_neighbor_lists_same(allnn, all_trueNN);
 
         auto allnn_idxs = index.radius_idxs(q, reasonable_dist);
         auto trueNN_idxs = idxs_from_neighbors(all_trueNN);
-        CAPTURE(ar::to_string(allnn_idxs));
-        CAPTURE(ar::to_string(trueNN_idxs));
+        CAPTURE(ar::to_string(ar::sort(allnn_idxs )));
+        CAPTURE(ar::to_string(ar::sort(trueNN_idxs)));
         require_neighbor_idx_lists_same(allnn_idxs, trueNN_idxs);
 
         // ------------------------ knn
@@ -157,8 +177,8 @@ inline void _test_index_with_query(MatrixT& X, IndexT& index,
             CAPTURE(knn[0].idx);
             CAPTURE(trueKnn[0].dist);
             CAPTURE(trueKnn[0].idx);
-            CAPTURE(ar::to_string(knn_idxs));
-            CAPTURE(ar::to_string(trueKnn_idxs));
+            CAPTURE(ar::to_string(ar::sort(knn_idxs    )));
+            CAPTURE(ar::to_string(ar::sort(trueKnn_idxs)));
             REQUIRE(ar::all_eq(knn_idxs, trueKnn_idxs));
         }
     }
