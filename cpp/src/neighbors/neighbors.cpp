@@ -271,15 +271,21 @@ MatrixXi NAME ::knn_batch(const RowMatrixT & queries, int k,                \
     KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                     \
     INDEX_STATS_FUNCS(NAME)
 
-// ------------------------ type aliases
+// ------------------------ 1 level Kmeans index
 
-template<class T> using KnnInnerIndexT = nn::L2IndexSimple<T>;
-template<class T> using KmeansIndexT = nn::L2KmeansIndex<T, KnnInnerIndexT<T> >;
-
-// ------------------------ macro invocations
+template<class T> using KmeansInnerIndexT = nn::L2IndexSimple<T>;
+template<class T> using KmeansIndexT = nn::L2KmeansIndex<T, KmeansInnerIndexT<T> >;
 
 DEFINE_KMEANS_INDEX(KmeansIndex, double, VectorXd, RowMatrixXd, KmeansIndexT);
 DEFINE_KMEANS_INDEX(KmeansIndexF, float, VectorXf, RowMatrixXf, KmeansIndexT);
+
+// ------------------------ 2 level Kmeans index
+
+template<class T> using LeafIndexT = nn::L2IndexSimple<T>;
+template<class T> using Level1IndexT = nn::L2KmeansIndex<T, LeafIndexT<T> >;
+template<class T> using Level0IndexT = nn::L2KmeansIndex<T, Level1IndexT<T> >;
+DEFINE_KMEANS_INDEX(TwoLevelKmeansIndex, double, VectorXd, RowMatrixXd, Level0IndexT);
+DEFINE_KMEANS_INDEX(TwoLevelKmeansIndexF, float, VectorXf, RowMatrixXf, Level0IndexT);
 
 // #define NAME KmeansIndex
 

@@ -33,7 +33,8 @@ inline void _prof_wrapper_index_with_query(MatrixT& X, IndexT& index,
         EasyTimer _(total_time, true); // true = add to value
 
         // ------------------------ radius
-        // auto reasonable_dist = (X.row(0) - q).squaredNorm() + .00001;
+        // auto reasonable_dist = (X.row(0) - q).squaredNorm();
+        // reasonable_dist = round(reasonable_dist * 1024.f - 1) / 1024.f;
         // auto allnn_idxs = index.radius(q, reasonable_dist,
         //     std::forward<Args>(args)...);
 
@@ -158,11 +159,11 @@ void _prof_cluster_wrapper_index(search_config& cfg)
     // PROF_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 1000, 64, __VA_ARGS__);
 
 
-TEST_CASE("Prof_KmeansIndex", "[profile][neighbors_wrappers]") {
-    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, -1);
-    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .5);
-    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .25);
-}
+// TEST_CASE("Prof_KmeansIndex", "[profile][neighbors_wrappers]") {
+//     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, -1);
+//     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .5);
+//     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .25);
+// }
 // TEST_CASE("KmeansIndexF", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(KmeansIndexF);
 // }

@@ -161,12 +161,12 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 
     dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
-    # ------------------------ knn query
+    # # ------------------------ knn query
 
-    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3,
-        **search_kwargs)
-    test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10,
-        **search_kwargs)
+    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=3,
+    #     **search_kwargs)
+    # test_knn_batch_query(index, queries, idxs_sorted, name=name, k=10,
+    #     **search_kwargs)
 
     # ------------------------ radius
 
@@ -196,10 +196,11 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
-    N = 10 * 1000
+    # N = 1000
+    # N = 10 * 1000
+    N = 100 * 1000
     # N = 500 * 1000
     # N = 1000 * 1000
-    # N = 1000
     D = 100
     # D = 200
 
@@ -231,17 +232,16 @@ if __name__ == '__main__':
     opts_dbl = dict(X=X, q=q, dtype=None, trueDists=trueDists)
     opts_flt = dict(X=Xfloat, q=qfloat, dtype=np.float32, trueDists=trueDistsF)
 
+    # test_index(dig.MatmulIndex, "matmul", **opts_dbl)
+    # test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
 
-    test_index(dig.MatmulIndex, "matmul", **opts_dbl)
-    test_index(dig.MatmulIndexF, "matmulf", **opts_flt)
+    # test_index(dig.AbandonIndex, "abandon", **opts_dbl)
+    # test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
 
-    test_index(dig.AbandonIndex, "abandon", **opts_dbl)
-    test_index(dig.AbandonIndexF, "abandonf", **opts_flt)
+    # test_index(dig.SimpleIndex, "simple", **opts_dbl)
+    # test_index(dig.SimpleIndexF, "simplef", **opts_flt)
 
-    test_index(dig.SimpleIndex, "simple", **opts_dbl)
-    test_index(dig.SimpleIndexF, "simplef", **opts_flt)
-
-    import sys; sys.exit()
+    # import sys; sys.exit()
 
     # ------------------------ KmeansIndex stuff
 
@@ -253,24 +253,36 @@ if __name__ == '__main__':
     # ctor_func = functools.partial(dig.KmeansIndex, k=64,
     #     default_search_frac=.1)
     # k = 512
-    k = int(np.sqrt(N))
-    print "building index with {} centroids...".format(k)
+
 
     run_dbl = False
     run_flt = True
 
+    two_level = True
+
+    k = int(np.power(N, 1./3)) if two_level else int(np.sqrt(N))
+    print "building index with {} centroids...".format(k)
+
     if run_dbl:
-        ctor_func = dig.KmeansIndex(X, k)  # pass in index directly
+        if two_level:
+            ctor_func = dig.TwoLevelKmeansIndex(X, k)
+        else:
+            ctor_func = dig.KmeansIndex(X, k)
         kmean_opts_dbl = opts_dbl.copy()
     if run_flt:
-        ctor_funcF = dig.KmeansIndexF(Xfloat, k)  # pass in index directly
+        if two_level:
+            ctor_funcF = dig.TwoLevelKmeansIndexF(Xfloat, k)
+        else:
+            ctor_funcF = dig.KmeansIndexF(Xfloat, k)
+        # ctor_funcF = dig.KmeansIndexF(Xfloat, k)  # pass in index directly
         kmean_opts_flt = opts_flt.copy()
 
     # k = 512, 500k x 100
     # search_fracs = [-1., .5, .2, .1, .05]
     # search_fracs = [.01, 2. / k, 1. / k]
     # search_fracs = [.01, .005]
-    search_fracs = [-1., .5, .2, .1, .05, .01, .005]
+    # search_fracs = [-1., .5, .2, .1, .05, .01, .005]
+    search_fracs = [-1.]
     for frac in search_fracs:
         print '================================ search_frac: ', frac
         if run_dbl:

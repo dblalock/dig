@@ -24,12 +24,13 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
 {
     PrintTimer t(msg);
     // for (int i = 0; i < 100; i++) {
-    for (int i = 0; i < 10; i++) {
-    // for (int i = 0; i < 1; i++) {
+    // for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 1; i++) {
         q.setRandom();
 
         // ------------------------ radius
-        // auto reasonable_dist = (X.row(0) - q).squaredNorm() + .00001;
+        // auto reasonable_dist = (X.row(0) - q).squaredNorm();
+        // reasonable_dist = round(reasonable_dist * 1024.f - 1) / 1024.f;
         // auto allnn_idxs = index.radius(q, reasonable_dist,
         //     std::forward<Args>(args)...);
         // auto trueNN = radius_simple(X, q, reasonable_dist);
@@ -41,6 +42,7 @@ inline void _test_wrapper_index_with_query(MatrixT& X, IndexT& index,
 
         // ------------------------ knn
         for (int k = 1; k <= 5; k += 2) {
+            // PRINT("------------------------ new query")
             auto knn_idxs = index.knn(q, k, std::forward<Args>(args)...);
 			auto trueKnn = nn::simple::knn(X, q, k);
 			auto trueKnn_idxs = idxs_from_neighbors(trueKnn);
@@ -115,13 +117,22 @@ void _test_cluster_wrapper_index(int64_t N=100, int64_t D=16, const char* msg=""
     for (int i = 0; i < 10; i++) { \
         TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 10*1000, 100, __VA_ARGS__); \
     }
+        // TEST_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 20, 4, __VA_ARGS__); \
 
 TEST_CASE("KmeansIndex", "[neighbors_wrappers]") {
     TEST_CLUSTER_WRAPPER_INDEX(KmeansIndex, 53); // weird number of clusters
-	// _test_cluster_wrapper_index<KmeansIndex>(100, 16, "foo", 50);
 }
 TEST_CASE("KmeansIndexF", "[neighbors_wrappers]") {
     TEST_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 47); // weird number of clusters
+}
+
+TEST_CASE("TwoLevelKmeansIndex", "[neighbors_wrappers]") {
+    TEST_CLUSTER_WRAPPER_INDEX(KmeansIndex, 53); // weird number of clusters
+}
+TEST_CASE("TwoLevelKmeansIndexF", "[neighbors_wrappers]") {
+    TEST_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 1);
+    TEST_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 2);
+    TEST_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 39); // weird number of clusters
 }
 
 TEST_CASE("MatmulIndex", "[neighbors_wrappers]") {
@@ -137,10 +148,3 @@ TEST_CASE("SimpleIndex", "[neighbors_wrappers]") {
 TEST_CASE("SimpleIndexF", "[neighbors_wrappers]") {
     TEST_WRAPPER_INDEX(SimpleIndexF);
 }
-
-// TEST_CASE("AbandonIndex", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(AbandonIndex);
-// }
-// TEST_CASE("AbandonIndexF", "[neighbors_wrappers]") {
-//     TEST_WRAPPER_INDEX(AbandonIndexF);
-// }

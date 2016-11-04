@@ -142,6 +142,8 @@ public: \
 
 DECLARE_KMEANS_INDEX(KmeansIndex, double, VectorXd, RowMatrixXd);
 DECLARE_KMEANS_INDEX(KmeansIndexF, float, VectorXf, RowMatrixXf);
+DECLARE_KMEANS_INDEX(TwoLevelKmeansIndex, double, VectorXd, RowMatrixXd);
+DECLARE_KMEANS_INDEX(TwoLevelKmeansIndexF, float, VectorXf, RowMatrixXf);
 
 // class KmeansIndex {
 // public:

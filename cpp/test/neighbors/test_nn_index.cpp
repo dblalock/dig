@@ -16,7 +16,7 @@
 #include "neighbor_testing_utils.hpp"
 
 
-TEST_CASE("print sizes", "tmp") { // not really a test; just prints sizes
+TEST_CASE("print sizes", "[mem]") { // not really a test; just prints sizes
 	printf("sizeof(float vector) = %ld\n", sizeof(std::vector<float>));
 	printf("sizeof(double vector) = %ld\n", sizeof(std::vector<float>));
 	printf("sizeof(eigen Matrix) = %ld\n", sizeof(Eigen::MatrixXd));
