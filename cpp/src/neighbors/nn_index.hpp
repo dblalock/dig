@@ -9,13 +9,13 @@
 #ifndef __NN_INDEX_HPP
 #define __NN_INDEX_HPP
 
-#include <experimental/optional>
 #include <memory>
 #include "assert.h"
 
 #include "Dense"
 
 #include "cluster.hpp"
+#include "id_store.hpp"
 #include "nn_search.hpp"
 #include "nn_utils.hpp"
 #include "array_utils.hpp"
@@ -25,29 +25,34 @@
 
 // #include "debug_utils.hpp"
 
-template<class T> using optional = std::experimental::optional<T>; // will be std::optional in c++17
-static constexpr auto nullopt = std::experimental::nullopt;
-// auto empty() { return nullopt_t(); }
-
 namespace nn {
 
 static const int8_t kAlignBytes = 32;
+
+
+// ================================================================
+// SearchConfig
+// ================================================================
+
+enum class SearchType {
+    Radius, OneNN, Knn
+};
+
+class SearchConfig {
+    SearchType type;
+    float d_max;
+    int k;
+    float search_frac;
+};
+
+// SELF: pick up here by adding set_search_cfg() to all Index classes, and
+// having it actually do something for L2KmeansIndex
+//     -then write setters for kmeans wrappers that create configs and set them
 
 // ================================================================
 // IndexConfig
 // ================================================================
 
-// template<class RowMatrixT>
-// class IndexConfig {
-// public:
-// 	virtual const RowMatrixT& get().data    const;
-// 	virtual int get().num_clusters          const;
-// 	virtual int get().default_search_frac   const;
-
-// 	virtual ~IndexConfig() {};
-// };
-
-// class IndexConfig: public IndexConfig<RowMatrixT> {
 template<class RowMatrixT>
 class IndexConfig {
 public:
@@ -88,16 +93,8 @@ public:
     IndexConfig& get() { return *this; }
 };
 
-//template<class IndexConfigT, class RowMatrixT2>
-//std::unique_ptr<IndexConfig> create_child_config(const RowMatrixT2& data,
-//	vector<idx_t>* ids_=nullptr)
-//{
-//	return std::make_unique<IndexConfig<RowMatrixT2> >(data, num_clusters,
-//        default_search_frac, ids_);
-//}
 
 template<class RowMatrixT, int NumLevels=4>
-//class HierarchicalIndexConfig: public IndexConfig<RowMatrixT> {
 class HierarchicalIndexConfig {
 public:
     int level;
@@ -128,76 +125,6 @@ public:
 
     const IndexConfig<RowMatrixT>& get() const { return configs[level]; }
     IndexConfig<RowMatrixT>& get() { return configs[level]; }
-};
-
-
-// ================================================================
-// FlatIdStore / Neighbor postprocessing
-// ================================================================
-
-struct IdentityIdStore {
-    template<class... Args> IdentityIdStore(Args&&... args) {};
-    template<class T> T postprocess(const T& neighbors) { return neighbors; }
-};
-
-template<class IdT=idx_t>
-class FlatIdStore {
-public:
-    typedef IdT ID;
-
-    FlatIdStore(const std::vector<ID> ids): _ids(ids) {}
-    FlatIdStore(size_t len):
-        // _ids(ar::range(static_cast<ID>(0), static_cast<ID>(len)))
-        FlatIdStore(ar::range(static_cast<ID>(0), static_cast<ID>(len))) {}
-    FlatIdStore(const optional<std::vector<ID> > ids, size_t len):
-        FlatIdStore(len)
-	{
-		if (ids) {
-            _ids = *ids;
-        }
-		// else { PRINT("not using ids cuz they were null"); }
-	}
-
-    FlatIdStore() = default;
-    FlatIdStore(const FlatIdStore& rhs) = delete;
-    // FlatIdStore(FlatIdStore&& rhs): _ids(std::move(rhs._ids)) {
-    //     PRINT("move ctor")
-    //     PRINT_VAR(_ids.size());
-    // }
-
-    idx_t rows() const { return static_cast<idx_t>(_ids.size()); }
-
-    // TODO keep this protected and add it as optional arg to ctor
-    std::vector<ID>& ids() { return _ids; }
-
-    // ------------------------ neighbor postprocessing
-    // ie, convert indices within storage to point IDs
-
-    Neighbor postprocess(Neighbor n) {
-        // PRINT_VAR(_ids.size());
-        // DEBUGF("%lld (%g) -> %lld", n.idx, n.dist, _ids[n.idx]);
-        // PRINT_VAR(n.dist);
-
-		return Neighbor{_ids[n.idx], n.dist};
-    }
-    std::vector<Neighbor> postprocess(std::vector<Neighbor> neighbors) {
-        auto idxs = ar::map([](auto& n) { return n.idx; }, neighbors);
-        auto dists = ar::map([](auto& n) { return n.dist; }, neighbors);
-        // PRINT_VAR(ar::to_string(idxs));
-        // PRINT_VAR(ar::to_string(dists));
-        return ar::map([this](const Neighbor n) {
-			return this->postprocess(n);
-        }, neighbors);
-    }
-    std::vector<std::vector<Neighbor> > postprocess(
-        std::vector<std::vector<Neighbor> > nested_neighbors) {
-        return ar::map([this](const std::vector<Neighbor> neighbors) {
-            return this->postprocess(neighbors);
-        }, nested_neighbors);
-    }
-
-protected:
-    std::vector<ID> _ids;
 };
 
 

@@ -429,6 +429,7 @@
 		72C419581C5337AD004689A2 /* testing_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = testing_utils.hpp; sourceTree = "<group>"; };
 		72C4195A1C5337AD004689A2 /* test_array_utils.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_array_utils.cpp; sourceTree = "<group>"; };
 		72C4195B1C5337AD004689A2 /* test_array_utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test_array_utils.h; sourceTree = "<group>"; };
+		72C57CB21DCE9B820019C906 /* id_store.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = id_store.hpp; sourceTree = "<group>"; };
 		72C81BE61C90B6EE00639302 /* flock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = flock.cpp; sourceTree = "<group>"; };
 		72C81BE71C90B6EE00639302 /* flock.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = flock.hpp; sourceTree = "<group>"; };
 		72C81BE91C90DC0100639302 /* shape_features.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = shape_features.cpp; sourceTree = "<group>"; };
@@ -1209,6 +1210,7 @@
 		72C419401C5337AD004689A2 /* neighbors */ = {
 			isa = PBXGroup;
 			children = (
+				72C57CB21DCE9B820019C906 /* id_store.hpp */,
 				722E1C5A1DC7E3AE004BD70A /* preproc.hpp */,
 				721FC9CD1DAC00AE00EF824F /* neighbors.cpp */,
 				721403BA1D8B5AF000F8658F /* nn_search.hpp */,
