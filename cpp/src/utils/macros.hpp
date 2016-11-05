@@ -34,7 +34,7 @@
 	#define PREFETCH_WITH_STICKINESS(ADDR, INT) \
 		__builtin_prefetch(ADDR, 0, INT)
 	#define PREFETCH_RW_WITH_STICKINESS(ADDR, INT) \
-		__builtin_prefetch(ADDR, 0, INT)
+		__builtin_prefetch(ADDR, 1, INT)
 	#define PREFETCH_TRANSIENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 0)
 	#define PREFETCH_PERSISTENT(ADDR) PREFETCH_WITH_STICKINESS(ADDR, 3)
 	#define PREFETCH_RW_TRANSIENT(ADDR) PREFETCH_RW_WITH_STICKINESS(ADDR, 0)
@@ -65,6 +65,12 @@
 	 _13, _14, _15, _16, N, ...) N
 
 #ifdef __cplusplus
+// ------------------------ type aliases // TODO macros file not ideal place
+	#include <experimental/optional>
+	// will be std::optional in c++17
+	template<class T> using optional = std::experimental::optional<T>;
+	static constexpr auto nullopt = std::experimental::nullopt;
+
 // ------------------------ type traits macros
 	#include <type_traits>
 
