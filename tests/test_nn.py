@@ -8,7 +8,9 @@ import dig
 
 
 def all_eq(x, y):
-    if (len(x) == 0) and (len(y) == 0):
+    if len(x) != len(y):
+        return False
+    if len(x) == 0:
         return True
     return np.max(np.abs(x - y)) < .001
 
@@ -72,7 +74,7 @@ def test_radius_batch_query(index, queries, dists, name, r2, **kwargs):
 
 def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
                dtype=np.float64, X=None, q=None, trueDists=None,
-               **search_kwargs):
+               no_asserts=False, **search_kwargs):
     print("------------------------ {}".format(name))
 
     print "start of X: ", X[0, :5]
@@ -101,6 +103,10 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
         index.getIndexConstructionTimeMs()  # is it an index instance?
     except TypeError:
         index = index(X)
+    if 'search_frac' in search_kwargs:
+        # hack to set search_frac for hierarchical kmeans, because we don't
+        # actually forward the args from the calls to the search funcs
+        index.set_default_search_frac(search_kwargs['search_frac'])
 
     t = index.getIndexConstructionTimeMs()
     print "{} index time: {}".format(name, t)
@@ -129,8 +135,8 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     #     print "trueNeighborIdxs: ", trueNeighborIdxs
     print "-> {} range query time\t= {}".format(name, t)
 
-    assert(len(neighborIdxs) == len(trueNeighborIdxs))
-    assert(all_eq(neighborIdxs, trueNeighborIdxs))
+    assert(no_asserts or len(neighborIdxs) == len(trueNeighborIdxs))
+    assert(no_asserts or all_eq(neighborIdxs, trueNeighborIdxs))
 
     # ------------------------ knn query
 
@@ -141,7 +147,7 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
     # print "sorted nn10, true nn10 =\n{}\n{}".format(
     #     sorted(nn10), sorted(trueNN10))
     print "-> {} knn time\t\t= {}".format(name, t)
-    assert(all_eq(nn10, trueNN10))
+    assert(no_asserts or all_eq(nn10, trueNN10))
 
     knn_dists = trueDists[nn10]
     # true_knn_dists = trueDists[trueNN10]
@@ -152,14 +158,14 @@ def test_index(index=dig.MatmulIndex, name="cpp", N=100, D=100, r2=-1,
 
     # ------------------------------------------------ batch of queries
 
-    Q = 32
-    queries = np.random.randn(Q, D).astype(dtype)
-    queries = np.cumsum(queries, axis=1)
-    queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
+    # Q = 32
+    # queries = np.random.randn(Q, D).astype(dtype)
+    # queries = np.cumsum(queries, axis=1)
+    # queries = np.copy(queries[:, ::-1])  # *should* help abandon a lot...
 
-    # ------------------------ dists for ground truth
+    # # ------------------------ dists for ground truth
 
-    dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
+    # dists, idxs_sorted, t_python = sq_dists_to_vectors(X, queries)
 
     # # ------------------------ knn query
 
@@ -198,9 +204,9 @@ if __name__ == '__main__':
 
     # N = 1000
     # N = 10 * 1000
-    N = 100 * 1000
+    # N = 100 * 1000
     # N = 500 * 1000
-    # N = 1000 * 1000
+    N = 1000 * 1000
     D = 100
     # D = 200
 
@@ -268,31 +274,36 @@ if __name__ == '__main__':
             ctor_func = dig.TwoLevelKmeansIndex(X, k)
         else:
             ctor_func = dig.KmeansIndex(X, k)
-        kmean_opts_dbl = opts_dbl.copy()
+        kmeans_opts_dbl = opts_dbl.copy()
+        kmeans_opts_dbl['no_asserts'] = True
     if run_flt:
         if two_level:
             ctor_funcF = dig.TwoLevelKmeansIndexF(Xfloat, k)
         else:
             ctor_funcF = dig.KmeansIndexF(Xfloat, k)
         # ctor_funcF = dig.KmeansIndexF(Xfloat, k)  # pass in index directly
-        kmean_opts_flt = opts_flt.copy()
+        kmeans_opts_flt = opts_flt.copy()
+        kmeans_opts_flt['no_asserts'] = True
 
     # k = 512, 500k x 100
     # search_fracs = [-1., .5, .2, .1, .05]
     # search_fracs = [.01, 2. / k, 1. / k]
     # search_fracs = [.01, .005]
-    # search_fracs = [-1., .5, .2, .1, .05, .01, .005]
-    search_fracs = [-1.]
+    if two_level:
+        search_fracs = [-1., .5, .2, .1, .05]
+    else:
+        search_fracs = [-1., .5, .2, .1, .05, .01, .005]
+    # search_fracs = [-1.]
     for frac in search_fracs:
         print '================================ search_frac: ', frac
         if run_dbl:
-            kmean_opts_dbl['search_frac'] = frac
-            test_index(ctor_func, 'kmeans', **kmean_opts_dbl)
+            kmeans_opts_dbl['search_frac'] = frac
+            test_index(ctor_func, 'kmeans', **kmeans_opts_dbl)
             # -1: 31.0, 33.6, 100% acc
             # .5:
             # .2:
             # .1:
             # .05:
         if run_flt:
-            kmean_opts_flt['search_frac'] = frac
-            test_index(ctor_funcF, 'kmeans', **kmean_opts_flt)
+            kmeans_opts_flt['search_frac'] = frac
+            test_index(ctor_funcF, 'kmeans', **kmeans_opts_flt)

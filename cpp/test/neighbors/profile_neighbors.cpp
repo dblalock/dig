@@ -9,15 +9,18 @@
 #include "neighbors.hpp"
 #include "catch.hpp"
 
+#include <array>
 #include <string>
 
 #include "neighbor_testing_utils.hpp"
 #include "nn_search.hpp"
 #include "timing_utils.hpp"
 
-// constexpr int kDefaultN = 100 * 1000;
-constexpr int kDefaultN = 500;
+constexpr int kDefaultN = 100 * 1000;
+// constexpr int kDefaultN = 500;
 constexpr int kDefaultD = 100;
+
+const std::array<float, 6> kDefaultSearchFracs {-1, .5, .2, .1, .05, .01};
 
 template<class MatrixT, class IndexT, class QueryT, class... Args>
 inline void _prof_wrapper_index_with_query(MatrixT& X, IndexT& index,
@@ -42,10 +45,6 @@ inline void _prof_wrapper_index_with_query(MatrixT& X, IndexT& index,
 
         // 10nn
         volatile auto knn_idxs = index.knn(q, 10, std::forward<Args>(args)...);
-
-        // for (int k = 1; k <= 5; k += 2) {
-            // volatile auto knn_idxs = index.knn(q, k, std::forward<Args>(args)...);
-        // }
     }
 }
 
@@ -69,18 +68,18 @@ search_config create_search_config(int64_t N, int64_t D, std::string msg="",
     cfg.num_clusters = num_clusters;
     cfg.search_frac = search_frac;
     if (msg.size() < 1) {
-        msg = string_with_format("%lldx%lld_%d_%d,",
+        cfg.msg = string_with_format("\t%lldx%lld_%d_%.3f",
             N, D, num_clusters, search_frac);
     }
 	return cfg;
 }
 
-search_config default_search_cfg() {
-    int N = 10 * 1000;
-    int D = 100;
+search_config default_search_cfg(int num_clusters=-1, float search_frac=-1) {
+    int N = kDefaultN;
+    int D = kDefaultD;
     // auto msg = string_with_format("\t%dx%d", N, D);
     // return create_search_config(N, D, msg);
-    return create_search_config(N, D);
+    return create_search_config(N, D, "", num_clusters, search_frac);
 }
 
 template<class Scalar>
@@ -128,30 +127,32 @@ void _prof_cluster_wrapper_index(search_config& cfg)
     // auto msg = string_with_format("{}x{}", N, D);
     // _prof_wrapper_index<CLS>(cfg);
 
+void print_total_time(search_config cfg, int num_queries=1) {
+    std::cout << "total time: " << cfg.total_time <<
+        " (" << cfg.total_time / float(num_queries) << " / query)\n";
+}
 
-#define PROF_WRAPPER_INDEX(CLS) \
-    do { std::cout << #CLS << ":\n"; \
-    search_config cfg = default_search_cfg(); \
-	for (int i = 0; i < 10; i++) { \
-		_prof_wrapper_index<CLS>(cfg); \
-	} \
-    std::cout << "total time: " << cfg.total_time << "\n"; } while(0);
+#define PROF_WRAPPER_INDEX(CLS)                                             \
+    do { std::cout << #CLS << ":\n";                                        \
+    search_config cfg = default_search_cfg();                               \
+	for (int i = 0; i < 4; i++) {                                           \
+		_prof_wrapper_index<CLS>(cfg);                                      \
+	}                                                                       \
+    print_total_time(cfg, 40); } while(0);
 
 // #define PROF_CLUSTER_WRAPPER_INDEX_ONCE(CLS, N, D, NUM_CLUSTERS, SEARCH_FRAC) \
 //     do { search_config cfg = create_search_config("\t" #N "x" #D, N, D, \
 //         NUM_CLUSTERS, SEARCH_FRAC); \
 //     _prof_cluster_wrapper_index<CLS>(cfg); } while (0);
 
-#define PROF_CLUSTER_WRAPPER_INDEX(CLS, NUM_CLUSTERS, SEARCH_FRAC) \
-    do { \
+#define PROF_CLUSTER_WRAPPER_INDEX(CLS, NUM_CLUSTERS, SEARCH_FRAC)          \
+    do {                                                                    \
     std::cout << #CLS << "_" << #NUM_CLUSTERS << "_" #SEARCH_FRAC << ":\n"; \
-	search_config cfg = default_search_cfg(); \
-	cfg.num_clusters = NUM_CLUSTERS; \
-	cfg.search_frac = SEARCH_FRAC; \
-    for (int i = 0; i < 10; i++) { \
-        _prof_cluster_wrapper_index<CLS>(cfg); \
-    } \
-    std::cout << "total time: " << cfg.total_time << "\n"; } while(0);
+	search_config cfg = default_search_cfg(NUM_CLUSTERS, SEARCH_FRAC);      \
+    for (int i = 0; i < 4; i++) {                                           \
+        _prof_cluster_wrapper_index<CLS>(cfg);                              \
+    }                                                                       \
+    print_total_time(cfg, 40); } while(0);
 
         // PROF_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 10*1000, 100, NUM_CLUSTERS, SEARCH_FRAC); \
     // PROF_CLUSTER_WRAPPER_INDEX_ONCE(CLS, 100, 10, __VA_ARGS__); \
@@ -164,27 +165,42 @@ void _prof_cluster_wrapper_index(search_config& cfg)
 //     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .5);
 //     PROF_CLUSTER_WRAPPER_INDEX(KmeansIndex, 64, .25);
 // }
-// TEST_CASE("KmeansIndexF", "[profile][neighbors_wrappers]") {
-//     PROF_WRAPPER_INDEX(KmeansIndexF);
-// }
+TEST_CASE("Prof_KmeansIndexF", "[profile][neighbors_wrappers]") {
+    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 64, -1);
+    // PROF_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 64, .5);
+    // PROF_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 64, .25);
+    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 64, .1);
+    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 64, .05);
+    PROF_CLUSTER_WRAPPER_INDEX(KmeansIndexF, 64, .01);
+}
+
+TEST_CASE("Prof_TwoLevelKmeansIndexF", "[profile][neighbors_wrappers]") {
+    PROF_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 64, -1);
+    PROF_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 64, .5);
+    PROF_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 64, .25);
+    PROF_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 64, .1);
+    PROF_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 64, .05);
+    PROF_CLUSTER_WRAPPER_INDEX(TwoLevelKmeansIndexF, 64, .01);
+}
+
 
 // TEST_CASE("Prof_MatmulIndex", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(MatmulIndex);
 // }
-// TEST_CASE("MatmulIndexF", "[profile][neighbors_wrappers]") {
-//     PROF_WRAPPER_INDEX(MatmulIndexF);
-// }
+TEST_CASE("Prof_MatmulIndexF", "[profile][neighbors_wrappers]") {
+    PROF_WRAPPER_INDEX(MatmulIndexF);
+}
 
-// TEST_CASE("SimpleIndex", "[profile][neighbors_wrappers]") {
+// TEST_CASE("Prof_SimpleIndex", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(SimpleIndex);
 // }
-// TEST_CASE("SimpleIndexF", "[profile][neighbors_wrappers]") {
-//     PROF_WRAPPER_INDEX(SimpleIndexF);
-// }
+TEST_CASE("Prof_SimpleIndexF", "[profile][neighbors_wrappers]") {
+    PROF_WRAPPER_INDEX(SimpleIndexF);
+}
 
-// TEST_CASE("AbandonIndex", "[profile][neighbors_wrappers]") {
+// TEST_CASE("Prof_AbandonIndex", "[profile][neighbors_wrappers]") {
 //     PROF_WRAPPER_INDEX(AbandonIndex);
 // }
-// TEST_CASE("AbandonIndexF", "[profile][neighbors_wrappers]") {
-//     PROF_WRAPPER_INDEX(AbandonIndexF);
-// }
+TEST_CASE("Prof_AbandonIndexF", "[profile][neighbors_wrappers]") {
+    PROF_WRAPPER_INDEX(AbandonIndexF);
+}

@@ -71,6 +71,9 @@
 	template<class T> using optional = std::experimental::optional<T>;
 	static constexpr auto nullopt = std::experimental::nullopt;
 
+	// template<class T>
+	// void maybe_assign(T& lval, optional<T> maybe) { if (maybe) lval = maybe; }
+
 // ------------------------ type traits macros
 	#include <type_traits>
 

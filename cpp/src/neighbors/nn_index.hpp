@@ -34,16 +34,16 @@ static const int8_t kAlignBytes = 32;
 // SearchConfig
 // ================================================================
 
-enum class SearchType {
-    Radius, OneNN, Knn
-};
+// enum class SearchType {
+//     Radius, OneNN, Knn
+// };
 
-class SearchConfig {
-    SearchType type;
-    float d_max;
-    int k;
-    float search_frac;
-};
+// class SearchConfig {
+//     SearchType type;
+//     float d_max;
+//     int k;
+//     float search_frac;
+// };
 
 // SELF: pick up here by adding set_search_cfg() to all Index classes, and
 // having it actually do something for L2KmeansIndex
@@ -128,6 +128,15 @@ public:
 };
 
 
+// TODO IndexConfig should maybe not have data field, so it can be
+// non-templated and we can just pass these around; also, it would be better
+// if we had a SearchConfig object that got passed directly into searches,
+// but that would be a lot of refactoring and all we actually need is to
+// set the default search config
+struct RuntimeIndexConfig {
+    optional<float> default_search_frac;
+};
+
 // ================================================================
 // IndexBase
 // ================================================================
@@ -177,6 +186,11 @@ public:
     // static inline Derived construct(const ConfigT& cfg) {
     //     return Derived{cfg.get().data};
     // }
+
+    // ------------------------------------------------ configuration
+
+     // do nothing by default
+    template<class ConfigT> bool configure(const ConfigT& cfg) { return false; }
 
     // ------------------------------------------------ single queries
 
@@ -636,14 +650,6 @@ public:
             inner_cfg.get().default_search_frac = _default_search_frac;
             inner_cfg.get().ids = cfg.ids ? ar::at_idxs(*cfg.ids, idxs) : idxs;
 
-       //      if (cfg.ids) {
-       //          inner_cfg.ids = ar::at_idxs(*cfg.ids, idxs);
-    			// auto inner_ids = ar::at_idxs(*cfg.ids, idxs);
-       //          // PRINT_VAR(ar::to_string(inner_ids));
-       //          inner_cfg.ids = inner_ids;
-       //      } else {
-       //          inner_cfg.ids = idxs;
-       //      }
             // InnerIndex foo(inner_cfg); // TODO rm
             new (&_indexes[i]) InnerIndex(inner_cfg);
 //             new (&_indexes[i]) InnerIndex(storage.topRows(nrows));
@@ -668,6 +674,34 @@ public:
 //    static inline L2KmeansIndex construct(const ConfigT& cfg) {
 //        return L2KmeansIndex{cfg.get().data, cfg.get().num_clusters,};
 //    }
+
+    // ------------------------------------------------ configuration
+
+    template<class ConfigT> bool configure(const ConfigT& cfg) {
+        // auto& cfg = cfg_.get();
+        // maybe_assign(_default_search_frac, cfg.default_search_frac);
+        bool ret = false;
+        if (cfg.default_search_frac) {
+            _default_search_frac = *cfg.default_search_frac;
+            ret = true;
+        }
+        // set this config for all children as well
+        // TODO call get_child_config() on it or something?
+        // for (auto& idx : _indexes) {
+        for(int i = 0; i < _num_centroids; i++) {
+            _indexes[i].configure(cfg);
+        }
+
+        return ret;
+    }
+
+    // bool set_default_search_frac(float search_frac) {
+    //     _default_search_frac = search_frac;
+    //     RuntimeIndexConfig cfg(search_frac);
+    //     for (auto& idx : _indexes) {
+    //         idx.configure(cfg);
+    //     }
+    // }
 
     // ------------------------------------------------ accessors
 

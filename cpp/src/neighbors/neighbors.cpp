@@ -101,6 +101,10 @@ public:
         return idx_mat_from_nested_neighbor_idxs(nested_neighbors);
     }
 
+    template<class ConfigT> bool configure(const ConfigT& cfg) {
+        return _index.configure(cfg);
+    }
+
 protected:
     cputime_t _indexStartTimeMs;
     IndexT _index;
@@ -114,54 +118,58 @@ protected:
 
 // ------------------------ pimpl
 
-#define INDEX_PIMPL(INDEX_NAME, InnerIndexT) \
-class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > { \
-    using Super = IndexImpl<InnerIndexT >; \
-    friend class INDEX_NAME; \
-    using Super::Super; \
+#define INDEX_PIMPL(INDEX_NAME, InnerIndexT)                                \
+class INDEX_NAME ::Impl: public IndexImpl<InnerIndexT > {                   \
+    using Super = IndexImpl<InnerIndexT >;                                  \
+    friend class INDEX_NAME;                                                \
+    using Super::Super;                                                     \
 };
 
 // ------------------------ ctors / dtors
 
-#define INDEX_CTORS_DTOR(INDEX_NAME, Scalar, MatrixT) \
-    INDEX_NAME ::INDEX_NAME(const MatrixT & X): _this{new INDEX_NAME ::Impl{X}} {} \
-    INDEX_NAME ::INDEX_NAME(Scalar* X, int m, int n): \
-        _this{new INDEX_NAME ::Impl{X, m, n}} {} \
+#define INDEX_CTORS_DTOR(INDEX_NAME, Scalar, MatrixT)                       \
+    INDEX_NAME ::INDEX_NAME(const MatrixT & X):                             \
+        _this{new INDEX_NAME ::Impl{X}} {}                                  \
+    INDEX_NAME ::INDEX_NAME(Scalar* X, int m, int n):                       \
+        _this{new INDEX_NAME ::Impl{X, m, n}} {}                            \
     INDEX_NAME ::~INDEX_NAME() = default;
 // ^ default dtor needed for swig with unique_ptr
 
 // ------------------------ query funcs
 
-#define INDEX_QUERY_FUNCS(INDEX_NAME, VectorT, RowMatrixT) \
-vector<int64_t> INDEX_NAME ::radius(const VectorT & q, double radiusL2) { \
-    return _this->radius(q, radiusL2); \
-} \
-vector<int64_t> INDEX_NAME ::knn(const VectorT & q, int k) { \
-    return _this->knn(q, k); \
-} \
-MatrixXi INDEX_NAME ::radius_batch(const RowMatrixT & queries, double radiusL2) { \
-    return _this->radius_batch(queries, radiusL2); \
-} \
-MatrixXi INDEX_NAME ::knn_batch(const RowMatrixT & queries, int k) { \
-    return _this->knn_batch(queries, k); \
+#define INDEX_QUERY_FUNCS(INDEX_NAME, VectorT, RowMatrixT)                  \
+vector<int64_t> INDEX_NAME ::radius(const VectorT & q, double radiusL2) {   \
+    return _this->radius(q, radiusL2);                                      \
+}                                                                           \
+vector<int64_t> INDEX_NAME ::knn(const VectorT & q, int k) {                \
+    return _this->knn(q, k);                                                \
+}                                                                           \
+MatrixXi INDEX_NAME ::radius_batch(const RowMatrixT & queries,              \
+    double radiusL2)                                                        \
+{                                                                           \
+    return _this->radius_batch(queries, radiusL2);                          \
+}                                                                           \
+MatrixXi INDEX_NAME ::knn_batch(const RowMatrixT & queries, int k) {        \
+    return _this->knn_batch(queries, k);                                    \
 }
 
 // ------------------------ stats
 
-#define INDEX_STATS_FUNCS(INDEX_NAME) \
-double INDEX_NAME ::getIndexConstructionTimeMs() { return _this->_indexTimeMs; } \
+#define INDEX_STATS_FUNCS(INDEX_NAME)                                       \
+double INDEX_NAME ::getIndexConstructionTimeMs() {                          \
+    return _this->_indexTimeMs; }                                           \
 double INDEX_NAME ::getQueryTimeMs() { return _this->_queryTimeMs; }
 
 // ------------------------ top-level macro for convenience
 
-#define DEFINE_INDEX(NAME, Scalar, VectorT, RowMatrixT, InnerIndexT) \
-    INDEX_PIMPL(NAME, InnerIndexT) \
-    INDEX_CTORS_DTOR(NAME, Scalar, RowMatrixT) \
-    INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT) \
+#define DEFINE_INDEX(NAME, Scalar, VectorT, RowMatrixT, InnerIndexT)        \
+    INDEX_PIMPL(NAME, InnerIndexT)                                          \
+    INDEX_CTORS_DTOR(NAME, Scalar, RowMatrixT)                              \
+    INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                            \
     INDEX_STATS_FUNCS(NAME)
 
 // ================================================================
-// Index Impls
+// Basic Index Impls
 // ================================================================
 
 // ------------------------------------------------ Matmul, Abandon, Simple
@@ -179,7 +187,9 @@ using InnerIndexSimpleT = nn::L2IndexSimple<T>;
 DEFINE_INDEX(SimpleIndex, double, VectorXd, RowMatrixXd, InnerIndexSimpleT<double>);
 DEFINE_INDEX(SimpleIndexF, float, VectorXf, RowMatrixXf, InnerIndexSimpleT<float>);
 
-// ------------------------------------------------ KmeansIndex
+// ================================================================
+// KmeansIndex
+// ================================================================
 
 // ------------------------ custom ctors (and dtor impl)
 
@@ -214,21 +224,21 @@ class NAME::Impl: public IndexImpl<KmeansIndexT<ScalarT> > {                \
 
 // ------------------------ custom ctors (and dtor impl)
 
-#define KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT)                  \
-                                                                            \
-NAME ::NAME(const RowMatrixT & X, int k):                                   \
-    _this{new NAME ::Impl{X, k}} {}                                         \
-                                                                            \
-NAME ::NAME(ScalarT* X, int m, int n, int k, float default_search_frac):    \
-    _this{new NAME ::Impl{X, m, n, k, default_search_frac}} {}              \
-                                                                            \
-NAME ::NAME(ScalarT* X, int m, int n, int k):                               \
-    NAME(X, m, n, k, -1) {}                                                 \
-                                                                            \
-NAME ::NAME(ScalarT* X, int m, int n):                                      \
-    NAME(X, m, n, 100) {}                                                   \
-                                                                            \
-NAME ::~NAME() = default;
+#define KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT)                   \
+                                                                             \
+    NAME ::NAME(const RowMatrixT & X, int k):                                \
+        _this{new NAME ::Impl{X, k}} {}                                      \
+                                                                             \
+    NAME ::NAME(ScalarT* X, int m, int n, int k, float default_search_frac): \
+        _this{new NAME ::Impl{X, m, n, k, default_search_frac}} {}           \
+                                                                             \
+    NAME ::NAME(ScalarT* X, int m, int n, int k):                            \
+        NAME(X, m, n, k, -1) {}                                              \
+                                                                             \
+    NAME ::NAME(ScalarT* X, int m, int n):                                   \
+        NAME(X, m, n, 100) {}                                                \
+                                                                             \
+    NAME ::~NAME() = default;
 
 // KMEANS_INDEX_CTORS_DTOR(KmeansIndex, double, RowMatrixXd);
 
@@ -236,40 +246,50 @@ NAME ::~NAME() = default;
 
 #define KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                 \
                                                                             \
-vector<int64_t> NAME ::radius(const VectorT & q, double radiusL2,           \
-    float search_frac=-1)                                                   \
-{                                                                           \
-	return _this->radius(q, radiusL2, search_frac);                         \
-}                                                                           \
+    vector<int64_t> NAME ::radius(const VectorT & q, double radiusL2,       \
+        float search_frac=-1)                                               \
+    {                                                                       \
+    	return _this->radius(q, radiusL2, search_frac);                     \
+    }                                                                       \
                                                                             \
-vector<int64_t> NAME ::knn(const VectorT & q, int k,                        \
-    float search_frac=-1)                                                   \
-{                                                                           \
-    int d_max = -1;                                                         \
-	return _this->knn(q, k, d_max, search_frac);                            \
-}                                                                           \
+    vector<int64_t> NAME ::knn(const VectorT & q, int k,                    \
+        float search_frac=-1)                                               \
+    {                                                                       \
+        int d_max = -1;                                                     \
+    	return _this->knn(q, k, d_max, search_frac);                        \
+    }                                                                       \
                                                                             \
-MatrixXi NAME ::radius_batch(const RowMatrixT & queries,                    \
-    double radiusL2, float search_frac=-1)                                  \
-{                                                                           \
-	return _this->radius_batch(queries, radiusL2, search_frac);             \
-}                                                                           \
+    MatrixXi NAME ::radius_batch(const RowMatrixT & queries,                \
+        double radiusL2, float search_frac=-1)                              \
+    {                                                                       \
+    	return _this->radius_batch(queries, radiusL2, search_frac);         \
+    }                                                                       \
                                                                             \
-MatrixXi NAME ::knn_batch(const RowMatrixT & queries, int k,                \
-    float search_frac=-1)                                                   \
-{                                                                           \
-	return _this->knn_batch(queries, k, search_frac);                       \
-}
+    MatrixXi NAME ::knn_batch(const RowMatrixT & queries, int k,            \
+        float search_frac=-1)                                               \
+    {                                                                       \
+    	return _this->knn_batch(queries, k, search_frac);                   \
+    }
+
+// ------------------------ configuration
+
+#define KMEANS_INDEX_CONFIG_FUNCS(NAME)                                     \
+    bool NAME :: set_default_search_frac(float search_frac) {               \
+        nn::RuntimeIndexConfig cfg{};                                       \
+        cfg.default_search_frac = search_frac;                              \
+        return _this->configure(cfg);                                       \
+    }
 
 // KMEANS_INDEX_QUERY_FUNCS(KmeansIndex, VectorXd, RowMatrixXd);
 
 // ------------------------ top-level macro for convenience
 
 #define DEFINE_KMEANS_INDEX(NAME, ScalarT, VectorT, RowMatrixT, KmeansIndexT) \
-    KMEANS_INDEX_PIMPL(NAME, ScalarT, RowMatrixT, KmeansIndexT)             \
-    KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT)                      \
-    KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                     \
-    INDEX_STATS_FUNCS(NAME)
+    KMEANS_INDEX_PIMPL(NAME, ScalarT, RowMatrixT, KmeansIndexT)               \
+    KMEANS_INDEX_CTORS_DTOR(NAME, ScalarT, RowMatrixT)                        \
+    KMEANS_INDEX_QUERY_FUNCS(NAME, VectorT, RowMatrixT)                       \
+    INDEX_STATS_FUNCS(NAME)                                                   \
+    KMEANS_INDEX_CONFIG_FUNCS(NAME)
 
 // ------------------------ 1 level Kmeans index
 
