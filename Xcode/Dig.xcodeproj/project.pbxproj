@@ -27,6 +27,7 @@
 		72C419681C5337AD004689A2 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C419541C5337AD004689A2 /* main.cpp */; };
 		72C419691C5337AD004689A2 /* testing_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C419571C5337AD004689A2 /* testing_utils.cpp */; };
 		72C4196A1C5337AD004689A2 /* test_array_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C4195A1C5337AD004689A2 /* test_array_utils.cpp */; };
+		72C57CB41DDA69AA0019C906 /* profile_euclidean.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C57CB31DDA69AA0019C906 /* profile_euclidean.cpp */; };
 		72C81BE81C90B6EE00639302 /* flock.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE61C90B6EE00639302 /* flock.cpp */; };
 		72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BE91C90DC0100639302 /* shape_features.cpp */; };
 		72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C81BF01C93629D00639302 /* test_subseq.cpp */; };
@@ -430,6 +431,7 @@
 		72C4195A1C5337AD004689A2 /* test_array_utils.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_array_utils.cpp; sourceTree = "<group>"; };
 		72C4195B1C5337AD004689A2 /* test_array_utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test_array_utils.h; sourceTree = "<group>"; };
 		72C57CB21DCE9B820019C906 /* id_store.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = id_store.hpp; sourceTree = "<group>"; };
+		72C57CB31DDA69AA0019C906 /* profile_euclidean.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_euclidean.cpp; sourceTree = "<group>"; };
 		72C81BE61C90B6EE00639302 /* flock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = flock.cpp; sourceTree = "<group>"; };
 		72C81BE71C90B6EE00639302 /* flock.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = flock.hpp; sourceTree = "<group>"; };
 		72C81BE91C90DC0100639302 /* shape_features.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = shape_features.cpp; sourceTree = "<group>"; };
@@ -1265,6 +1267,7 @@
 		72C4194D1C5337AD004689A2 /* distance */ = {
 			isa = PBXGroup;
 			children = (
+				72C57CB31DDA69AA0019C906 /* profile_euclidean.cpp */,
 				72DED7591DB546FC00F3301F /* test_distance_speed.cpp */,
 				72A789D31DA1F372004F2D18 /* test_cluster.cpp */,
 				72E7147A1DB04BE000CE06EC /* test_euclidean.cpp */,
@@ -1385,6 +1388,7 @@
 				727207DD1DBFEF520014F72B /* profile_neighbors.cpp in Sources */,
 				72E714791DAFE6DB00CE06EC /* test_neighbors.cpp in Sources */,
 				72C81BE81C90B6EE00639302 /* flock.cpp in Sources */,
+				72C57CB41DDA69AA0019C906 /* profile_euclidean.cpp in Sources */,
 				721403B61D8B535100F8658F /* test_nn_index.cpp in Sources */,
 				72C419611C5337AD004689A2 /* dig.cpp in Sources */,
 				72C4196A1C5337AD004689A2 /* test_array_utils.cpp in Sources */,

@@ -29,18 +29,18 @@ static inline double durationMs(cputime_t t1, cputime_t t0) {
 class EasyTimer {
 public:
     using TimeT = double;
-    EasyTimer(TimeT* write_to, bool add=false):
+    EasyTimer(TimeT& write_to, bool add=false):
         _write_here(write_to), _tstart(timeNow()), _add(add) {}
     ~EasyTimer() {
         TimeT duration = static_cast<TimeT>(durationMs(_tstart, timeNow()));
         if (_add) {
-            *_write_here += duration;
+            _write_here += duration;
         } else {
-            *_write_here = duration;
+            _write_here = duration;
         }
     }
 private:
-    TimeT* _write_here;
+    TimeT& _write_here;
     cputime_t _tstart;
     bool _add;
 };

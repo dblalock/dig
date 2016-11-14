@@ -73,13 +73,13 @@ public:
     // ------------------------ single queries
     template<class... Args>
     vector<int64_t> radius(const VectorT& q, double radiusL2, Args&&... args) {
-        EasyTimer t(&_queryTimeMs);
+        EasyTimer t(_queryTimeMs);
         return _index.radius_idxs(q.transpose(), radiusL2,
             std::forward<Args>(args)...);
     }
     template<class... Args>
     vector<int64_t> knn(const VectorT& q, int k, Args&&... args) {
-        EasyTimer t(&_queryTimeMs);
+        EasyTimer t(_queryTimeMs);
         return _index.knn_idxs(q.transpose(), k, std::forward<Args>(args)...);
     }
 
@@ -88,14 +88,14 @@ public:
     MatrixXi radius_batch(const RowMatrixT& queries, double radiusL2,
         Args&&... args)
     {
-        EasyTimer t(&_queryTimeMs);
+        EasyTimer t(_queryTimeMs);
         auto nested_neighbors = _index.radius_batch_idxs(
             queries, radiusL2, std::forward<Args>(args)...);
         return idx_mat_from_nested_neighbor_idxs(nested_neighbors);
     }
     template<class... Args>
     MatrixXi knn_batch(const RowMatrixT& queries, int k, Args&&... args) {
-        EasyTimer t(&_queryTimeMs);
+        EasyTimer t(_queryTimeMs);
         auto nested_neighbors = _index.knn_batch_idxs(
             queries, k, std::forward<Args>(args)...);
         return idx_mat_from_nested_neighbor_idxs(nested_neighbors);

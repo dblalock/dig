@@ -47,8 +47,8 @@ template<class T, class U, REQUIRE_NUM(T), REQUIRE_NUM(U)>
 struct product_traits {
 	using type = decltype(std::declval<T>() + std::declval<U>());
 };
-template<class T, class U, int RetStorageOrder=Eigen::RowMajor, class _T=typename T::Scalar,
-		class _U=typename U::Scalar>
+template<class T, class U, int RetStorageOrder=Eigen::RowMajor,
+    class _T=typename T::Scalar, class _U=typename U::Scalar>
 struct mat_product_traits {
 	static constexpr int RowsAtCompileTime = T::RowsAtCompileTime;
 	static constexpr int ColsAtCompileTime = U::ColsAtCompileTime;

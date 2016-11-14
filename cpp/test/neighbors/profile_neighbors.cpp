@@ -33,7 +33,7 @@ inline void _prof_wrapper_index_with_query(MatrixT& X, IndexT& index,
     // for (int i = 0; i < 1; i++) {
         q.setRandom();
 
-        EasyTimer _(total_time, true); // true = add to value
+        EasyTimer _(*total_time, true); // true = add to value
 
         // ------------------------ radius
         // auto reasonable_dist = (X.row(0) - q).squaredNorm();
