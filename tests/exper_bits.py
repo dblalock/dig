@@ -22,6 +22,11 @@ def dists_sq(X, q):
     return np.sum(diffs * diffs, axis=-1)
 
 
+def dists_l1(X, q):
+    diffs = np.abs(X - q)
+    return np.sum(diffs, axis=-1)
+
+
 def dists_to_vects(X, q):
     row_norms = np.sum(X*X, axis=1, keepdims=True)
     q_norms = np.sum(q*q, axis=1)
@@ -122,48 +127,157 @@ class Normalizer(object):
 
 # ------------------------------------------------ Quantization (incl DBQ)
 
-def quantize(A, means, std, nbits=8, max_sigma=-1, normalize=True):
+def cutoff_quantize(A, thresholds):
+    out = np.empty(A.shape)
+    if len(thresholds.shape) == 1:
+        return np.digitize(A, thresholds)
+
+    for i, col in enumerate(A.T):
+        threshs = thresholds[:, i]  # use col i of threshs for col i of A
+        out[:, i] = np.digitize(col, threshs)
+
+    return out
+
+
+def gauss_quantize(A, means, std, nbits=8, max_sigma=-1, normalize=True):
+
     nbins = int(2 ** nbits)
     if max_sigma <= 0:
         # set this such that end bins each have 1/nbins of the distro
         max_sigma = -stats.norm.ppf(1. / nbins)
         max_sigma *= (nbins / 2) / ((nbins / 2) - 1)
+
+    # print "gauss_quantize: nbits = ", nbits
+    # print "gauss_quantize: nbins = ", nbins
+    # assert nbits == 2
+
     A_z = (A - means) / std if normalize else A
-    max_val = 2 ** int(nbits) - 1
+    max_val = 2 ** int(nbits - 1) - 1
+    # max_val = 2 ** int(nbits) - 1  # TODO remove after debug
     min_val = -(max_val + 1)
+
+    print "gauss_quantize: minval, maxval = ", min_val, max_val
+    # print "gauss_quantize: nbins = ", nbins
+    # assert nbits == 2
+
     scale_by = max_val / float(max_sigma)
     quantized = np.floor(A_z * scale_by)
     return np.clip(quantized, min_val, max_val).astype(np.int)
 
 
-def dbq(A, lower_threshs, upper_threshs):
+def fit_gauss_thresholds(A, nbits, shared=True, max_sigma=-1):
+    nbins = int(2 ** nbits)
+    quantiles = np.arange(1, nbins) / float(nbins)
+    threshs = stats.norm.ppf(quantiles)
+
+    thresholds = np.empty((nbins - 1, A.shape[1]))
+    means = np.mean(A, axis=0)
+    stds = np.std(A, axis=0)
+
+    if shared:
+        std = np.mean(stds)
+        # XXX assumes means subtracted off
+        # return threshs * std
+        for i, std in enumerate(stds):
+            thresholds[:, i] = threshs * std + means[i]
+    else:
+        # thresholds = np.empty(nbins - 1, A.shape[1])
+        for i, std in enumerate(stds):
+            thresholds[:, i] = threshs * std + means[i]
+
+    return thresholds
+
+    # if max_sigma <= 0:
+    #     # set this such that end bins each have 1/nbins of the distro
+    #     max_sigma = -stats.norm.ppf(1. / nbins)
+    #     max_sigma *= (nbins / 2) / ((nbins / 2) - 1)
+
+
+def fit_quantile_thresholds(X, nbits=-1, shared=True, nbins=-1):
+    if nbins < 1:
+        nbins = int(2 ** nbits)
+    quantiles = np.arange(1, nbins) / float(nbins)
+    if shared:
+        return np.percentile(X, q=quantiles, interpolation='midpoint')
+    return np.percentile(X, q=quantiles, axis=0, interpolation='midpoint')
+
+
+def fit_kmeans_thresholds(X, nbits, shared=True):
+    nbins = int(2 ** nbits)
+
+    if shared:  # one set of thresholds shared by all dims
+        centroids, _ = kmeans(X.ravel(), nbins)
+        return (centroids[:-1] + centroids[1:]) / 2.
+
+    # uniq set of thresholds for each dim
+    thresholds = np.empty(nbins - 1, X.shape[1])
+    for i, col in enumerate(X.T):
+        centroids, _ = kmeans(col, nbins)
+        midpoints = (centroids[:-1] + centroids[1:]) / 2.
+        thresholds[:, i] = midpoints
+    return thresholds
+
+
+def dbq_quantize(A, lower_threshs, upper_threshs):
     # we take sqrt so dist_sq() will yield hamming dist
-    return np.sqrt((A > lower_threshs).astype(np.float) + (A > upper_threshs))
-    # return (A > lower_threshs).astype(np.float) + (A > upper_threshs)
+    # EDIT: no, this is broken cuz (sqrt(2) - 1)^2 != (1 - 0)^2
+    # return np.sqrt((A > lower_threshs).astype(np.float) + (A > upper_threshs))
+    return (A > lower_threshs).astype(np.float) + (A > upper_threshs)
 
 
-def fit_dbq_thresholds(A):
-    # return np.percentile(A, q=[33, 67], axis=0, interpolation='midpoint')
-    return np.percentile(A, q=[33, 67], interpolation='midpoint')
+def fit_dbq_thresholds(A, shared=True):
+    # return fit_quantile_thresholds(A, nbins=2, shared=shared)
+    if shared:
+        return np.percentile(A, q=[33, 67], interpolation='midpoint')
+    return np.percentile(A, q=[33, 67], axis=0, interpolation='midpoint')
 
 
 class Quantizer(object):
     GAUSS = 'gauss'
     DBQ = 'dbq'
+    KMEANS = 'kmeans'
+    QUANTILE = 'quantile'
 
-    def __init__(self, X, nbits=2, how=GAUSS):
+    def __init__(self, X, nbits=2, how=GAUSS, shared_bins=True):
         self.X = X
         self.nbits = nbits
         self.how = how
         self.normalizer = Normalizer(X)  # just to store means and std
-        self.dbq_thresholds = fit_dbq_thresholds(X)
+        if how == Quantizer.DBQ:
+            self.dbq_thresholds = fit_dbq_thresholds(X, shared=shared_bins)
+        elif how == Quantizer.KMEANS:
+            self.kmeans_thresholds = fit_kmeans_thresholds(
+                X, nbits=nbits, shared=shared_bins)
+        elif how == Quantizer.QUANTILE:
+            self.kmeans_thresholds = fit_quantile_thresholds(
+                X, nbits=nbits, shared=shared_bins)
+        elif how == Quantizer.GAUSS:
+            self.gauss_thresholds = fit_gauss_thresholds(
+                X, nbits=nbits, shared=shared_bins)
+        else:
+            raise ValueError("Unrecognized quantization method: {}".format(how))
 
     def gauss_quantize(self, A, **kwargs):
-        return quantize(A, self.normalizer.means, self.normalizer.std,
-                        nbits=self.nbits, **kwargs)
+        # return cutoff_quantize(A, self.gauss_thresholds)
+        ret = cutoff_quantize(A, self.gauss_thresholds)
+        assert self.nbits == 2
+        # print "min, max quantized value: ", np.min(ret), np.max(ret)
+        assert np.min(ret) >= 0
+        assert np.max(ret) <= 3
+        return ret
+
+        # return gauss_quantize(A, self.normalizer.means, self.normalizer.std,
+        #                       nbits=self.nbits, **kwargs)
+        # ret = gauss_quantize(A, self.normalizer.means, self.normalizer.std,
+        #                       nbits=self.nbits, **kwargs)
+        # assert self.nbits == 2
+        # print "min, max quantized value: ", np.min(ret), np.max(ret)
+        # assert np.min(ret) >= -2
+        # assert np.max(ret) <= 1
+        # return ret
 
     def dbq_quantize(self, A, **kwargs):
-        return dbq(A, self.dbq_thresholds[0], self.dbq_thresholds[1])
+        return dbq_quantize(A, self.dbq_thresholds[0], self.dbq_thresholds[1])
 
     def transform(self, A, **kwargs):
         if self.how == Quantizer.DBQ:
@@ -316,6 +430,30 @@ class QuantizedRandomIsoHash(object):
         return self.quantizer.transform(ret)
 
 
+# ------------------------------------------------ Random rotation
+class RandomProjections(object):
+    def __init__(self, X, ndims=64, orthogonal=False):
+        self.ndims = ndims
+        self.hyperplanes = np.random.randn(ndims, X.shape[-1])
+        if orthogonal:
+            self.hyperplanes = orthogonalize_rows(self.hyperplanes)
+
+    def transform(self, X):
+        return np.dot(X, self.hyperplanes.T)
+
+
+class QuantizedRandomProjections(object):
+    def __init__(self, X, ndims=64, orthogonal=False,  **quantize_kwargs):
+        self.inner_sketch = RandomProjections(
+            X, ndims=ndims, orthogonal=orthogonal)
+        X = self.inner_sketch.transform(X)
+        self.quantizer = Quantizer(X, **quantize_kwargs)
+
+    def transform(self, X):
+        ret = self.inner_sketch.transform(X)
+        return self.quantizer.transform(ret)
+
+
 # ================================================================ Main
 
 def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=True):
@@ -326,7 +464,6 @@ def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=True):
     search_k = 20
     fracs = []
     for i, q in enumerate(queries):
-        # print "plotting stuff for query"
 
         all_true_dists = []
         all_bit_dists = []
@@ -357,8 +494,8 @@ def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=True):
         frac_below_max = float(num_below_max) / len(all_bit_dists)
         fracs.append(frac_below_max)
 
-        print "bit dists: {}; max = {:.1f};\tfrac = {:.4f}".format(
-            np.round(knn_bit_dists).astype(np.int), max_bit_dist, frac_below_max)
+        # print "bit dists: {}; max = {:.1f};\tfrac = {:.4f}".format(
+        #     np.round(knn_bit_dists).astype(np.int), max_bit_dist, frac_below_max)
 
     #     print stats.describe(all_true_dists)
     #     print stats.describe(all_bit_dists)
@@ -391,17 +528,23 @@ def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=True):
         # plt.plot(queries.T)
         plt.show()
 
+    stats = np.array(fracs)
+    print "mean, 90th pctile, std of fracs to search: " \
+        "{:.3f}, {:.3f}, {:.3f}".format(np.mean(stats),
+                                        np.percentile(stats, q=90),
+                                        np.std(stats))
+
     return fracs
 
 
 def main():
-    # N = -1  # set this to not limit real datasets to first N entries
-    N = 10 * 1000
+    N = -1  # set this to not limit real datasets to first N entries
+    # N = 10 * 1000
     # N = 500 * 1000
     # N = 1000 * 1000
     D = 128
     num_centroids = 256
-    num_queries = 20
+    num_queries = 128
 
     dataset_func = functools.partial(load_dataset_and_groups,
                                      num_centroids=num_centroids, N=N, D=D,
@@ -411,15 +554,15 @@ def main():
     # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)  # 1.002
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)  # 1.03
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_mean=True)  # 1.03
-    # dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
-    dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)  # 5ish?
+    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
+    # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)  # 5ish?
     # dataset = dataset_func(Datasets.GLOVE_200, norm_mean=True)  #
     # dataset = dataset_func(Datasets.SIFT_200, norm_mean=True)  #
     # dataset = dataset_func(Datasets.GLOVE, norm_mean=True)  #
     # dataset = dataset_func(Datasets.SIFT, norm_mean=True)  #
 
     # encoder = PcaSketch(dataset.X, 64)
-    encoder = RandomIsoHash(dataset.X, 64)
+    # encoder = RandomIsoHash(dataset.X, 64)
     # encoder = SampleDimsSketch(dataset.X, 64)
     # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
     # encoder = QuantizedRandomIsoHash(dataset.X, 32, nbits=2, how=Quantizer.GAUSS)
@@ -436,11 +579,27 @@ def main():
     # encoder = SuperbitLSH(dataset.X, 64, subvect_len=32)
     # encoder = SuperbitLSH(dataset.X, 64, subvect_len=64)
 
-    plot_embedding(dataset, encoder.transform)
+    print "------------------------ dbq l1"
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
+    plot_embedding(dataset, encoder.transform, dist_func=dists_l1, plot=False)
+
+    print "------------------------ dbq l2"
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
+    plot_embedding(dataset, encoder.transform, dist_func=dists_sq, plot=False)
+
+    # okay, so if we use 3 bits and 64 projections, gauss mean is < .01 for
+    # both glove100 and sift100; but if we use 2, it gets way worse
+
+    print "------------------------ gauss l1"
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS, shared_bins=False)
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
+    # encoder = QuantizedRandomProjections(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
+    plot_embedding(dataset, encoder.transform, dist_func=dists_l1, plot=False)
+
+    print "------------------------ gauss l2"
+    plot_embedding(dataset, encoder.transform, dist_func=dists_sq, plot=False)
 
     # X, q, centroids, groups = dataset
-
-
 
 
 if __name__ == '__main__':
