@@ -196,9 +196,10 @@ def fit_quantile_thresholds(X, nbits=-1, shared=True, nbins=-1):
     if nbins < 1:
         nbins = int(2 ** nbits)
     quantiles = np.arange(1, nbins) / float(nbins)
+    percentiles = quantiles * 100
     if shared:
-        return np.percentile(X, q=quantiles, interpolation='midpoint')
-    return np.percentile(X, q=quantiles, axis=0, interpolation='midpoint')
+        return np.percentile(X, q=percentiles, interpolation='midpoint')
+    return np.percentile(X, q=percentiles, axis=0, interpolation='midpoint')
 
 
 def fit_kmeans_thresholds(X, nbits, shared=True):  # for manhattan hashing
@@ -248,7 +249,7 @@ class Quantizer(object):
             self.kmeans_thresholds = fit_kmeans_thresholds(
                 X, nbits=nbits, shared=shared_bins)
         elif how == Quantizer.QUANTILE:
-            self.kmeans_thresholds = fit_quantile_thresholds(
+            self.quantile_thresholds = fit_quantile_thresholds(
                 X, nbits=nbits, shared=shared_bins)
         elif how == Quantizer.GAUSS:
             self.gauss_thresholds = fit_gauss_thresholds(
@@ -281,13 +282,15 @@ class Quantizer(object):
         assert np.min(ret) == 0
         assert np.max(ret) == 2
 
-    def transform(self, A, **kwargs):
+    def transform(self, A):
         if self.how == Quantizer.DBQ:
-            return self.dbq_quantize(A, **kwargs)
+            return self.dbq_quantize(A)
         elif self.how == Quantizer.KMEANS:
             return cutoff_quantize(A, self.kmeans_thresholds)
+        elif self.how == Quantizer.QUANTILE:
+            return cutoff_quantize(A, self.quantile_thresholds)
         elif self.how == Quantizer.GAUSS:
-            return self.gauss_quantize(A, **kwargs)
+            return self.gauss_quantize(A)
         else:
             raise ValueError("Unrecognized quantization method: {}".format(
                 self.how))
@@ -464,7 +467,7 @@ class QuantizedRandomProjections(object):
 
 # ================================================================ Main
 
-def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=True):
+def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=False):
     X, queries, centroids, groups = dataset
     if len(queries.shape) == 1:
         queries = [queries]
@@ -563,9 +566,9 @@ def main():
     # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)  # 1.002
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)  # 1.03
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_mean=True)  # 1.03
-    # dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
+    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
     # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)  # 5ish?
-    dataset = dataset_func(Datasets.GLOVE_200, norm_mean=True)  #
+    # dataset = dataset_func(Datasets.GLOVE_200, norm_mean=True)  #
     # dataset = dataset_func(Datasets.SIFT_200, norm_mean=True)  #
     # dataset = dataset_func(Datasets.GLOVE, norm_mean=True)  #
     # dataset = dataset_func(Datasets.SIFT, norm_mean=True)  #
@@ -592,29 +595,37 @@ def main():
 
     # print "------------------------ dbq l1"
     # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
-    # plot_embedding(dataset, encoder.transform, dist_func=dists_l1, plot=False)
+    # plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
     # print "------------------------ dbq l2"
     # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
-    # plot_embedding(dataset, encoder.transform, dist_func=dists_sq, plot=False)
+    # plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
 
-    print "------------------------ manhattan l1"
-    # note that we need shared_bins=False to mimic the paper
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS)
-    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS, shared_bins=False)
-    plot_embedding(dataset, encoder.transform, dist_func=dists_l1, plot=False)
+    # print "------------------------ manhattan l1"
+    # # note that we need shared_bins=False to mimic the paper
+    # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS)
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS, shared_bins=False)
+    # plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
-    print "------------------------ manhattan l2"
-    plot_embedding(dataset, encoder.transform, dist_func=dists_sq, plot=False)
+    # print "------------------------ manhattan l2"
+    # plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
 
     print "------------------------ gauss l1"
     # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS, shared_bins=False)
     encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
     # encoder = QuantizedRandomProjections(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
-    plot_embedding(dataset, encoder.transform, dist_func=dists_l1, plot=False)
+    plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
     print "------------------------ gauss l2"
-    plot_embedding(dataset, encoder.transform, dist_func=dists_sq, plot=False)
+    plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
+
+    print "------------------------ quantile l1"
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS, shared_bins=False)
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.QUANTILE)
+    plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
+
+    print "------------------------ quantile l2"
+    plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
 
 
 if __name__ == '__main__':
