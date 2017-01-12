@@ -4,18 +4,22 @@ import functools
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sb
+import time
 
 import kmc2
 from collections import namedtuple
 from scipy import stats
 from sklearn import cluster
 from sklearn.decomposition import TruncatedSVD
+from numba import jit
 
 from datasets import load_dataset, Datasets
 
 from joblib import Memory
-_memory = Memory('.', verbose=1)
+_memory = Memory('.', verbose=0)
 
+
+# ================================================================ Distances
 
 def dists_sq(X, q):
     diffs = X - q
@@ -27,12 +31,176 @@ def dists_l1(X, q):
     return np.sum(diffs, axis=-1)
 
 
+def _learn_expected_dists_for_diffs(X_embed, X_quant, base_dist_func=dists_sq,
+                                    samples_per_bin=1e3):
+    # TODO try fitting dists based on orig data, not embedded
+
+    assert np.array_equal(X_quant[:10], X_quant[:10].astype(np.int))
+    assert X_embed.shape == X_quant.shape
+
+    uniqs = np.unique(X_quant)
+    cardinality = len(uniqs)
+    dists = np.zeros(cardinality)
+    counts = np.zeros(cardinality)
+
+    assert np.max(uniqs) == (cardinality - 1)  # must be ints 0..b for some b
+
+    nsamples = int(counts.size * samples_per_bin)
+    for n in range(nsamples):
+        row1, row2 = np.random.randint(X_embed.shape[0], size=2)
+        col1, col2 = np.random.randint(X_embed.shape[1], size=2)
+        diff = np.abs(X_quant[row1, col1] - X_quant[row2, col2]).astype(np.int)
+        dist = base_dist_func(X_embed[row1, col1], X_embed[row2, col2])
+        counts[diff] += 1
+        dists[diff] += dist
+
+    assert np.min(counts) > 0
+    dists /= counts
+    return dists - np.min(dists)
+    # return dists / counts  # TODO uncomment
+    # return np.array([base_dist_func(i, 0) for i in np.arange(cardinality)])
+
+
+def learn_dists_func(X_embed, X_quant, base_dist_func=dists_sq,
+                     samples_per_bin=1e3):
+    """
+    Args:
+        X_embed (2D, array-like): the data just before quantization
+        X_quant (2D, array-like): quantized version of `X_embed`
+        base_dist_func (f(a, b) -> R+): function used to compute distances
+            between pairs of scalars
+        samples_per_bin (scalar > 0): the expected number of samples per bin
+
+    Returns:
+        f(X, q), a function with the same signature as `dists_sq` and `dists_l1`
+    """
+
+    expected_dists = _learn_expected_dists_for_diffs(
+        X_embed, X_quant, base_dist_func, samples_per_bin)
+
+    print "expected_dists: ", expected_dists
+
+    def f(X, q, expected_dists=expected_dists):
+        diffs = np.abs(X - q)
+        orig_shape = diffs.shape
+        # assert np.min(diffs)
+        dists = expected_dists[diffs.ravel().astype(np.int)]
+        return dists.reshape(orig_shape).sum(axis=-1)
+
+    return f
+
+
+def dists_elemwise_sq(x, q):
+    diffs = x - q
+    return diffs * diffs
+
+
+def dists_elemwise_l1(x, q):
+    return np.abs(x - q)
+
+
+def learn_query_lut(X_embed, X_quant, q_embed,
+                    elemwise_dist_func=dists_elemwise_sq, samples_per_bin=1e3):
+    assert np.array_equal(X_embed.shape, X_quant.shape)
+    # assert np.array_equal(q_embed.shape, q_quant.shape)
+    assert np.equal(X_embed.shape[-1], q_embed.shape[-1])
+
+    ndims = q_embed.shape[-1]
+    uniqs = np.unique(X_quant)
+    cardinality = len(uniqs)
+    distances = np.zeros((cardinality, ndims))
+    counts = np.zeros((cardinality, ndims))
+
+    # assert cardinality == 4  # TODO rm
+    assert np.max(uniqs) == (cardinality - 1)  # must be ints 0..b for some b
+
+    nsamples = min(int(cardinality * samples_per_bin), X_embed.shape[0])
+    all_cols = np.arange(ndims, dtype=np.int)
+    for n in range(nsamples):
+        bins = X_quant[n].astype(np.int)
+        dists = elemwise_dist_func(X_embed[n], q_embed)
+        counts[bins, all_cols] += 1
+        distances[bins, all_cols] += dists.ravel()
+
+    # TODO also learn avg dist and set scale factor such that avg point will
+    # just barely integer overflow
+
+    assert np.min(counts) > 0
+    return np.asfortranarray(distances / counts)
+
+
+# def _inner_dists_lut(X_quant, q_lut, all_cols):
+# @jit
+def _inner_dists_lut(X_quant, q_lut):
+    # ret = np.zeros(X_quant.shape[0])
+
+    # offset cols of X_quant so that col i has offset of i * `cardinality`;
+    # this will allow us to directly index into q_lut all at once
+    cardinality, ndims = q_lut.shape
+    offsets = np.arange(ndims, dtype=np.int) * cardinality
+    X_quant_offset = X_quant + offsets
+
+    dists = q_lut.T.ravel()[X_quant_offset.ravel()]
+    # dists = q_lut.T.ravel()[X_quant_offset.reshape(-1)]
+    dists = dists.reshape(X_quant.shape)
+    return np.sum(dists, axis=-1)
+
+    # ndims = q_lut.shape[-1]
+    # for i in range(X_quant.shape[0]):
+    #     row = X_quant[i]
+    # for i, row in enumerate(X_quant):
+        # for j in range(ndims):
+        #     ret[i] += q_lut[row[j], j]
+        # dists = q_lut[row, all_cols]
+        # ret[i] = np.sum(dists)
+
+    # return ret
+
+
+# @profile
+def dists_lut(X_quant, q_lut):  # q_lut is [cardinality, ndims]
+    """
+    >>> X_quant = np.array([[0, 2], [1, 0]], dtype=np.int)
+    >>> q_lut = np.array([[10, 11, 12], [20, 21, 22]]).T
+    >>> dists_lut(X_quant, q_lut)
+    array([ 32.,  31.])
+    """
+    assert X_quant.shape[-1] == q_lut.shape[-1]
+
+    # return dists_sq(X_quant, q_lut) # TODO rm  # yep, identical output
+
+    # ndims = q_lut.shape[-1]
+    X_quant = np.atleast_2d(X_quant.astype(np.int))
+    # all_cols = np.arange(ndims, dtype=np.int)
+
+    return _inner_dists_lut(X_quant, q_lut)
+
+    # cardinality, ndims = q_lut.shape
+    # offsets = np.arange(ndims, dtype=np.int) * cardinality
+    # X_quant_offset = X_quant + offsets
+
+    # dists = q_lut.T.ravel()[X_quant_offset.ravel()]
+    # # dists = q_lut.T.ravel()[X_quant_offset.reshape(-1)]
+    # dists = dists.reshape(X_quant.shape)
+    # return np.sum(dists, axis=-1)
+
+
 def dists_to_vects(X, q):
     row_norms = np.sum(X*X, axis=1, keepdims=True)
     q_norms = np.sum(q*q, axis=1)
     prods = np.dot(X, q.T)
     return -2 * prods + row_norms + q_norms
 
+
+def hamming_dist(v1, v2):
+    return np.count_nonzero(v1 != v2)
+
+
+def hamming_dists(X, q):
+    return np.array([hamming_dist(row, q) for row in X])
+
+
+# ================================================================ Misc
 
 def randwalk(*args):
     ret = np.random.randn(*args)
@@ -47,14 +215,6 @@ def top_k_idxs(elements, k, smaller_better=False):
     else:
         which_nn = len(elements) - 1 - np.arange(k)
         return np.argpartition(elements, kth=which_nn)[-k:][::-1]
-
-
-def hamming_dist(v1, v2):
-    return np.count_nonzero(v1 != v2)
-
-
-def hamming_dists(X, q):
-    return np.array([hamming_dist(row, q) for row in X])
 
 
 def find_knn(X, q, k):
@@ -86,7 +246,8 @@ def groups_from_labels(X, labels, num_centroids):
         groups[lbl].append(X[i])
 
     for i, g in enumerate(groups[:]):
-        groups[i] = np.array(g)
+        groups[i] = np.array(g, order='F')
+        # groups[i] = np.array(g)
 
     # group_sizes = [len(g) for g in groups]
     # huh; these are like 80% singleton clusters in 64D and 32 kmeans iters...
@@ -105,6 +266,7 @@ def load_dataset_and_groups(which_dataset, num_centroids=256,
     assert q.shape[-1] == X.shape[-1]
     centroids, labels = kmeans(X, num_centroids)
     groups = groups_from_labels(X, labels, num_centroids)
+
     return Dataset(X, q, centroids, groups)
 
 
@@ -128,7 +290,7 @@ class Normalizer(object):
 # ------------------------------------------------ Quantization (incl DBQ)
 
 def cutoff_quantize(A, thresholds):
-    out = np.empty(A.shape)
+    out = np.empty(A.shape, dtype=np.int)
     if len(thresholds.shape) == 1:
         return np.digitize(A, thresholds)
 
@@ -276,15 +438,17 @@ class Quantizer(object):
         # assert np.max(ret) <= 1
         # return ret
 
-    def dbq_quantize(self, A, **kwargs):
-        ret = dbq_quantize(A, self.dbq_thresholds[0], self.dbq_thresholds[1])
-        assert self.nbits == 2
-        assert np.min(ret) == 0
-        assert np.max(ret) == 2
+    # def dbq_quantize(self, A, **kwargs):
+    #     ret = dbq_quantize(A, self.dbq_thresholds[0], self.dbq_thresholds[1])
+    #     assert self.nbits == 2
+    #     assert np.min(ret) == 0
+    #     assert np.max(ret) == 2
 
     def transform(self, A):
         if self.how == Quantizer.DBQ:
-            return self.dbq_quantize(A)
+            return dbq_quantize(A, self.dbq_thresholds[0], self.dbq_thresholds[1])
+            # return self.dbq_quantize(A)
+            # return cutoff_quantize(A, self.dbq_thresholds)
         elif self.how == Quantizer.KMEANS:
             return cutoff_quantize(A, self.kmeans_thresholds)
         elif self.how == Quantizer.QUANTILE:
@@ -387,6 +551,12 @@ class QuantizedSampleDimsSketch(object):
 
 
 # ------------------------------------------------ PCA / IsoHash
+
+@_memory.cache
+def _fit_svd(X_train, n_components):
+    return TruncatedSVD(n_components=n_components).fit(X_train)
+
+
 class Pca(object):
     DEFAULT_MAX_NUM_DIMS = 64
 
@@ -394,7 +564,7 @@ class Pca(object):
         self.means = np.mean(X, axis=0)
         self.pre_normalizer = Normalizer(X)
         X_train = self.pre_normalizer.znormalize(X)
-        self.svd = TruncatedSVD(n_components=ndims + 1).fit(X_train)
+        self.svd = _fit_svd(X_train, ndims + 1)
 
         X_pca = self.transform(X_train, postnormalize=False)
         self.post_normalizer = Normalizer(X_pca)
@@ -467,14 +637,41 @@ class QuantizedRandomProjections(object):
 
 # ================================================================ Main
 
-def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=False):
+def create_q_encoding_func(X, encoder, elemwise_dist_func):
+    X_embed = encoder.inner_sketch.transform(X)
+    X_quant = encoder.quantizer.transform(X_embed)
+
+    def q_encoding_func(q, X_embed=X_embed, X_quant=X_quant,
+                        encoder=encoder, elemwise_dist_func=elemwise_dist_func):
+        q_embed = encoder.inner_sketch.transform(q)
+        return learn_query_lut(X_embed, X_quant, q_embed,
+                               elemwise_dist_func=elemwise_dist_func)
+
+    return q_encoding_func
+
+
+def eval_embedding(dataset, encoding_func, dist_func=dists_sq, plot=False,
+                   q_encoding_func=None, bits_dist_func=None):
     X, queries, centroids, groups = dataset
     if len(queries.shape) == 1:
-        queries = [queries]
+        queries = [queries.ravel()]
+
+    if q_encoding_func is None:
+        q_encoding_func = encoding_func
+    if bits_dist_func is None:
+        bits_dist_func = dist_func
 
     search_k = 20
     fracs = []
     for i, q in enumerate(queries):
+
+        # # print "q: ", q
+        # plt.plot(encoder.inner_sketch.transform(q))
+        q_bits = q_encoding_func(q)
+        # plt.plot(q_bits.T, 'r-')
+        # # # print "q lut: ", q_bits
+        # plt.show()
+        # return
 
         all_true_dists = []
         all_bit_dists = []
@@ -487,9 +684,8 @@ def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=False):
             all_true_dists.append(true_dists)
 
             X_bits = encoding_func(X)
-            q_bits = encoding_func(q).ravel()
 
-            bit_dists = dist_func(X_bits, q_bits)
+            bit_dists = bits_dist_func(X_bits, q_bits)
             all_bit_dists.append(bit_dists)
 
         all_true_dists = np.hstack(all_true_dists)
@@ -549,12 +745,15 @@ def plot_embedding(dataset, encoding_func, dist_func=dists_sq, plot=False):
 
 
 def main():
-    N = -1  # set this to not limit real datasets to first N entries
+    import doctest
+    # doctest.testmod()  # TODO uncomment after debug
+
+    # N = -1  # set this to not limit real datasets to first N entries
     # N = 10 * 1000
-    # N = 100 * 1000
+    N = 50 * 1000
     # N = 1000 * 1000
     D = 128
-    # D = 4
+    # D = 66
     num_centroids = 256
     num_queries = 128
 
@@ -566,8 +765,8 @@ def main():
     # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)  # 1.002
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)  # 1.03
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_mean=True)  # 1.03
-    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
-    # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)  # 5ish?
+    # dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
+    dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)  # 5ish?
     # dataset = dataset_func(Datasets.GLOVE_200, norm_mean=True)  #
     # dataset = dataset_func(Datasets.SIFT_200, norm_mean=True)  #
     # dataset = dataset_func(Datasets.GLOVE, norm_mean=True)  #
@@ -593,39 +792,91 @@ def main():
     # encoder = SuperbitLSH(dataset.X, 64, subvect_len=32)
     # encoder = SuperbitLSH(dataset.X, 64, subvect_len=64)
 
-    # print "------------------------ dbq l1"
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
-    # plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
+    print "------------------------ dbq l1"
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
-    # print "------------------------ dbq l2"
+    print "------------------------ dbq l2"
     # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
-    # plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq)
 
-    # print "------------------------ manhattan l1"
-    # # note that we need shared_bins=False to mimic the paper
-    # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS)
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS, shared_bins=False)
-    # plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
+    print "------------------------ manhattan l1"
+    # note that we need shared_bins=False to mimic the paper
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.KMEANS)
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+                                     how=Quantizer.KMEANS, shared_bins=False)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
-    # print "------------------------ manhattan l2"
-    # plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
+    print "------------------------ manhattan l2"
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq)
 
     print "------------------------ gauss l1"
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS, shared_bins=False)
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    #                                  how=Quantizer.GAUSS, shared_bins=False)
     encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
     # encoder = QuantizedRandomProjections(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
-    plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
     print "------------------------ gauss l2"
-    plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq)
 
-    print "------------------------ quantile l1"
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS, shared_bins=False)
-    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.QUANTILE)
-    plot_embedding(dataset, encoder.transform, dist_func=dists_l1)
+    print "------------------------ pca l1"
+    encoder = PcaSketch(dataset.X, 64)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_l1)
+
+    print "------------------------ pca l2"  # hmm; much better than quantized
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq)
+
+    print "------------------------ quantile l1"  # yep, same performance as gauss
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    #     how=Quantizer.QUANTILE, shared_bins=False)
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+                                     how=Quantizer.QUANTILE)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_l1)
 
     print "------------------------ quantile l2"
-    plot_embedding(dataset, encoder.transform, dist_func=dists_sq)
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq)
+
+    print "------------------------ q lut l1"
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=8,  # 8 -> same as pca
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=4,  # 4 -> little worse
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,  # 2 ->
+                                     how=Quantizer.QUANTILE, shared_bins=False)
+    q_encoding_func = create_q_encoding_func(dataset.X, encoder,
+                                             dists_elemwise_l1)
+    t1 = time.time()
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq,
+                   q_encoding_func=q_encoding_func, bits_dist_func=dists_lut)
+    print "time to compute dists with lut: ", time.time() - t1
+
+    print "------------------------ q lut l2"
+    # t0 = time.time()
+    q_encoding_func = create_q_encoding_func(dataset.X, encoder,
+                                             dists_elemwise_sq)
+    t1 = time.time()
+    # print "time to learn lut: ", t1 - t0
+
+    eval_embedding(dataset, encoder.transform, dist_func=dists_sq,
+                   q_encoding_func=q_encoding_func, bits_dist_func=dists_lut)
+
+    print "time to compute dists with lut: ", time.time() - t1
+
+    # print "===="
+    # TODO this should be encapsulated in the encoder and/or in a func
+    # that knows how to reach into encoders and just takes in X and the encoder
+    X_embed = encoder.inner_sketch.transform(dataset.X)
+    X_quant = encoder.quantizer.transform(X_embed)
+    learned_sq = learn_dists_func(X_embed, X_quant, base_dist_func=dists_sq)
+    learned_l1 = learn_dists_func(X_embed, X_quant, base_dist_func=dists_l1)
+
+    print "------------------------ quantile l1, learned dists"
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+                                     how=Quantizer.GAUSS, shared_bins=False)
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.QUANTILE)
+    eval_embedding(dataset, encoder.transform, dist_func=learned_l1)
+
+    print "------------------------ quantile l2, learned dists"
+    eval_embedding(dataset, encoder.transform, dist_func=learned_sq)
 
 
 if __name__ == '__main__':
