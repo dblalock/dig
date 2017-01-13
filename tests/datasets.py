@@ -74,11 +74,19 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
     else:
         raise ValueError("unrecognized dataset {}".format(which_dataset))
 
-    if N > 0 and N < X.shape[0]:
-        X = X[:N, :]
+    # if N > 0 and N < X.shape[0]:
+    #     X = X[:N, :]
 
     if which_dataset in Datasets.FILE_DATASETS:
         X, q = extract_random_rows(X, how_many=num_queries)
+
+        N = X.shape[0] if N < 1 else N
+        D = X.shape[1] if D < 1 else D
+        X = X[:N, :D]
+        if len(q.shape) > 1:
+            q = q[:, :D]
+        else:
+            q = q[:D]
 
     # if which_dataset in Datasets.FILE_DATASETS:
     #     if N > 0 and N < X.shape[0]:
