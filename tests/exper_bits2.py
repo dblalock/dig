@@ -555,7 +555,7 @@ class Pca(object):
     DEFAULT_MAX_NUM_DIMS = 64
 
     def __init__(self, X, ndims=DEFAULT_MAX_NUM_DIMS):
-        self.means = np.mean(X, axis=0)
+        self.ndims = ndims
         self.pre_normalizer = Normalizer(X)
         X_train = self.pre_normalizer.znormalize(X)
         # self.svd = _fit_svd(X_train, ndims + 1)
@@ -564,9 +564,9 @@ class Pca(object):
         X_pca = self.transform(X_train, postnormalize=False)
         self.post_normalizer = Normalizer(X_pca)
 
-    def transform(self, A, ndims=DEFAULT_MAX_NUM_DIMS, postnormalize=True):
+    def transform(self, A, postnormalize=True):
         A_in = self.pre_normalizer.znormalize(A)
-        A_pca = _pca(self.svd, A_in, ndims=ndims)
+        A_pca = _pca(self.svd, A_in, ndims=self.ndims)
         # A_pca = self.svd.transform(A_in)[:, 1:(ndims+1)]
         if postnormalize:
             return self.post_normalizer.znormalize(A_pca)
@@ -690,11 +690,18 @@ def _learn_centroids(X, ncentroids, nsubvects, subvect_len):
 
 class PQEncoder(object):
 
-    def __init__(self, dataset, code_bits=64, bits_per_subvect=8,
-                 elemwise_dist_func=dists_elemwise_sq):
+    def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
+                 nsubvects=-1, elemwise_dist_func=dists_elemwise_sq):
         X = dataset.X
+        if nsubvects < 0:
+            nsubvects = code_bits // bits_per_subvect
+        elif code_bits < 1:
+            code_bits = bits_per_subvect * nsubvects
+        elif bits_per_subvect < 1:
+            bits_per_subvect = code_bits // nsubvects
+
         self.elemwise_dist_func = elemwise_dist_func
-        self.nsubvects = code_bits // bits_per_subvect
+        self.nsubvects = nsubvects
         self.ncentroids = int(2 ** bits_per_subvect)
         self.subvect_len = X.shape[1] / self.nsubvects
 
@@ -750,10 +757,15 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     if len(queries.shape) == 1:
         queries = [queries]
 
+    # TODO: just encode dataset once, since we end up hitting each group
+    # more than one time when using many queries
+
     if dist_func_true is None:
         dist_func_true = encoder.dists_true
     if dist_func_enc is None:
         dist_func_enc = encoder.dists_enc
+
+    t0 = time.time()
 
     search_k = 20
     fracs = []
@@ -769,6 +781,10 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         idxs = top_k_idxs(dists_to_centroids, search_k, smaller_better=True)
         for idx in idxs:
             X = groups[idx]
+            if len(X) == 0:
+                print "Warning: group at idx {} had no elements!".format(idx)
+                continue
+
             true_dists = dist_func_true(X, q)
             all_true_dists.append(true_dists)
 
@@ -812,118 +828,13 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         plt.show()
 
     stats = np.array(fracs)
+    t = time.time() - t0
     if verbosity > 0:
         print "mean, 90th pctile, std of fracs to search: " \
-            "{:.3f}, {:.3f}, {:.3f}".format(np.mean(stats),
-                                            np.percentile(stats, q=90),
-                                            np.std(stats))
+            "{:.3f}, {:.3f}, {:.3f} ({:.1f}s)".format(
+                np.mean(stats), np.percentile(stats, q=90), np.std(stats), t)
 
     return fracs
-
-
-# def create_q_encoding_func(X, encoder, elemwise_dist_func):
-#     X_embed = encoder.inner_sketch.transform(X)
-#     X_quant = encoder.quantizer.transform(X_embed)
-
-#     def q_encoding_func(q, X_embed=X_embed, X_quant=X_quant,
-#                         encoder=encoder, elemwise_dist_func=elemwise_dist_func):
-#         q_embed = encoder.inner_sketch.transform(q)
-#         return learn_query_lut(X_embed, X_quant, q_embed,
-#                                elemwise_dist_func=elemwise_dist_func)
-
-#     return q_encoding_func
-
-
-# def eval_embedding(dataset, encoding_func, dist_func=dists_sq, plot=False,
-#                    q_encoding_func=None, bits_dist_func=None):
-#     X, queries, centroids, groups = dataset
-#     if len(queries.shape) == 1:
-#         queries = [queries.ravel()]
-
-#     if q_encoding_func is None:
-#         q_encoding_func = encoding_func
-#     if bits_dist_func is None:
-#         bits_dist_func = dist_func
-
-#     search_k = 20
-#     fracs = []
-#     for i, q in enumerate(queries):
-
-#         # # print "q: ", q
-#         # plt.plot(encoder.inner_sketch.transform(q))
-#         q_bits = q_encoding_func(q)
-#         # plt.plot(q_bits.T, 'r-')
-#         # # # print "q lut: ", q_bits
-#         # plt.show()
-#         # return
-
-#         all_true_dists = []
-#         all_bit_dists = []
-
-#         dists_to_centroids = dists_sq(centroids, q)
-#         idxs = top_k_idxs(dists_to_centroids, search_k, smaller_better=True)
-#         for idx in idxs:
-#             X = groups[idx]
-#             true_dists = dists_sq(X, q)
-#             all_true_dists.append(true_dists)
-
-#             X_bits = encoding_func(X)
-
-#             bit_dists = bits_dist_func(X_bits, q_bits)
-#             all_bit_dists.append(bit_dists)
-
-#         all_true_dists = np.hstack(all_true_dists)
-#         all_bit_dists = np.hstack(all_bit_dists)
-
-#         # ------------------------ begin analysis / reporting code
-
-#         knn_idxs = top_k_idxs(all_true_dists, 10, smaller_better=True)
-#         cutoff = all_true_dists[knn_idxs[-1]]
-#         knn_bit_dists = all_bit_dists[knn_idxs]
-#         max_bit_dist = np.max(knn_bit_dists)
-#         num_below_max = np.sum(all_bit_dists <= max_bit_dist)
-#         frac_below_max = float(num_below_max) / len(all_bit_dists)
-#         fracs.append(frac_below_max)
-
-#         # print "bit dists: {}; max = {:.1f};\tfrac = {:.4f}".format(
-#         #     np.round(knn_bit_dists).astype(np.int), max_bit_dist, frac_below_max)
-
-#     #     print stats.describe(all_true_dists)
-#     #     print stats.describe(all_bit_dists)
-#         if plot and i < 3:  # at most 3 plots
-#             # plt.figure()
-
-#             # xlim = [np.min(all_true_dists + .5), np.max(all_true_dists)]
-#             # xlim = [0, np.max(all_true_dists) / 2]
-#             # ylim = [-1, num_bits]
-#             # ylim = [-1, np.max(all_bit_dists) / 2]
-#             num_nn = min(10000, len(all_true_dists) - 1)
-#             xlim = [0, np.partition(all_true_dists, num_nn)[num_nn]]
-#             ylim = [0, np.partition(all_bit_dists, num_nn)[num_nn]]
-
-#             grid = sb.jointplot(x=all_true_dists, y=all_bit_dists,
-#                                 xlim=xlim, ylim=ylim, joint_kws=dict(s=10))
-
-#             # hack to bully the sb JointGrid into plotting a vert line
-#             grid.x = [cutoff, cutoff]
-#             grid.y = ylim
-#             grid.plot_joint(plt.plot, color='r', linestyle='--')
-
-#             # also make it plot cutoff in terms of quantized dist
-#             grid.x = xlim
-#             grid.y = [max_bit_dist, max_bit_dist]
-#             grid.plot_joint(plt.plot, color='k', linestyle='--')
-
-#     if plot:
-#         plt.show()
-
-#     stats = np.array(fracs)
-#     print "mean, 90th pctile, std of fracs to search: " \
-#         "{:.3f}, {:.3f}, {:.3f}".format(np.mean(stats),
-#                                         np.percentile(stats, q=90),
-#                                         np.std(stats))
-
-#     return fracs
 
 
 def main():
@@ -934,11 +845,11 @@ def main():
     N, D = -1, -1
 
     # N = -1  # set this to not limit real datasets to first N entries
-    # N = 10 * 1000
+    N = 10 * 1000
     # N = 50 * 1000
-    N = 100 * 1000
+    # N = 100 * 1000
     # N = 1000 * 1000
-    D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
     num_centroids = 256
     num_queries = 128
     # num_queries = 2
@@ -947,11 +858,12 @@ def main():
                                      num_centroids=num_centroids, N=N, D=D,
                                      num_queries=num_queries)
 
-    # dataset = dataset_func(Datasets.RAND_WALK, norm_len=True)  # 1.002
-    # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)  # 1.002
-    # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)  # 1.03
-    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
-    # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)  # 5ish?
+    # dataset = dataset_func(Datasets.RAND_WALK, norm_len=True)
+    # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)
+    # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)
+    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)
+    # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)
+    # dataset = dataset_func(Datasets.GIST_100, norm_mean=True)
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -981,44 +893,57 @@ def main():
     # print "------------------------ gauss l2"
     # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
-    print "------------------------ pq l2, 8 bit centroids idxs"
-    encoder = PQEncoder(dataset, code_bits=128, bits_per_subvect=8)
-    eval_encoder(dataset, encoder)
+    # print "------------------------ pq l2, 8x10 bit centroids idxs"
+    # # encoder = PQEncoder(dataset, code_bits=128, bits_per_subvect=8)
+    # encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=10)
+    # eval_encoder(dataset, encoder)
 
-    print "------------------------ pq l2, 4 bit centroid idxs"
-    encoder = PQEncoder(dataset, code_bits=128, bits_per_subvect=4)
-    eval_encoder(dataset, encoder)
+    # print "------------------------ pq l2, 8x8 bit centroids idxs"
+    # # encoder = PQEncoder(dataset, code_bits=128, bits_per_subvect=8)
+    # encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=8)
+    # eval_encoder(dataset, encoder)
 
-    print "------------------------ pca l1"
-    pca_encoder = PcaSketch(dataset.X, 64)
-    encoder = pca_encoder
-    eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    print "------------------------ pca l2"  # much better than quantized
-    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    # print "------------------------ pq l2, 16x6 bit centroid idxs"
+    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=6)
+    # eval_encoder(dataset, encoder)
 
-    print "------------------------ quantile l1"  # yep, same performance as gauss
-    # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-    # # #     how=Quantizer.QUANTILE, shared_bins=False)
-    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-                                     how=Quantizer.QUANTILE)
+    # print "------------------------ pq l2, 16x4 bit centroid idxs"
+    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
+    # eval_encoder(dataset, encoder)
+
+    # # print "------------------------ pca l1"
+    # # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
+    # encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
+    # # encoder = PcaSketch(dataset.X, 128)   # mu, 90th on gist100? .007 .001
+    # # encoder = PcaSketch(dataset.X, 256)   # mu, 90th on gist100? .005 .007
+    # # encoder = PcaSketch(dataset.X, 512)   # mu, 90th on gist100? .004, .006
     # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    print "------------------------ quantile l2"
-    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    # print "------------------------ pca l2"  # much better than quantized
+    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
-    print "------------------------ q lut l1"
-    inner_sketch = RandomIsoHash(dataset.X, 64)
-    encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
-                          elemwise_dist_func=dists_elemwise_l1,
-                          how=Quantizer.QUANTILE, shared_bins=True)
-    eval_encoder(dataset, encoder)
-    print "------------------------ q lut l2"
-    encoder.elemwise_dist_func = dists_elemwise_sq
-    encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
-                          elemwise_dist_func=dists_elemwise_sq,
-                          how=Quantizer.QUANTILE, shared_bins=False)
-    # encoder = BoltEncoder(dataset, inner_sketch=pca_encoder,
-    #                       elemwise_dist_func=dists_elemwise_sq)
-    eval_encoder(dataset, encoder, dist_func_true=dists_sq)
+    # print "------------------------ quantile l1"  # yep, same performance as gauss
+    # # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    # # # #     how=Quantizer.QUANTILE, shared_bins=False)
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    #                                  how=Quantizer.QUANTILE)
+    # # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
+    # print "------------------------ quantile l2"
+    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+
+    # print "------------------------ q lut l1"
+    # inner_sketch = RandomIsoHash(dataset.X, 64)
+    # encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
+    #                       elemwise_dist_func=dists_elemwise_l1,
+    #                       how=Quantizer.QUANTILE, shared_bins=True)
+    # eval_encoder(dataset, encoder)
+    # print "------------------------ q lut l2"
+    # encoder.elemwise_dist_func = dists_elemwise_sq
+    # encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
+    #                       elemwise_dist_func=dists_elemwise_sq,
+    #                       how=Quantizer.QUANTILE, shared_bins=False)
+    # # encoder = BoltEncoder(dataset, inner_sketch=pca_encoder,
+    # #                       elemwise_dist_func=dists_elemwise_sq)
+    # eval_encoder(dataset, encoder, dist_func_true=dists_sq)
 
     # ^ NOTE: seems to get much worse when we add top principal component
     # if inner_sketch is just raw pca
