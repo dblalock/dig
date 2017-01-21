@@ -4,6 +4,11 @@ import numpy as np
 from sklearn import cluster
 import kmc2  # state-of-the-art kmeans initialization (as of NIPS 2016)
 
+from joblib import Memory
+_memory = Memory('.', verbose=1)
+
+
+# ================================================================ Utils
 
 def dists_sq(X, q):
     diffs = X - q
@@ -24,9 +29,10 @@ def knn(X, q, k):
     return top_k_idxs(dists, k)
 
 
-def kmeans(X, k):
+@_memory.cache
+def kmeans(X, k, max_iter=16):
     seeds = kmc2.kmc2(X, k)
-    estimator = cluster.MiniBatchKMeans(k, init=seeds, max_iter=16).fit(X)
+    estimator = cluster.MiniBatchKMeans(k, init=seeds, max_iter=max_iter).fit(X)
     return estimator.cluster_centers_, estimator.labels_
 
 
@@ -35,39 +41,23 @@ def kmeans(X, k):
 #     return Q.T
 
 
-def learn_pq(X, ncentroids, nsubvects, subvect_len):
+# ================================================================ PQ
+
+def learn_pq(X, ncentroids, nsubvects, subvect_len, max_kmeans_iters=16):
     codebooks = np.empty((ncentroids, nsubvects, subvect_len))
-    assignments = np.empty((X.shape[0], nsubvects))
+    assignments = np.empty((X.shape[0], nsubvects), dtype=np.int)
+
+    print "codebooks shape: ", codebooks.shape
+
     for i in range(nsubvects):
         start_col = i * subvect_len
         end_col = start_col + subvect_len
         X_in = X[:, start_col:end_col]
-        centroids, labels = kmeans(X_in, ncentroids)
+        centroids, labels = kmeans(X_in, ncentroids, max_iter=max_kmeans_iters)
         codebooks[:, i, :] = centroids
         assignments[:, i] = labels
 
     return codebooks, assignments  # [2**nbits x M x D/M], [N x M]
-
-
-def _update_centroids_opq(X, assignments, ncentroids):  # [N x D], [N x M]
-    nsubvects = assignments.shape[1]
-    subvect_len = X.shape[1] // nsubvects
-
-    assert X.shape[0] == assignments.centroids[0]
-    assert X.shape[1] % ncentroids == 0
-
-    codebooks = np.zeros((ncentroids, nsubvects, subvect_len), dtype=np.float32)
-    for i, row in enumerate(X):
-        for m in range(nsubvects):
-            start_col = m * subvect_len
-            end_col = start_col + subvect_len
-            codebooks[assignments[i, m], m, :] += row[start_col:end_col]
-
-    for m in range(nsubvects):
-        code_counts = np.bincount(assignments[:, m]).reshape((-1, 1))
-        codebooks[:, m] /= np.maximum(code_counts, 1)  # preclude div by 0
-
-    return codebooks
 
 
 def reconstruct_X_pq(assignments, codebooks):
@@ -114,16 +104,66 @@ def _encode_X_pq(X, codebooks, elemwise_dist_func=_dists_elemwise_sq):
     return idxs  # [N x nsubvects]
 
 
-# based on https://github.com/arbabenko/Quantizations/blob/master/opqCoding.py
-def learn_opq(X, ncodebooks, codebook_bits=8, niters=20):
+# ================================================================ OPQ
 
-    X = X.astype(np.float32)
+def _update_centroids_opq(X, assignments, ncentroids):  # [N x D], [N x M]
+    nsubvects = assignments.shape[1]
+    subvect_len = X.shape[1] // nsubvects
+
+    assert X.shape[0] == assignments.shape[0]
+    assert X.shape[1] % nsubvects == 0
+
+    codebooks = np.zeros((ncentroids, nsubvects, subvect_len), dtype=np.float32)
+    for i, row in enumerate(X):
+        for m in range(nsubvects):
+            start_col = m * subvect_len
+            end_col = start_col + subvect_len
+            codebooks[assignments[i, m], m, :] += row[start_col:end_col]
+
+    for m in range(nsubvects):
+        code_counts = np.bincount(assignments[:, m]).reshape((-1, 1))
+        codebooks[:, m] /= np.maximum(code_counts, 1)  # preclude div by 0
+
+    return codebooks
+
+
+class NumericalException(Exception):
+    pass
+
+
+def _debug_rotation(R):
+    D = np.max(R.shape)
+    identity = np.identity(D, dtype=np.float32)
+    RtR = np.dot(R.T, R)
+
+    R_det = np.linalg.det(RtR)
+    print "determinant of R*R: ", R_det
+    R_trace = np.trace(RtR)
+    print "trace of R*R, trace divided by D: {}, {}".format(R_trace, R_trace / D)
+    off_diagonal_abs_mean = np.mean(np.abs(RtR - identity))
+    print "mean(abs(off diagonals of R*R)): ", off_diagonal_abs_mean
+
+    if R_det < .999 or R_det > 1.001:
+        raise NumericalException("Bad determinant")
+    if R_trace < .999 * D or R_trace > 1.001 * D:
+        raise NumericalException("Bad trace")
+    if off_diagonal_abs_mean > .001:
+        raise NumericalException("Bad off-diagonals")
+
+
+# based on https://github.com/arbabenko/Quantizations/blob/master/opqCoding.py
+def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
+              initial_kmeans_iters=1, debug=False):
+
+    X = X_train.astype(np.float32)
     N, D = X.shape
     ncentroids = int(2**codebook_bits)
     subvect_len = D // ncodebooks
     # codebook_indices = np.arange(ncodebooks, dtype=np.int)
 
-    assert D % ncentroids == 0  # equal number of dims for each codebook
+    normalize_mse_by = np.var(X)
+
+    assert D % subvect_len == 0  # equal number of dims for each codebook
 
     R = np.identity(D, dtype=np.float32)  # D x D
     # X_rotated = np.dot(X, R.T)  # (N x D) * (D x D) = N x D
@@ -131,8 +171,10 @@ def learn_opq(X, ncodebooks, codebook_bits=8, niters=20):
     # initialize codebooks by running kmeans on each rotated dim; this way,
     # setting niters=0 corresponds to normal PQ
     X_rotated = X
-    codebooks, assignments = learn_pq(X_rotated, ncentroids=ncodebooks,
-                                      nsubvects=ncentroids, subvect_len=subvect_len)
+    codebooks, assignments = learn_pq(X_rotated, ncentroids=ncentroids,
+                                      nsubvects=ncodebooks,
+                                      subvect_len=subvect_len,
+                                      max_kmeans_iters=1)
     # alternative: initialize codebooks by sampling randomly from the data
     # codebooks = np.zeros((ncodebooks, ncentroids, subvect_len))
     # all_idxs = np.arange(N, dtype=np.int)
@@ -142,72 +184,76 @@ def learn_opq(X, ncodebooks, codebook_bits=8, niters=20):
     #     end_col = start_col + subvect_len
     #     codebooks[:, m, :] = X_rotated[rand_idxs, start_col:end_col]
 
+    prev_err = np.inf
+    prev_codebooks = None
+    prev_assignments = None
     for it in np.arange(niters):
         # compute reconstruction errors
         X_hat = reconstruct_X_pq(assignments, codebooks)
         errors = X_rotated - X_hat
-        print "OPQ iter {}: elementwise mse = {}".format(
-            it, np.mean(errors * errors))
+        err = np.mean(errors * errors) / normalize_mse_by
+        print "---- OPQ iter {}: mse / variance = {}".format(it, err)
+
+        if err > prev_err:
+            print "WARNING: OPQ began to diverge"
+            try:
+                _debug_rotation(R)
+            except NumericalException:
+                pass
+            codebooks = prev_codebooks
+            assignments = prev_assignments
+            break  # computation is diverging
+        prev_err = err
 
         # update rotation matrix based on reconstruction errors
         U, s, V = np.linalg.svd(np.dot(X_hat.T, X), full_matrices=False)
         R = np.dot(U, V)
 
+        if debug:
+            try:
+                _debug_rotation(R)
+            except NumericalException as e:
+                raise e
+
         # update centroids using new rotation matrix
         X_rotated = np.dot(X, R.T)
+        prev_codebooks = codebooks
+        prev_assignments = assignments
         codebooks = _update_centroids_opq(X, assignments, ncentroids)
         assignments = _encode_X_pq(X_rotated, codebooks)
 
     X_hat = reconstruct_X_pq(assignments, codebooks)
     errors = X_rotated - X_hat
-    print "OPQ iter {}: elementwise mse = {}".format(
-        niters, np.mean(errors * errors))
+    err = np.mean(errors * errors) / normalize_mse_by
+    print "---- OPQ final mse / variance = {}".format(err)
 
     return codebooks, assignments, R
 
-    # R = np.identity(dim)
-    # rotatedPoints = np.dot(points, R.T).astype('float32')
-    # codebookDim = dim / M
-    # codebooks = np.zeros((M, K, codebookDim), dtype='float32')
-    # # init vocabs
-    # for i in xrange(M):
-    #     perm = np.random.permutation(pointsCount)
-    #     codebooks[i, :, :] = rotatedPoints[perm[:K], codebookDim*i:codebookDim*(i+1)].copy()
-    # # init assignments
-    # assigns = np.zeros((pointsCount, M), dtype='int32')
-    # for i in xrange(M):
-    #     (idx, dis) = ynumpy.knn(rotatedPoints[:,codebookDim*i:codebookDim*(i+1)].astype('float32'), codebooks[i,:,:], nt=30)
-    #     assigns[:,i] = idx.flatten()
-    # for it in xrange(ninit):
-    #     approximations = reconstruct_X_pq(assigns, codebooks)
-    #     errors = rotatedPoints - approximations
-    #     error = 0
-    #     for pid in xrange(pointsCount):
-    #         error += np.dot(errors[pid,:], errors[pid,:].T)
-    #     print 'Quantization error: ' + str(error / pointsCount)
-    #     U, s, V = np.linalg.svd(np.dot(approximations.T, points), full_matrices=False)
-    #     R = np.dot(U, V)
-    #     rotatedPoints = np.dot(points, R.T).astype('float32')
-    #     for m in xrange(M):
-    #         counts = np.bincount(assigns[:,m])
-    #         for k in xrange(K):
-    #             codebooks[m,k,:] = np.sum(rotatedPoints[assigns[:,m]==k,codebookDim*m:codebookDim*(m+1)], axis=0) / counts[k]
-    #     for m in xrange(M):
-    #         subpoints = rotatedPoints[:,codebookDim*m:codebookDim*(m+1)].copy()
-    #         (idx, dis) = ynumpy.knn(subpoints, codebooks[m,:,:], nt=30)
-    #         assigns[:,m] = idx.flatten()
-    # error = 0
-    # for m in xrange(M):
-    #     subpoints = rotatedPoints[:,m*codebookDim:(m+1)*codebookDim].copy()
-    #     (idx, dis) = ynumpy.knn(subpoints, codebooks[m,:,:], nt=2)
-    #     error += np.sum(dis.flatten())
-    # print 'Quantization error: ' + str(error / pointsCount)
-    # model = (codebooks, R)
-
-
 
 def main():
-    pass
+    import datasets
+    # tmp = datasets.load_dataset(
+    X_train, Q, X_test, truth = datasets.load_dataset(
+        # datasets.Random.UNIFORM, N=1000, D=64)
+        # datasets.Glove.TEST_100, N=10000)
+        # datasets.Glove.TEST_100, N=100000)
+        # datasets.Sift1M.TEST_100, N=100000)
+        # datasets.Gist.TEST_100, N=50000)
+        # datasets.Glove.TEST_100, D=96)
+        datasets.Random.BLOBS, N=10000, D=96)
+
+    # print X_train.shape
+
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=0)
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=2)
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=20, debug=True)
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=20)
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=8, niters=20)
+
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=0,
+    #                                       initial_kmeans_iters=16)
+
+
 
 if __name__ == '__main__':
     main()
