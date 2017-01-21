@@ -3,6 +3,7 @@
 # import functools
 import os
 import numpy as np
+from sklearn.datasets.samples_generator import make_blobs
 
 from joblib import Memory
 _memory = Memory('.', verbose=1)
@@ -11,37 +12,11 @@ DATA_DIR = os.path.expanduser('~/Desktop/datasets/nn-search')
 join = os.path.join
 
 
-# class Datasets:
-#     RAND_UNIF = 0
-#     RAND_GAUSS = 1
-#     RAND_WALK = 2
-#     GLOVE = 10
-#     GLOVE_100 = 11
-#     GLOVE_200 = 12
-#     SIFT = 20
-#     SIFT_100 = 21
-#     SIFT_200 = 22
-#     GIST = 30
-#     GIST_100 = 31
-#     GIST_200 = 32
-#     # GIST_QUERIES = 33
-
-#     RAND_DATASETS = [RAND_UNIF, RAND_GAUSS, RAND_WALK]
-#     FILE_DATASETS = [GLOVE, GLOVE_100, GLOVE_200,
-#                      SIFT, SIFT_100, SIFT_200,
-#                      GIST, GIST_100, GIST_200]
-
-
-# RAND_DATASETS = [RAND_UNIF, RAND_GAUSS, RAND_WALK]
-# FILE_DATASETS = [GLOVE, GLOVE_100, GLOVE_200,
-#                  SIFT, SIFT_100, SIFT_200,
-#                  GIST, GIST_100, GIST_200]
-
-
 class Random:
     UNIFORM = 'uniform'
     GAUSS = 'gauss'
     WALK = 'walk'
+    BLOBS = 'blobs'
 
 
 class Gist:
@@ -149,6 +124,15 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
             X_train = np.cumsum(X_train)
         Q = np.random.randn(num_queries, D)
         Q = np.cumsum(Q, axis=-1)
+    elif which_dataset == Random.BLOBS:
+        # centers is D x D, and centers[i, j] = (i + j)
+        centers = np.arange(D)
+        centers = np.sum(np.meshgrid(centers, centers), axis=0)
+        X_test, _ = make_blobs(n_samples=N, centers=centers)
+        X_train = X_test
+        if Ntrain > 0:
+            X_train, _ = make_blobs(n_samples=Ntrain, centers=centers)
+        Q, true_nn = make_blobs(n_samples=num_queries, centers=centers)
 
     # datasets that are just one block of a "real" dataset
     elif isinstance(which_dataset, str):
@@ -157,33 +141,9 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
         X_train = X_test
         true_nn = _ground_truth_for_dataset(which_dataset)
 
+    # "real" datasets with predefined train, test, queries, truth
     elif which_dataset in (Glove, Gist, Sift1M, Sift10M):
         X_train, Q, X_test, true_nn = _load_complete_dataset(which_dataset)
-
-
-    # return _load_complete_dataset(which_dataset, N, D)
-        # X_train =
-
-    # elif which_dataset == Glove.TEST:
-    #     X = cached_load(Glove.TEST)
-    # elif which_dataset == Datasets.GLOVE_100:
-    #     X = cached_load(Glove.TEST_100)
-    # elif which_dataset == Datasets.GLOVE_200:
-    #     X = cached_load(Glove.TEST_200)
-
-    # elif which_dataset == Datasets.SIFT:
-    #     X = cached_load(Sift.TEST)
-    # elif which_dataset == Datasets.SIFT_100:
-    #     X = cached_load(Sift.TEST_100)
-    # elif which_dataset == Datasets.SIFT_200:
-    #     X = cached_load(Sift.TEST_200)
-
-    # elif which_dataset == Datasets.GIST:
-    #     X = np.load(Gist.TEST)
-    # elif which_dataset == Datasets.GIST_100:
-    #     X = np.load(Gist.TEST_100)
-    # elif which_dataset == Datasets.GIST_200:
-    #     X = np.load(Gist.TEST_200)
 
     else:
         raise ValueError("unrecognized dataset {}".format(which_dataset))
