@@ -13,7 +13,7 @@ from sklearn import cluster
 from sklearn.decomposition import TruncatedSVD
 # from numba import jit
 
-from datasets import load_dataset, Datasets
+import datasets
 
 from joblib import Memory
 _memory = Memory('.', verbose=0)
@@ -232,18 +232,21 @@ def groups_from_labels(X, labels, num_centroids):
     return groups
 
 
-@_memory.cache
+@_memory.cache  # TODO use X_train and X_test separately, as well as truth idxs
 def load_dataset_and_groups(which_dataset, num_centroids=256,
                             **load_dataset_kwargs):
-    X, q = load_dataset(which_dataset, **load_dataset_kwargs)
+    X_train, q, X_test, true_nn = datasets.load_dataset(
+        which_dataset, **load_dataset_kwargs)
+    X = X_train  # TODO use train vs test
     assert q.shape[-1] == X.shape[-1]
     centroids, labels = kmeans(X, num_centroids)
     groups = groups_from_labels(X, labels, num_centroids)
 
-    return Dataset(X, q, centroids, groups)
+    return Dataset(X, q, X, X_test, true_nn, centroids, groups)
 
 
-Dataset = namedtuple('Dataset', ['X', 'q', 'centroids', 'groups'])
+Dataset = namedtuple('Dataset', [
+    'X', 'q', 'X_train', 'X_test', 'true_nn', 'centroids', 'groups'])
 
 
 # ================================================================ Preproc
@@ -742,7 +745,7 @@ class PQEncoder(object):
         return self
 
     def dists_enc(self, X_enc, q_unused):
-        # this line has each element of X_enc index to the flattened
+        # this line has each element of X_enc index into the flattened
         # version of q's distances to the centroids; we had to add
         # offsets to each col of X_enc above for this to work
         centroid_dists = self.q_dists_.T.ravel()[X_enc.ravel()]
@@ -753,7 +756,12 @@ class PQEncoder(object):
 
 def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
                  verbosity=1, plot=False):
-    X, queries, centroids, groups = dataset
+    # X, queries, centroids, groups = dataset
+    X = dataset.X
+    queries = dataset.q
+    centroids = dataset.centroids
+    groups = dataset.groups
+
     if len(queries.shape) == 1:
         queries = [queries]
 
@@ -845,11 +853,11 @@ def main():
     N, D = -1, -1
 
     # N = -1  # set this to not limit real datasets to first N entries
-    N = 10 * 1000
-    # N = 50 * 1000
+    # N = 10 * 1000
+    N = 50 * 1000
     # N = 100 * 1000
     # N = 1000 * 1000
-    # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
     num_centroids = 256
     num_queries = 128
     # num_queries = 2
@@ -861,7 +869,7 @@ def main():
     # dataset = dataset_func(Datasets.RAND_WALK, norm_len=True)
     # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)
     # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)
-    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)
+    dataset = dataset_func(datasets.Glove.TEST_100, norm_mean=True)
     # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)
     # dataset = dataset_func(Datasets.GIST_100, norm_mean=True)
 
@@ -871,27 +879,27 @@ def main():
     #     dataset = dataset._replace(X=np.hstack((dataset.X, padding)))
     #     padding = np.zeros((dataset.X.shape[0], D - ncols))
 
-    # print "------------------------ dbq l1"
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    # print "------------------------ dbq l2"
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    print "------------------------ dbq l1"
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.DBQ)
+    eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
+    print "------------------------ dbq l2"
+    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
-    # print "------------------------ manhattan l1"
-    # # # note that we need shared_bins=False to mimic the paper
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-    #                                  how=Quantizer.KMEANS, shared_bins=False)
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    # print "------------------------ manhattan l2"
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    print "------------------------ manhattan l1"
+    # # note that we need shared_bins=False to mimic the paper
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+                                     how=Quantizer.KMEANS, shared_bins=False)
+    eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
+    print "------------------------ manhattan l2"
+    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
-    # print "------------------------ gauss l1"
-    # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-    # #                                  how=Quantizer.GAUSS, shared_bins=False)
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    # print "------------------------ gauss l2"
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    print "------------------------ gauss l1"
+    # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    #                                  how=Quantizer.GAUSS, shared_bins=False)
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2, how=Quantizer.GAUSS)
+    eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
+    print "------------------------ gauss l2"
+    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
     # print "------------------------ pq l2, 8x10 bit centroids idxs"
     # # encoder = PQEncoder(dataset, code_bits=128, bits_per_subvect=8)
@@ -907,43 +915,43 @@ def main():
     # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=6)
     # eval_encoder(dataset, encoder)
 
-    # print "------------------------ pq l2, 16x4 bit centroid idxs"
-    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
-    # eval_encoder(dataset, encoder)
+    print "------------------------ pq l2, 16x4 bit centroid idxs"
+    encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
+    eval_encoder(dataset, encoder)
 
-    # # print "------------------------ pca l1"
-    # # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
-    # encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
-    # # encoder = PcaSketch(dataset.X, 128)   # mu, 90th on gist100? .007 .001
-    # # encoder = PcaSketch(dataset.X, 256)   # mu, 90th on gist100? .005 .007
-    # # encoder = PcaSketch(dataset.X, 512)   # mu, 90th on gist100? .004, .006
+    # print "------------------------ pca l1"
+    # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
+    encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
+    # encoder = PcaSketch(dataset.X, 128)   # mu, 90th on gist100? .007 .001
+    # encoder = PcaSketch(dataset.X, 256)   # mu, 90th on gist100? .005 .007
+    # encoder = PcaSketch(dataset.X, 512)   # mu, 90th on gist100? .004, .006
+    # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
+    print "------------------------ pca l2"  # much better than quantized
+    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+
+    print "------------------------ quantile l1"  # yep, same performance as gauss
+    # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    # # #     how=Quantizer.QUANTILE, shared_bins=False)
+    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+                                     how=Quantizer.QUANTILE)
     # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    # print "------------------------ pca l2"  # much better than quantized
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
-
-    # print "------------------------ quantile l1"  # yep, same performance as gauss
-    # # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-    # # # #     how=Quantizer.QUANTILE, shared_bins=False)
-    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-    #                                  how=Quantizer.QUANTILE)
-    # # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    # print "------------------------ quantile l2"
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    print "------------------------ quantile l2"
+    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
     # print "------------------------ q lut l1"
-    # inner_sketch = RandomIsoHash(dataset.X, 64)
-    # encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
-    #                       elemwise_dist_func=dists_elemwise_l1,
-    #                       how=Quantizer.QUANTILE, shared_bins=True)
+    inner_sketch = RandomIsoHash(dataset.X, 64)
+    encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
+                          elemwise_dist_func=dists_elemwise_l1,
+                          how=Quantizer.QUANTILE, shared_bins=True)
     # eval_encoder(dataset, encoder)
-    # print "------------------------ q lut l2"
-    # encoder.elemwise_dist_func = dists_elemwise_sq
-    # encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
-    #                       elemwise_dist_func=dists_elemwise_sq,
-    #                       how=Quantizer.QUANTILE, shared_bins=False)
-    # # encoder = BoltEncoder(dataset, inner_sketch=pca_encoder,
-    # #                       elemwise_dist_func=dists_elemwise_sq)
-    # eval_encoder(dataset, encoder, dist_func_true=dists_sq)
+    print "------------------------ q lut l2"
+    encoder.elemwise_dist_func = dists_elemwise_sq
+    encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
+                          elemwise_dist_func=dists_elemwise_sq,
+                          how=Quantizer.QUANTILE, shared_bins=False)
+    # encoder = BoltEncoder(dataset, inner_sketch=pca_encoder,
+    #                       elemwise_dist_func=dists_elemwise_sq)
+    eval_encoder(dataset, encoder, dist_func_true=dists_sq)
 
     # ^ NOTE: seems to get much worse when we add top principal component
     # if inner_sketch is just raw pca
