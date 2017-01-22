@@ -719,32 +719,6 @@ def _fit_opq_lut(q, centroids, elemwise_dist_func):
     return np.asfortranarray(q_dists_)
 
 
-class OPQEncoder(object):
-
-    def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
-                 nsubvects=-1, elemwise_dist_func=dists_elemwise_sq):
-        X = dataset.X
-        self.elemwise_dist_func = elemwise_dist_func
-
-        tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
-                                     bits_per_subvect=bits_per_subvect,
-                                     nsubvects=nsubvects)
-        self.nsubvects, self.ncentroids, self.subvect_len = tmp
-
-        # for fast lookups via indexing into flattened array
-        self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
-
-        # assert code_bits % bits_per_subvect == 0
-        # assert X.shape[1] % self.subvect_len == 0  # TODO rm this constraint
-
-
-        # SELF: pick up here
-
-
-        # self.centroids = _learn_centroids(X, self.ncentroids, self.nsubvects,
-        #                                   self.subvect_len)
-
-
 class PQEncoder(object):
 
     def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
@@ -752,17 +726,6 @@ class PQEncoder(object):
         X = dataset.X
         self.elemwise_dist_func = elemwise_dist_func
 
-        # if nsubvects < 0:
-        #     nsubvects = code_bits // bits_per_subvect
-        # elif code_bits < 1:
-        #     code_bits = bits_per_subvect * nsubvects
-        # elif bits_per_subvect < 1:
-        #     bits_per_subvect = code_bits // nsubvects
-
-        # self.nsubvects = nsubvects
-        # self.ncentroids = int(2 ** bits_per_subvect)
-        # self.subvect_len = X.shape[1] / self.nsubvects
-
         tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
                                      bits_per_subvect=bits_per_subvect,
                                      nsubvects=nsubvects)
@@ -771,27 +734,17 @@ class PQEncoder(object):
         # for fast lookups via indexing into flattened array
         self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
 
-        # assert code_bits % bits_per_subvect == 0
-        # assert X.shape[1] % self.subvect_len == 0  # TODO rm this constraint
+        # self.centroids, _, _ = quantize.learn_opq(
+        #     X, ncodebooks=nsubvects, niters=0)
 
         self.centroids = _learn_centroids(X, self.ncentroids, self.nsubvects,
                                           self.subvect_len)
 
     def encode_X(self, X, **sink):
-        assert X.shape[1] == (self.nsubvects * self.subvect_len)
-
         idxs = quantize._encode_X_pq(X, codebooks=self.centroids,
                                      elemwise_dist_func=self.elemwise_dist_func)
-
-        # idxs = np.empty((X.shape[0], self.nsubvects), dtype=np.int)
-        # X = X.reshape((X.shape[0], self.nsubvects, self.subvect_len))
-        # for i, row in enumerate(X):
-        #     row = row.reshape((1, self.nsubvects, self.subvect_len))
-        #     dists = self.elemwise_dist_func(self.centroids, row)
-        #     dists = np.sum(dists, axis=-1)
-        #     idxs[i, :] = np.argmin(dists, axis=0)
-
         return idxs + self.offsets  # offsets let us index into raveled dists
+        # return idxs
 
     def encode_q(self, q, **sink):
         return None  # we use fit_query() instead, so fail fast
@@ -803,12 +756,12 @@ class PQEncoder(object):
         self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
                                      elemwise_dist_func=self.elemwise_dist_func)
 
-        # assert len(q) == self.nsubvects * self.subvect_len
-        # q = q.reshape((1, self.nsubvects, self.subvect_len))
-        # self.q_dists_ = self.elemwise_dist_func(self.centroids, q)
-        # self.q_dists_ = np.sum(self.q_dists_, axis=-1)
-        # self.q_dists_ = np.asfortranarray(self.q_dists_)
-        # return self
+    # def dists_enc(self, X_enc, q_unused):
+    #     dists = np.zeros(X_enc.shape[0])
+    #     for i, row in enumerate(X_enc):
+    #         for j, idx in enumerate(row):
+    #             dists[i] += self.q_dists_[idx, j]
+    #     return dists
 
     def dists_enc(self, X_enc, q_unused):
         # this line has each element of X_enc index into the flattened
@@ -816,6 +769,68 @@ class PQEncoder(object):
         # offsets to each col of X_enc above for this to work
         centroid_dists = self.q_dists_.T.ravel()[X_enc.ravel()]
         return np.sum(centroid_dists.reshape(X_enc.shape), axis=-1)
+
+
+class OPQEncoder(PQEncoder):
+
+    def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
+                 nsubvects=-1, elemwise_dist_func=dists_elemwise_sq,
+                 opq_iters=20):
+        X = dataset.X
+        self.elemwise_dist_func = elemwise_dist_func
+
+        tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
+                                     bits_per_subvect=bits_per_subvect,
+                                     nsubvects=nsubvects)
+        self.nsubvects, self.ncentroids, self.subvect_len = tmp
+
+        # for fast lookups via indexing into flattened array
+        self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
+
+        self.centroids, _, self.R = quantize.learn_opq(
+            X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
+            niters=opq_iters)
+
+    def encode_X(self, X, **sink):
+        X = quantize.opq_rotate(X, self.R)
+        idxs = quantize._encode_X_pq(X, codebooks=self.centroids,
+                                     elemwise_dist_func=self.elemwise_dist_func)
+
+        # hmm...really small numbers just like in opq func
+        # X_hat = quantize.reconstruct_X_pq(idxs, self.centroids)
+        # errors = X - X_hat
+        # err = np.mean(errors * errors) / np.var(X)
+        # print "OPQ reconstruction mse / variance = {}".format(err)
+
+        return idxs + self.offsets  # offsets let us index into raveled dists
+        # return idxs
+
+    def fit_query(self, q, **sink):
+        # orig_norm = np.linalg.norm(q)
+        q = quantize.opq_rotate(q, self.R).ravel()
+        # print "norm before and after: ", orig_norm, np.linalg.norm(q)  # same
+
+        # PQEncoder.fit_query(self, q)
+        self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
+                                     elemwise_dist_func=self.elemwise_dist_func)
+
+    # def dists_enc(self, X_enc, q_unused):
+    #     dists = np.zeros(X_enc.shape[0])
+    #     for i, row in enumerate(X_enc):
+    #         for j, idx in enumerate(row):
+    #             dists[i] += self.q_dists_[idx, j]
+    #     return dists
+        # return PQEncoder.dists_enc(self, X_enc, q_unused)
+
+    # # ------------------------ DEBUG: just reconstruct points  # TODO rm
+    # # yes, this works...so what's broken?
+    # def encode_q(self, q, **sink):
+    #     return q
+
+    # def dists_enc(self, X_enc, q_unused):
+    #     X_enc -= self.offsets
+    #     X_hat = quantize.reconstruct_X_pq(X_enc, self.centroids)
+    #     return dists_sq(X_hat, q_unused)
 
 
 # ================================================================ Main
@@ -920,10 +935,11 @@ def main():
 
     # N = -1  # set this to not limit real datasets to first N entries
     # N = 10 * 1000
-    N = 50 * 1000
-    # N = 100 * 1000
+    # N = 50 * 1000
+    N = 100 * 1000
     # N = 1000 * 1000
-    D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 32
     num_centroids = 256
     num_queries = 128
     # num_queries = 2
@@ -932,12 +948,13 @@ def main():
                                      num_centroids=num_centroids, N=N, D=D,
                                      num_queries=num_queries)
 
-    # dataset = dataset_func(Datasets.RAND_WALK, norm_len=True)
-    # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)
-    # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)
-    dataset = dataset_func(datasets.Glove.TEST_100, norm_mean=True)
-    # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)
-    # dataset = dataset_func(Datasets.GIST_100, norm_mean=True)
+    # dataset = dataset_func(datasets.Random.WALK, norm_len=True)
+    # dataset = dataset_func(datasets.Random.UNIF, norm_len=True)
+    # dataset = dataset_func(datasets.Random.GAUSS, norm_len=True)
+    # dataset = dataset_func(datasets.Random.BLOBS, norm_len=True)
+    # dataset = dataset_func(datasets.Glove.TEST_100, norm_mean=True)
+    dataset = dataset_func(datasets.Sift1M.TEST_100, norm_mean=True)
+    # dataset = dataset_func(datasets.Gist.TEST_100, norm_mean=True)
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -985,24 +1002,30 @@ def main():
     encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
     eval_encoder(dataset, encoder)
 
-    # print "------------------------ pca l1"
-    # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
-    encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
-    # encoder = PcaSketch(dataset.X, 128)   # mu, 90th on gist100? .007 .001
-    # encoder = PcaSketch(dataset.X, 256)   # mu, 90th on gist100? .005 .007
-    # encoder = PcaSketch(dataset.X, 512)   # mu, 90th on gist100? .004, .006
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    print "------------------------ pca l2"  # much better than quantized
-    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    print "------------------------ opq l2, 16x4 bit centroid idxs"
+    encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
+    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # eval_encoder(dataset, encoder, plot=True)
+    eval_encoder(dataset, encoder)
 
-    print "------------------------ quantile l1"  # yep, same performance as gauss
-    # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-    # # #     how=Quantizer.QUANTILE, shared_bins=False)
-    encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
-                                     how=Quantizer.QUANTILE)
+    # # print "------------------------ pca l1"
+    # # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
+    # encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
+    # # encoder = PcaSketch(dataset.X, 128)   # mu, 90th on gist100? .007 .001
+    # # encoder = PcaSketch(dataset.X, 256)   # mu, 90th on gist100? .005 .007
+    # # encoder = PcaSketch(dataset.X, 512)   # mu, 90th on gist100? .004, .006
     # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    print "------------------------ quantile l2"
-    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    # print "------------------------ pca l2"  # much better than quantized
+    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+
+    # print "------------------------ quantile l1"  # yep, same performance as gauss
+    # # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    # # # #     how=Quantizer.QUANTILE, shared_bins=False)
+    # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
+    #                                  how=Quantizer.QUANTILE)
+    # # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
+    # print "------------------------ quantile l2"
+    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
     # # print "------------------------ q lut l1"
     # inner_sketch = RandomIsoHash(dataset.X, 64)

@@ -5,7 +5,7 @@ from sklearn import cluster
 import kmc2  # state-of-the-art kmeans initialization (as of NIPS 2016)
 
 from joblib import Memory
-_memory = Memory('.', verbose=1)
+_memory = Memory('.', verbose=0)
 
 
 # ================================================================ Utils
@@ -151,7 +151,12 @@ def _debug_rotation(R):
         raise NumericalException("Bad off-diagonals")
 
 
+def opq_rotate(X, R):  # so other code need not know what to transpose
+    return np.dot(np.atleast_2d(X), R.T)
+
+
 # based on https://github.com/arbabenko/Quantizations/blob/master/opqCoding.py
+# @_memory.cache
 def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
               initial_kmeans_iters=1, debug=False):
 
@@ -216,7 +221,7 @@ def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
                 raise e
 
         # update centroids using new rotation matrix
-        X_rotated = np.dot(X, R.T)
+        X_rotated = opq_rotate(X, R)
         prev_codebooks = codebooks
         prev_assignments = assignments
         codebooks = _update_centroids_opq(X, assignments, ncentroids)
