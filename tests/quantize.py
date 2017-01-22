@@ -24,8 +24,8 @@ def top_k_idxs(elements, k, smaller_better=True):
         return np.argpartition(elements, kth=which_nn)[-k:][::-1]
 
 
-def knn(X, q, k):
-    dists = dists_sq(X, q)
+def knn(X, q, k, dist_func=dists_sq):
+    dists = dist_func(X, q)
     return top_k_idxs(dists, k)
 
 
@@ -36,9 +36,9 @@ def kmeans(X, k, max_iter=16):
     return estimator.cluster_centers_, estimator.labels_
 
 
-# def orthogonalize_rows(A):
-#     Q, R = np.linalg.qr(A.T)
-#     return Q.T
+def orthonormalize_rows(A):
+    Q, R = np.linalg.qr(A.T)
+    return Q.T
 
 
 # ================================================================ PQ
@@ -237,7 +237,8 @@ def opq_rotate(X, R):  # so other code need not know what to transpose
 # https://github.com/arbabenko/Quantizations/blob/master/opqCoding.py
 # @_memory.cache
 def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
-              initial_kmeans_iters=1, init_via_gauss=True, debug=False):
+              initial_kmeans_iters=1, init='gauss', debug=False):
+    """init in {'gauss', 'identity', 'random'}"""
 
     X = X_train.astype(np.float32)
     N, D = X.shape
@@ -249,21 +250,27 @@ def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
 
     assert D % subvect_len == 0  # equal number of dims for each codebook
 
-    if init_via_gauss:
+    if init == 'gauss':
         R = learn_opq_gaussian_rotation(X_train, ncodebooks, codebook_bits)
         R = R.astype(np.float32)
-        # _debug_rotation(R)
         X_rotated = opq_rotate(X, R)
-        assert X.shape[1] == R.shape[0]
-        assert X.shape[1] == R.shape[1]
-        assert X.shape == X_rotated.shape
-        norms = np.linalg.norm(X, axis=1)
-        norms_rot = np.linalg.norm(X_rotated, axis=1)
+        # _debug_rotation(R)
+        # assert X.shape[1] == R.shape[0]
+        # assert X.shape[1] == R.shape[1]
+        # assert X.shape == X_rotated.shape
+        # norms = np.linalg.norm(X, axis=1)
+        # norms_rot = np.linalg.norm(X_rotated, axis=1)
         # print "orig norms, rotated norms: ", norms, norms_rot
-        assert np.max(np.abs(norms - norms_rot)) < .01
-    else:
+        # assert np.max(np.abs(norms - norms_rot)) < .01
+    elif init == 'identity':
         R = np.identity(D, dtype=np.float32)  # D x D
         X_rotated = X
+    elif init == 'random':
+        R = np.random.randn(D, D).astype(np.float32)
+        R = orthonormalize_rows(R)
+        X_rotated = opq_rotate(X, R)
+    else:
+        raise ValueError("Unrecognized initialization method: ".format(init))
         # X_rotated = opq_rotate(X, R)
 
     # initialize codebooks by running kmeans on each rotated dim; this way,
@@ -336,8 +343,8 @@ def main():
     # tmp = datasets.load_dataset(
     X_train, Q, X_test, truth = datasets.load_dataset(
         # datasets.Random.UNIFORM, N=1000, D=64)
-        datasets.Glove.TEST_100, N=10000, D=32)
-        # datasets.Glove.TEST_100, N=100000)
+        # datasets.Glove.TEST_100, N=10000, D=32)
+        datasets.Glove.TEST_100, N=50000, D=96)
         # datasets.Sift1M.TEST_100, N=10000, D=32)
         # datasets.Gist.TEST_100, N=50000)
         # datasets.Glove.TEST_100, D=96)
@@ -354,9 +361,11 @@ def main():
     # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=0,
     #                                       initial_kmeans_iters=16)
 
+    # in terms of reconstruction err, gaussian < identity < random
     niters = 5
-    codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init_via_gauss=False)
-    codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters)
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='random')
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='identity')
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='gauss')
 
 
 if __name__ == '__main__':
