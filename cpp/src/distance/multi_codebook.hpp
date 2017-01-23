@@ -21,6 +21,7 @@
 
 namespace dist {
 
+static const uint8_t mask_low4b = 0x0F;
 
 // class multi_codebook
 // {
@@ -66,41 +67,47 @@ inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
     }
 }
 
-// EDIT: this is not a meaningful function unless all 4bit blocks of q are identical
-// // lut must be of length 16
-// template<class dist_t>
-// inline void single_lut_dists_8B_4b(const uint8_t* codes, const dist_t* lut,
-//     dist_t* dists_out, int N)
-// {
-//     std::cout << "lut:\n";
-//     for (int i = 0; i < 4; i++) {
-//         dumpBits(*(uint64_t*)(lut + 8 * i));
-//     }
+inline void naive_block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
+    uint8_t* dists_out, int nblocks)
+{
+    for (int b = 0; b < nblocks; b++) {
+        // auto totals = _mm256_setzero_si256();
+        for (uint8_t i = 0; i < 32; i++) {
+            dists_out[i] = 0;
+        }
 
-//     std::cout << "codes:\n";
+        for (uint8_t j = 0; j < 8; j++) {
+            for (uint8_t i = 0; i < 32; i++) {
+                auto code = codes[i];
+                auto low_bits = code & mask_low4b;
+                auto high_bits = code >> 4;
 
-//     for (int i = 0; i < N; i++) {
+                // what if we just use what the luts *should* be?
+                dists_out[i] += popcount(low_bits ^ (j << 1));
+                dists_out[i] += popcount(high_bits ^ ((j << 1) + 1));
 
-//         dumpBits(*(uint64_t*)codes);
+                // std::cout << "code: ";
+                // dumpEndianBits(code);
+                // std::cout << "code: " << (int)code << "\n";
 
-//         dists_out[i] = 0;
-//         for (int j = 0; j < 8; j++) {
-//             // dists_out[i] = j; // TODO rm after debug
-//             auto code_left = codes[j] >> 4;
-//             auto code_right = codes[j] & 0x0F;
-//             dists_out[i] += lut[code_left];
-//             dists_out[i] += lut[code_right];
-//         }
-//         codes += 8 * i;
-//     }
-// }
+                // auto lut_low = luts;
+                // auto lut_high = luts + 32;
+                // dists_out[i] += lut_low[low_bits];
+                // dists_out[i] += lut_high[high_bits];
+            }
+            codes += 32;
+            luts += 64;
+        }
+        luts -= 8 * 32;
+        dists_out += 32;
+    }
+}
 
-// luts must be of size [8][16]
+// luts must be of size [16][16]
 template<class dist_t>
 inline void lut_dists_8B_4b(const uint8_t* codes, const dist_t* luts,
     dist_t* dists_out, int N)
 {
-    static const uint8_t mask_low4b = 0x0F;
     for (int i = 0; i < N; i++) {
         dists_out[i] = 0;
         auto lut_ptr = luts;
@@ -118,11 +125,11 @@ inline void lut_dists_8B_4b(const uint8_t* codes, const dist_t* luts,
             dists_out[i] += lut_low[code_low];
             dists_out[i] += lut_high[code_high];
             auto dist = lut_low[code_low] + lut_high[code_high];
-            std::cout << "---- " << (int)j << "\n";
-            std::cout << "code: " << (int)codes[j] << "\n";
-            std::cout << "code_low: " << (int)code_low << "\n";
-            std::cout << "code_high: " << (int)code_high << "\n";
-            std::cout << "dist: " << (int)dist << "\n";
+            // std::cout << "---- " << (int)j << "\n";
+            // std::cout << "code: " << (int)codes[j] << "\n";
+            // std::cout << "code_low: " << (int)code_low << "\n";
+            // std::cout << "code_high: " << (int)code_high << "\n";
+            // std::cout << "dist: " << (int)dist << "\n";
             // std::cout <i< "dist: " << (int)dist << "\n";
             lut_ptr += 32;
         }
@@ -139,7 +146,7 @@ inline void lut_dists_8b(const uint8_t* codes, const dist_t* luts,
         for (int j = 0; j < NBytes; j++) {
             dists_out[i] += luts[j][codes[j]];
         }
-        codes += NBytes * i;
+        codes += NBytes;
     }
 }
 
@@ -163,7 +170,7 @@ inline void lut_dists_8B_8b_stride4b(const uint8_t* codes,
         for (int j = 0; j < NBytes - 1; j++) {
             dists_out[i] += luts[j + NBytes][shifted_codes[j]];
         }
-        codes += NBytes * i;
+        codes += NBytes;
     }
 }
 

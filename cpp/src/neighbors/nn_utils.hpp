@@ -44,8 +44,8 @@ typedef Eigen::Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
 static const int16_t kInvalidIdx = -1;
 
-static constexpr int kDefaultAlignBytes = EIGEN_DEFAULT_ALIGN_BYTES;
-static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");
+// static constexpr int kDefaultAlignBytes = EIGEN_DEFAULT_ALIGN_BYTES;
+// static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");
 
 namespace nn {
 
