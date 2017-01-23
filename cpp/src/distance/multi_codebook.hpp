@@ -39,34 +39,42 @@ inline __m256i load_si256i(T* ptr) {
 inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
     uint8_t* dists_out, int nblocks)
 {
+    static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
+
     for (int i = 0; i < nblocks; i++) {
         auto totals = _mm256_setzero_si256();
         for (uint8_t j = 0; j < 8; j++) {
             auto x_col = load_si256i(codes);
-            auto lut_left = load_si256i(luts);
-            auto lut_right = load_si256i(luts + 32);
+            auto lut_low = load_si256i(luts);
+            auto lut_high = load_si256i(luts + 32);
 
             // compute distances via lookups; we have one table for the upper
             // 4 bits of each byte in x, and one for the lower 4 bits; the
             // shuffle instruction always looks at the lower 4 bits, so we
-            // have to shift x to look at its upper 4 bits
-            auto x_left = _mm256_srli_epi16(x_col, 4);
-            auto dists_left = _mm256_shuffle_epi8(lut_left, x_left);
-            auto dists_right = _mm256_shuffle_epi8(lut_right, x_col);
+            // have to shift x to look at its upper 4 bits; also note that
+            // we have to mask out the upper bit because the shuffle
+            // instruction will zero the corresponding byte if this bit is set
+            auto x_low = _mm256_and_si256(x_col, low_4bits_mask);
+            auto x_high = _mm256_srli_epi16(x_col, 4);
+            x_high = _mm256_and_si256(x_high, low_4bits_mask);
 
-            // auto dists = _mm256_adds_epu8(dists_left, dists_right);
-            totals = _mm256_adds_epu8(totals, dists_left);
-            totals = _mm256_adds_epu8(totals, dists_right);
+            auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
+            auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
 
-            _mm256_store_si256((__m256i*)dists_out, totals);
-            // _mm256_stream_si256(dists_out, totals); // "non-temporal memory hint"
+            totals = _mm256_adds_epu8(totals, dists_low);
+            totals = _mm256_adds_epu8(totals, dists_high);
 
             codes += 32;
             luts += 64;
         }
+        // _mm256_store_si256((__m256i*)dists_out, totals);
+        _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
+        luts -= 8 * 64;
+        dists_out += 32;
     }
 }
 
+// for debugging; should have same behavior as above func
 inline void naive_block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
     uint8_t* dists_out, int nblocks)
 {
@@ -83,22 +91,19 @@ inline void naive_block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* 
                 auto high_bits = code >> 4;
 
                 // what if we just use what the luts *should* be?
-                dists_out[i] += popcount(low_bits ^ (j << 1));
-                dists_out[i] += popcount(high_bits ^ ((j << 1) + 1));
+                // dists_out[i] += popcount(low_bits ^ (j << 1));
+                // dists_out[i] += popcount(high_bits ^ ((j << 1) + 1));
 
-                // std::cout << "code: ";
-                // dumpEndianBits(code);
-                // std::cout << "code: " << (int)code << "\n";
-
-                // auto lut_low = luts;
-                // auto lut_high = luts + 32;
-                // dists_out[i] += lut_low[low_bits];
-                // dists_out[i] += lut_high[high_bits];
+                auto offset = 16 * (i >= 16); // look in 2nd 16B of lut
+                auto lut_low = luts + offset;
+                auto lut_high = luts + 32 + offset;
+                dists_out[i] += lut_low[low_bits];
+                dists_out[i] += lut_high[high_bits];
             }
             codes += 32;
             luts += 64;
         }
-        luts -= 8 * 32;
+        luts -= 8 * 64;
         dists_out += 32;
     }
 }
