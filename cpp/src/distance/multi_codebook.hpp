@@ -24,17 +24,42 @@ inline __m256i load_si256i(T* ptr) {
     return _mm256_load_si256((__m256i *)ptr);
 }
 
-inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
+
+
+// experimental version to see what bottlenecks are
+inline void incorrect_block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
     uint8_t* dists_out, int64_t nblocks)
 {
     static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
 
     for (int64_t i = 0; i < nblocks; i++) {
         auto totals = _mm256_setzero_si256();
+        // auto x_col = load_si256i(codes);
+        // auto both_luts = load_si256i(luts);
+//        __m256i both_luts;
+        __m256i four_luts = _mm256_undefined_si256();
+        // __m256i luts0, luts1;
+        // __m256i lut_low, lut_high;
         for (uint8_t j = 0; j < 8; j++) {
             auto x_col = load_si256i(codes);
-            auto lut_low = load_si256i(luts);
-            auto lut_high = load_si256i(luts + 32);
+
+            __m256i both_luts;
+            if (j % 2 == 0) {
+                four_luts = load_si256i(luts);
+                luts += 32;
+                both_luts = _mm256_permute2x128_si256(four_luts, four_luts, 0 + (0 << 4));
+            } else {
+                both_luts = _mm256_permute2x128_si256(four_luts, four_luts, 1 + (1 << 4));
+            }
+            // unpack lower and upper 4 bits into luts for lower and upper 4
+            // bits of codes
+            auto lut_low = _mm256_and_si256(both_luts, low_4bits_mask);
+            auto lut_high = _mm256_srli_epi16(both_luts, 4);
+            lut_high = _mm256_and_si256(lut_high, low_4bits_mask);
+
+            // auto both_luts = load_si256i(luts);
+            // auto lut_low = _mm256_permute2x128_si256(both_luts, both_luts, 0 + (0 << 4));
+            // auto lut_high = _mm256_permute2x128_si256(both_luts, both_luts, 1 + (1 << 4));
 
             // compute distances via lookups; we have one table for the upper
             // 4 bits of each byte in x, and one for the lower 4 bits; the
@@ -49,15 +74,115 @@ inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
             auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
             auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
 
+            // TODO uncomment after debug
+            totals = _mm256_adds_epu8(totals, dists_low);
+            totals = _mm256_adds_epu8(totals, dists_high);
+
+            codes += 32;
+        }
+        _mm256_store_si256((__m256i*)dists_out, totals);
+        luts -= 4 * 32;
+        dists_out += 32;
+    }
+}
+
+// version that unpacks 16B LUTs into 32B to cut out half the loads
+inline void block_lut_dists_32x8B_4b_unpack(const uint8_t* codes,
+    const uint8_t* luts, uint8_t* dists_out, int64_t nblocks)
+{
+    static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
+
+    for (int64_t i = 0; i < nblocks; i++) {
+        auto totals = _mm256_setzero_si256();
+        // auto x_col = load_si256i(codes);
+        // auto both_luts = load_si256i(luts);
+        for (uint8_t j = 0; j < 8; j++) {
+            auto x_col = load_si256i(codes);
+
+            // unpack lower and upper 16B into two 32B luts
+            // NOTE: cast + broadcast seems no faster, and more complicated
+            auto both_luts = load_si256i(luts);
+            // auto lower_128 = _mm256_castsi256_si128(both_luts);
+            // auto lut_low = _mm256_broadcastsi128_si256(lower_128);
+            auto lut_low = _mm256_permute2x128_si256(both_luts, both_luts, 0 + (0 << 4));
+            auto lut_high = _mm256_permute2x128_si256(both_luts, both_luts, 1 + (1 << 4));
+
+            // auto lut_high = both_luts;
+            // auto lut_low = load_si256i(luts);
+            // auto lut_high = load_si256i(luts + 32);
+
+            // compute distances via lookups; we have one table for the upper
+            // 4 bits of each byte in x, and one for the lower 4 bits; the
+            // shuffle instruction always looks at the lower 4 bits, so we
+            // have to shift x to look at its upper 4 bits; also note that
+            // we have to mask out the upper bit because the shuffle
+            // instruction will zero the corresponding byte if this bit is set
+            auto x_low = _mm256_and_si256(x_col, low_4bits_mask);
+            auto x_high = _mm256_srli_epi16(x_col, 4);
+            x_high = _mm256_and_si256(x_high, low_4bits_mask);
+            // auto x_low = x_col;
+            // auto x_high = _mm256_srli_epi16(x_col, 4);
+
+            auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
+            auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
+
+            // TODO uncomment after debug
+            totals = _mm256_adds_epu8(totals, dists_low);
+            totals = _mm256_adds_epu8(totals, dists_high);
+
+            codes += 32;
+            // luts += 64;
+            luts += 32;
+        }
+        _mm256_store_si256((__m256i*)dists_out, totals);
+        // _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
+        // luts -= 8 * 64;
+        luts -= 8 * 32;
+        dists_out += 32;
+    }
+}
+
+inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
+    uint8_t* dists_out, int64_t nblocks)
+{
+    static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
+
+    for (int64_t i = 0; i < nblocks; i++) {
+        auto totals = _mm256_setzero_si256();
+        for (uint8_t j = 0; j < 8; j++) {
+            auto x_col = load_si256i(codes);
+            auto lut_low = load_si256i(luts);
+            auto lut_high = load_si256i(luts + 32);
+            // auto both_luts = load_si256i(luts);
+            // auto lut_low = _mm256_permute2x128_si256(both_luts, both_luts, 0 + (0 << 4));
+            // auto lut_high = _mm256_permute2x128_si256(both_luts, both_luts, 1 + (1 << 4));
+
+            // compute distances via lookups; we have one table for the upper
+            // 4 bits of each byte in x, and one for the lower 4 bits; the
+            // shuffle instruction always looks at the lower 4 bits, so we
+            // have to shift x to look at its upper 4 bits; also note that
+            // we have to mask out the upper bit because the shuffle
+            // instruction will zero the corresponding byte if this bit is set
+            auto x_low = _mm256_and_si256(x_col, low_4bits_mask);
+            auto x_high = _mm256_srli_epi16(x_col, 4);
+            x_high = _mm256_and_si256(x_high, low_4bits_mask);
+
+            // TODO try 16B LUTs + broadcast upper and lower
+
+            auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
+            auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
+
             totals = _mm256_adds_epu8(totals, dists_low);
             totals = _mm256_adds_epu8(totals, dists_high);
 
             codes += 32;
             luts += 64;
+            // luts += 32;
         }
         _mm256_store_si256((__m256i*)dists_out, totals);
         // _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
-        luts -= 8 * 64;
+       luts -= 8 * 64;
+        // luts -= 8 * 32;
         dists_out += 32;
     }
 }
