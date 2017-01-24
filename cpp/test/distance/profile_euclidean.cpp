@@ -16,31 +16,33 @@
 #include "testing_utils.hpp"
 #include "timing_utils.hpp"
 
-using RowMatrixXd = RowMatrix<double>;
-using RowVectorXd = RowVector<double>;
-using RowMatrixXf = RowMatrix<float>;
-using RowVectorXf = RowVector<float>;
+#include "lower_bounds.hpp"
+
+// using RowMatrixXd = RowMatrix<double>;
+// using RowVectorXd = RowVector<double>;
+// using RowMatrixXf = RowMatrix<float>;
+// using RowVectorXf = RowVector<float>;
 
 static const int kDefaultNumQueriesPerRun = 10;
 static const int kDefaultNumRuns = 1;
 
-template<class F>
+template<class Scalar=float, class F=void>
 inline void _randunif_knn_time(F&& dist_func, const char* func_name,
     int N, int D, int k, int num_runs=kDefaultNumRuns,
     int num_queries=kDefaultNumQueriesPerRun)
 {
-    RowMatrixXf X(N, D);
-    RowVectorXf q(D);
+    RowMatrix<Scalar> X(N, D);
+    RowVector<Scalar> q(D);
     double total_time = 0;
     for (int r = 0; r < num_runs; r++) {
         X.setRandom();
+        // (nearly) wiping the cache has basically no effect, probably because
+        // we're going serially and thus prefetching effectively
+        // volatile Eigen::MatrixXd ruin_cache = Eigen::MatrixXd::Ones(1000, 1000);
         for (int j = 0; j < num_queries; j++) {
             q.setRandom();
             EasyTimer _(total_time, true); // true = add to value
             auto dists = dist_func(X, q, k);
-            // for (int i = 0; i < N; i++) {
-            //     auto dist = dist_func(X.row(i), q);
-            // }
         }
     }
     int total_queries = num_runs * num_queries;
@@ -52,13 +54,24 @@ inline void _randunif_knn_time(F&& dist_func, const char* func_name,
            Mops, gflops, total_time, ms_per_query);
 }
 
+
 TEST_CASE("l2_10nn", "[profile][distance][euclidean]") {
     // _randunif_knn_time([](const auto& x, const auto& q) {
     //     return (x * q.transpose()).eval() * -2;
     // }, "matmul", 100 * 10000, 8);
     int k = 10;
     int N = 100 * 1000;
-    int D = 128;
+    // constexpr int D = 64;
+    constexpr int D = 128;
+    // constexpr int D = 256;
+
+    _randunif_knn_time<uint8_t>([](const auto& X, const auto& q, const auto k) {
+        static constexpr int32_t thresh = 1;
+        // PRINT_VAR(pretty_ptr(X.data()));
+        return dist::quantize::radius<D>(X.data(), X.rows(), q.data(), thresh);
+    }, "quantize", N, D, k);
+
+
     Eigen::VectorXf spoof_rownorms(N);
     _randunif_knn_time([&spoof_rownorms](const auto& X, const auto& q, const auto k) {
         return dist::squared_dists_to_vector(X, q, spoof_rownorms); // ignore k
@@ -77,5 +90,7 @@ TEST_CASE("l2_10nn", "[profile][distance][euclidean]") {
         }
         return 0;
     }, "scalar", N, D, k); // about 6x slower than simple, 5x slower than matmul
+
+
 
 }

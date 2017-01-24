@@ -6,29 +6,20 @@ import numpy as np
 import seaborn as sb
 import time
 
-import kmc2
 from collections import namedtuple
 from scipy import stats
-from sklearn import cluster
 from sklearn.decomposition import TruncatedSVD
-# from numba import jit
 
-from datasets import load_dataset, Datasets
+import datasets
+import product_quantize as pq
+
+from utils import dists_sq, kmeans, orthonormalize_rows, top_k_idxs
 
 from joblib import Memory
 _memory = Memory('.', verbose=0)
 
 
 # ================================================================ Distances
-
-def dists_sq(X, q):
-    diffs = X - q
-    return np.sum(diffs * diffs, axis=-1)
-
-
-def dists_l1(X, q):
-    diffs = np.abs(X - q)
-    return np.sum(diffs, axis=-1)
 
 
 def _learn_expected_dists_for_diffs(X_embed, X_quant, base_dist_func=dists_sq,
@@ -174,50 +165,7 @@ def dists_lut(X_quant, q_lut):  # q_lut is [cardinality, ndims]
     return _inner_dists_lut(X_quant, q_lut)
 
 
-def dists_to_vects(X, q):
-    row_norms = np.sum(X*X, axis=1, keepdims=True)
-    q_norms = np.sum(q*q, axis=1)
-    prods = np.dot(X, q.T)
-    return -2 * prods + row_norms + q_norms
-
-
-def hamming_dist(v1, v2):
-    return np.count_nonzero(v1 != v2)
-
-
-def hamming_dists(X, q):
-    return np.array([hamming_dist(row, q) for row in X])
-
-
-# ================================================================ Misc
-
-def top_k_idxs(elements, k, smaller_better=False):
-    if smaller_better:
-        which_nn = np.arange(k)
-        return np.argpartition(elements, kth=which_nn)[:k]
-    else:
-        which_nn = len(elements) - 1 - np.arange(k)
-        return np.argpartition(elements, kth=which_nn)[-k:][::-1]
-
-
-def find_knn(X, q, k):
-    dists = dists_sq(X, q)
-    idxs = top_k_idxs(dists, k, smaller_better=True)
-    return idxs, dists[idxs]
-
-
-def orthogonalize_rows(A):
-    Q, R = np.linalg.qr(A.T)
-    return Q.T
-
-
 # ================================================================ Clustering
-
-@_memory.cache
-def kmeans(X, k):
-    seeds = kmc2.kmc2(X, k)
-    estimator = cluster.MiniBatchKMeans(k, init=seeds, max_iter=16).fit(X)
-    return estimator.cluster_centers_, estimator.labels_
 
 
 def groups_from_labels(X, labels, num_centroids):
@@ -232,18 +180,21 @@ def groups_from_labels(X, labels, num_centroids):
     return groups
 
 
-@_memory.cache
+@_memory.cache  # TODO use X_train and X_test separately, as well as truth idxs
 def load_dataset_and_groups(which_dataset, num_centroids=256,
                             **load_dataset_kwargs):
-    X, q = load_dataset(which_dataset, **load_dataset_kwargs)
+    X_train, q, X_test, true_nn = datasets.load_dataset(
+        which_dataset, **load_dataset_kwargs)
+    X = X_train  # TODO use train vs test
     assert q.shape[-1] == X.shape[-1]
     centroids, labels = kmeans(X, num_centroids)
     groups = groups_from_labels(X, labels, num_centroids)
 
-    return Dataset(X, q, centroids, groups)
+    return Dataset(X, q, X, X_test, true_nn, centroids, groups)
 
 
-Dataset = namedtuple('Dataset', ['X', 'q', 'centroids', 'groups'])
+Dataset = namedtuple('Dataset', [
+    'X', 'q', 'X_train', 'X_test', 'true_nn', 'centroids', 'groups'])
 
 
 # ================================================================ Preproc
@@ -474,7 +425,7 @@ class SignedRandomProjections(EncoderMixin):
     def __init__(self, X, nbits, orthogonal=False):
         self.hyperplanes = np.random.randn(nbits, X.shape[-1])
         if orthogonal:
-            self.hyperplanes = orthogonalize_rows(self.hyperplanes)
+            self.hyperplanes = orthonormalize_rows(self.hyperplanes)
 
     def transform(self, X):
         return np.dot(X, self.hyperplanes.T) > 0
@@ -485,7 +436,7 @@ class StripedRandomProjections(EncoderMixin):
     def __init__(self, X, nbits, orthogonal=False):
         self.hyperplanes = np.random.randn(nbits, X.shape[-1])
         if orthogonal:
-            self.hyperplanes = orthogonalize_rows(self.hyperplanes)
+            self.hyperplanes = orthonormalize_rows(self.hyperplanes)
 
     def transform(self, X):
         prod = np.dot(X, self.hyperplanes.T)
@@ -506,7 +457,7 @@ class SuperbitLSH(EncoderMixin):
         self.projections = np.random.randn(nbits / num_subvects, subvect_len)
         # orthagonalize groups of subvect_len projections
         for i in range(0, len(self.projections), subvect_len):
-            self.projections[i:i+subvect_len] = orthogonalize_rows(
+            self.projections[i:i+subvect_len] = orthonormalize_rows(
                 self.projections[i:i+subvect_len])
 
     def transform(self, X):
@@ -597,7 +548,7 @@ class RandomIsoHash(EncoderMixin):
     def __init__(self, X, ndims=64):
         self.inner_sketch = PcaSketch(X, ndims=ndims)
         hyperplanes = np.random.randn(ndims, ndims)
-        self.rotation = orthogonalize_rows(hyperplanes)
+        self.rotation = orthonormalize_rows(hyperplanes)
 
     def rotate(self, A):
         return np.dot(A, self.rotation.T)
@@ -624,7 +575,7 @@ class RandomProjections(EncoderMixin):
         self.ndims = ndims
         self.hyperplanes = np.random.randn(ndims, X.shape[-1])
         if orthogonal:
-            self.hyperplanes = orthogonalize_rows(self.hyperplanes)
+            self.hyperplanes = orthonormalize_rows(self.hyperplanes)
 
     def transform(self, X):
         return np.dot(X, self.hyperplanes.T)
@@ -688,44 +639,59 @@ def _learn_centroids(X, ncentroids, nsubvects, subvect_len):
     return ret
 
 
+def _parse_codebook_params(D, code_bits=-1, bits_per_subvect=-1, nsubvects=-1):
+    if nsubvects < 0:
+        nsubvects = code_bits // bits_per_subvect
+    elif code_bits < 1:
+        code_bits = bits_per_subvect * nsubvects
+    elif bits_per_subvect < 1:
+        bits_per_subvect = code_bits // nsubvects
+
+    ncentroids = int(2 ** bits_per_subvect)
+    subvect_len = D / nsubvects
+
+    assert code_bits % bits_per_subvect == 0
+    assert D % subvect_len == 0  # TODO rm this constraint
+
+    return nsubvects, ncentroids, subvect_len
+
+
+def _fit_opq_lut(q, centroids, elemwise_dist_func):
+    _, nsubvects, subvect_len = centroids.shape
+    assert len(q) == nsubvects * subvect_len
+
+    q = q.reshape((1, nsubvects, subvect_len))
+    q_dists_ = elemwise_dist_func(centroids, q)
+    q_dists_ = np.sum(q_dists_, axis=-1)
+    return np.asfortranarray(q_dists_)
+
+
 class PQEncoder(object):
 
     def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
                  nsubvects=-1, elemwise_dist_func=dists_elemwise_sq):
         X = dataset.X
-        if nsubvects < 0:
-            nsubvects = code_bits // bits_per_subvect
-        elif code_bits < 1:
-            code_bits = bits_per_subvect * nsubvects
-        elif bits_per_subvect < 1:
-            bits_per_subvect = code_bits // nsubvects
-
         self.elemwise_dist_func = elemwise_dist_func
-        self.nsubvects = nsubvects
-        self.ncentroids = int(2 ** bits_per_subvect)
-        self.subvect_len = X.shape[1] / self.nsubvects
+
+        tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
+                                     bits_per_subvect=bits_per_subvect,
+                                     nsubvects=nsubvects)
+        self.nsubvects, self.ncentroids, self.subvect_len = tmp
 
         # for fast lookups via indexing into flattened array
         self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
 
-        assert code_bits % bits_per_subvect == 0
-        assert X.shape[1] % self.subvect_len == 0  # TODO rm this constraint
+        # self.centroids, _, _ = pq.learn_opq(
+        #     X, ncodebooks=nsubvects, niters=0)
 
         self.centroids = _learn_centroids(X, self.ncentroids, self.nsubvects,
                                           self.subvect_len)
 
     def encode_X(self, X, **sink):
-        assert X.shape[1] == (self.nsubvects * self.subvect_len)
-
-        idxs = np.empty((X.shape[0], self.nsubvects), dtype=np.int)
-        X = X.reshape((X.shape[0], self.nsubvects, self.subvect_len))
-        for i, row in enumerate(X):
-            row = row.reshape((1, self.nsubvects, self.subvect_len))
-            dists = self.elemwise_dist_func(self.centroids, row)
-            dists = np.sum(dists, axis=-1)
-            idxs[i, :] = np.argmin(dists, axis=0)
-
+        idxs = pq._encode_X_pq(X, codebooks=self.centroids,
+                               elemwise_dist_func=self.elemwise_dist_func)
         return idxs + self.offsets  # offsets let us index into raveled dists
+        # return idxs
 
     def encode_q(self, q, **sink):
         return None  # we use fit_query() instead, so fail fast
@@ -734,26 +700,96 @@ class PQEncoder(object):
         return np.sum(self.elemwise_dist_func(X, q), axis=-1)
 
     def fit_query(self, q, **sink):
-        assert len(q) == self.nsubvects * self.subvect_len
-        q = q.reshape((1, self.nsubvects, self.subvect_len))
-        self.q_dists_ = self.elemwise_dist_func(self.centroids, q)
-        self.q_dists_ = np.sum(self.q_dists_, axis=-1)
-        self.q_dists_ = np.asfortranarray(self.q_dists_)
-        return self
+        self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
+                                     elemwise_dist_func=self.elemwise_dist_func)
+
+    # def dists_enc(self, X_enc, q_unused):
+    #     dists = np.zeros(X_enc.shape[0])
+    #     for i, row in enumerate(X_enc):
+    #         for j, idx in enumerate(row):
+    #             dists[i] += self.q_dists_[idx, j]
+    #     return dists
 
     def dists_enc(self, X_enc, q_unused):
-        # this line has each element of X_enc index to the flattened
+        # this line has each element of X_enc index into the flattened
         # version of q's distances to the centroids; we had to add
         # offsets to each col of X_enc above for this to work
         centroid_dists = self.q_dists_.T.ravel()[X_enc.ravel()]
         return np.sum(centroid_dists.reshape(X_enc.shape), axis=-1)
 
 
+class OPQEncoder(PQEncoder):
+
+    def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
+                 nsubvects=-1, elemwise_dist_func=dists_elemwise_sq,
+                 opq_iters=20):
+        X = dataset.X
+        self.elemwise_dist_func = elemwise_dist_func
+
+        tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
+                                     bits_per_subvect=bits_per_subvect,
+                                     nsubvects=nsubvects)
+        self.nsubvects, self.ncentroids, self.subvect_len = tmp
+
+        # for fast lookups via indexing into flattened array
+        self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
+
+        self.centroids, _, self.R = pq.learn_opq(
+            X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
+            niters=opq_iters)
+
+    def encode_X(self, X, **sink):
+        X = pq.opq_rotate(X, self.R)
+        idxs = pq._encode_X_pq(X, codebooks=self.centroids,
+                               elemwise_dist_func=self.elemwise_dist_func)
+
+        # hmm...really small numbers just like in opq func
+        # X_hat = pq.reconstruct_X_pq(idxs, self.centroids)
+        # errors = X - X_hat
+        # err = np.mean(errors * errors) / np.var(X)
+        # print "OPQ reconstruction mse / variance = {}".format(err)
+
+        return idxs + self.offsets  # offsets let us index into raveled dists
+        # return idxs
+
+    def fit_query(self, q, **sink):
+        # orig_norm = np.linalg.norm(q)
+        q = pq.opq_rotate(q, self.R).ravel()
+        # print "norm before and after: ", orig_norm, np.linalg.norm(q)  # same
+
+        # PQEncoder.fit_query(self, q)
+        self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
+                                     elemwise_dist_func=self.elemwise_dist_func)
+
+    # def dists_enc(self, X_enc, q_unused):
+    #     dists = np.zeros(X_enc.shape[0])
+    #     for i, row in enumerate(X_enc):
+    #         for j, idx in enumerate(row):
+    #             dists[i] += self.q_dists_[idx, j]
+    #     return dists
+        # return PQEncoder.dists_enc(self, X_enc, q_unused)
+
+    # # ------------------------ DEBUG: just reconstruct points  # TODO rm
+    # # yes, this works...so what's broken?
+    # def encode_q(self, q, **sink):
+    #     return q
+
+    # def dists_enc(self, X_enc, q_unused):
+    #     X_enc -= self.offsets
+    #     X_hat = pq.reconstruct_X_pq(X_enc, self.centroids)
+    #     return dists_sq(X_hat, q_unused)
+
+
 # ================================================================ Main
 
 def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
                  verbosity=1, plot=False):
-    X, queries, centroids, groups = dataset
+    # X, queries, centroids, groups = dataset
+    X = dataset.X
+    queries = dataset.q
+    centroids = dataset.centroids
+    groups = dataset.groups
+
     if len(queries.shape) == 1:
         queries = [queries]
 
@@ -849,7 +885,8 @@ def main():
     # N = 50 * 1000
     # N = 100 * 1000
     # N = 1000 * 1000
-    # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 32
     num_centroids = 256
     num_queries = 128
     # num_queries = 2
@@ -858,12 +895,13 @@ def main():
                                      num_centroids=num_centroids, N=N, D=D,
                                      num_queries=num_queries)
 
-    # dataset = dataset_func(Datasets.RAND_WALK, norm_len=True)
-    # dataset = dataset_func(Datasets.RAND_UNIF, norm_len=True)
-    # dataset = dataset_func(Datasets.RAND_GAUSS, norm_len=True)
-    dataset = dataset_func(Datasets.GLOVE_100, norm_mean=True)
-    # dataset = dataset_func(Datasets.SIFT_100, norm_mean=True)
-    # dataset = dataset_func(Datasets.GIST_100, norm_mean=True)
+    # dataset = dataset_func(datasets.Random.WALK, norm_len=True)
+    # dataset = dataset_func(datasets.Random.UNIF, norm_len=True)
+    # dataset = dataset_func(datasets.Random.GAUSS, norm_len=True)
+    # dataset = dataset_func(datasets.Random.BLOBS, norm_len=True)
+    dataset = dataset_func(datasets.Glove.TEST_100, norm_mean=True)
+    # dataset = dataset_func(datasets.Sift1M.TEST_100, norm_mean=True)
+    # dataset = dataset_func(datasets.Gist.TEST_100, norm_mean=True)
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -907,9 +945,15 @@ def main():
     # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=6)
     # eval_encoder(dataset, encoder)
 
-    # print "------------------------ pq l2, 16x4 bit centroid idxs"
-    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
-    # eval_encoder(dataset, encoder)
+    print "------------------------ pq l2, 16x4 bit centroid idxs"
+    encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
+    eval_encoder(dataset, encoder)
+
+    print "------------------------ opq l2, 16x4 bit centroid idxs"
+    encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
+    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # eval_encoder(dataset, encoder, plot=True)
+    eval_encoder(dataset, encoder)
 
     # # print "------------------------ pca l1"
     # # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
@@ -930,12 +974,12 @@ def main():
     # print "------------------------ quantile l2"
     # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
-    # print "------------------------ q lut l1"
+    # # print "------------------------ q lut l1"
     # inner_sketch = RandomIsoHash(dataset.X, 64)
     # encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,
     #                       elemwise_dist_func=dists_elemwise_l1,
     #                       how=Quantizer.QUANTILE, shared_bins=True)
-    # eval_encoder(dataset, encoder)
+    # # eval_encoder(dataset, encoder)
     # print "------------------------ q lut l2"
     # encoder.elemwise_dist_func = dists_elemwise_sq
     # encoder = BoltEncoder(dataset, inner_sketch=inner_sketch,

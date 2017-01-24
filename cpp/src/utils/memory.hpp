@@ -10,7 +10,11 @@
 #define __DIG_MEMORY_HPP
 
 
+
 #include "Dense"
+
+static constexpr int kDefaultAlignBytes = EIGEN_DEFAULT_ALIGN_BYTES;
+static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");
 
 // ------------------------------------------------ Alignment
 
@@ -37,7 +41,7 @@ template<> struct _AlignHelper<kDefaultAlignBytes> {
     static constexpr int AlignmentType = Eigen::Aligned;
 };
 
-template<class T, int AlignBytes>
+template<class T, int AlignBytes=kDefaultAlignBytes>
 static inline T* aligned_alloc(size_t n) {
     static_assert(AlignBytes == 0 || AlignBytes == kDefaultAlignBytes,
         "Only AlignBytes values of 0 and kDefaultAlignBytes are supported!");
@@ -49,7 +53,7 @@ static inline T* aligned_alloc(size_t n) {
         return new T[n];
     }
 }
-template<class T, int AlignBytes>
+template<class T, int AlignBytes=kDefaultAlignBytes>
 static inline void aligned_free(T* p) {
     static_assert(AlignBytes == 0 || AlignBytes == kDefaultAlignBytes,
         "Only AlignBytes values of 0 and kDefaultAlignBytes are supported!");

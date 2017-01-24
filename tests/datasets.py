@@ -3,6 +3,7 @@
 # import functools
 import os
 import numpy as np
+from sklearn.datasets.samples_generator import make_blobs
 
 from joblib import Memory
 _memory = Memory('.', verbose=1)
@@ -11,71 +12,64 @@ DATA_DIR = os.path.expanduser('~/Desktop/datasets/nn-search')
 join = os.path.join
 
 
-class Datasets:
-    RAND_UNIF = 0
-    RAND_GAUSS = 1
-    RAND_WALK = 2
-    GLOVE = 10
-    GLOVE_100 = 11
-    GLOVE_200 = 12
-    SIFT = 20
-    SIFT_100 = 21
-    SIFT_200 = 22
-    GIST = 30
-    GIST_100 = 31
-    GIST_200 = 32
-    # GIST_QUERIES = 33
-
-    RAND_DATASETS = [RAND_UNIF, RAND_GAUSS, RAND_WALK]
-    FILE_DATASETS = [GLOVE, GLOVE_100, GLOVE_200,
-                     SIFT, SIFT_100, SIFT_200,
-                     GIST, GIST_100, GIST_200]
+class Random:
+    UNIFORM = 'uniform'
+    GAUSS = 'gauss'
+    WALK = 'walk'
+    BLOBS = 'blobs'
 
 
 class Gist:
-    TRAIN    = join(DATA_DIR, 'gist_train.npy')     # noqa
-    TEST     = join(DATA_DIR, 'gist.npy')           # noqa
-    TEST_100 = join(DATA_DIR, 'gist_100k.npy')      # noqa
-    TEST_200 = join(DATA_DIR, 'gist_200k.npy')      # noqa
-    queries  = join(DATA_DIR, 'gist_queries.npy')   # noqa
-    truth    = join(DATA_DIR, 'gist_truth.npy')     # noqa
+    DIR = join(DATA_DIR, 'gist')
+    TRAIN    = join(DIR, 'gist_train.npy')     # noqa
+    TEST     = join(DIR, 'gist.npy')           # noqa
+    TEST_100 = join(DIR, 'gist_100k.npy')      # noqa
+    TEST_200 = join(DIR, 'gist_200k.npy')      # noqa
+    QUERIES  = join(DIR, 'gist_queries.npy')   # noqa
+    TRUTH    = join(DIR, 'gist_truth.npy')     # noqa
 
 
-class Sift:
-    TEST     = join(DATA_DIR, 'sift.txt')           # noqa
-    TEST_100 = join(DATA_DIR, 'sift_100k.txt')      # noqa
-    TEST_200 = join(DATA_DIR, 'sift_200k.txt')      # noqa
+class Sift1M:
+    DIR = join(DATA_DIR, 'sift1m')
+    TRAIN    = join(DIR, 'sift_learn.npy')          # noqa
+    TEST     = join(DIR, 'sift_base.npy')           # noqa
+    TEST_100 = join(DIR, 'sift_100k.txt')           # noqa
+    TEST_200 = join(DIR, 'sift_200k.txt')           # noqa
+    QUERIES  = join(DIR, 'sift_queries.npy')        # noqa
+    TRUTH    = join(DIR, 'sift_groundtruth.npy')    # noqa
+
+
+class Sift10M:
+    DIR = join(DATA_DIR, 'sift1b')
+    # TRAIN    = join(DIR, 'big_ann_learn_10M.npy') # noqa
+    TRAIN    = join(DIR, 'big_ann_learn_1M.npy')    # noqa  # TODO use 10M?
+    TRAIN_1M = join(DIR, 'big_ann_learn_1M.npy')    # noqa
+    TEST     = join(DIR, 'sift_10M.npy')            # noqa
+    QUERIES  = join(DIR, 'sift_queries.npy')        # noqa
+    TRUTH    = join(DIR, 'true_nn_idxs_10M.npy')    # noqa
+
+
+class LabelMe:
+    DIR = join(DATA_DIR, 'labelme')
+    # TODO pull out train and test, write out as files, and precompute truth
 
 
 class Glove:
-    TEST     = join(DATA_DIR, 'glove.txt')          # noqa
-    TEST_100 = join(DATA_DIR, 'glove_100k.txt')     # noqa
-    TEST_200 = join(DATA_DIR, 'glove_200k.txt')     # noqa
-
-# class Paths:
-#     GLOVE = join(DATA_DIR, 'glove.txt')
-#     GLOVE_100 = join(DATA_DIR, 'glove_100k.txt')
-#     GLOVE_200 = join(DATA_DIR, 'glove_200k.txt')
-#     SIFT = join(DATA_DIR, 'sift.txt')
-#     SIFT_100 = join(DATA_DIR, 'sift_100k.txt')
-#     SIFT_200 = join(DATA_DIR, 'sift_200k.txt')
-
-#     GIST = _Gist
-#     # GIST = join(DATA_DIR, 'gist.npy')
-#     # GIST_100     = join(DATA_DIR, 'gist_100k.npy')
-#     # GIST_200     = join(DATA_DIR, 'gist_200k.npy')
-#     # GIST_TRAIN   = join(DATA_DIR, 'gist_train.npy')
-#     # GIST_QUERIES = join(DATA_DIR, 'gist_queries.npy')
-#     # GIST_TRUTH   = join(DATA_DIR, 'gist_truth.npy')
+    DIR = join(DATA_DIR, 'glove')
+    TEST     = join(DIR, 'glove.txt')           # noqa
+    TEST_100 = join(DIR, 'glove_100k.txt')      # noqa
+    TEST_200 = join(DIR, 'glove_200k.txt')      # noqa
 
 
-@_memory.cache  # cache this more efficiently than as text
+# @_memory.cache  # cache this more efficiently than as text
 def cached_load_txt(*args, **kwargs):
     return np.loadtxt(*args, **kwargs)
 
 
-# def cached_load_npy(*args, **kwargs):
-#     return read_yael_vecs(*args, **kwargs)
+def load_file(fname, *args, **kwargs):
+    if fname.split('.')[-1] == 'txt':
+        return np.loadtxt(fname, *args, **kwargs)
+    return np.load(fname, *args, **kwargs)
 
 
 def extract_random_rows(X, how_many):
@@ -86,80 +80,97 @@ def extract_random_rows(X, how_many):
     return X[mask], rows
 
 
+def _load_complete_dataset(which_dataset, num_queries=1):
+    X_test = np.load(which_dataset.TEST)
+    try:
+        X_train = np.load(which_dataset.TRAIN)
+    except AttributeError:
+        X_train = X_test
+    try:
+        Q = np.load(which_dataset.QUERIES)
+    except AttributeError:
+        X_train, Q = extract_random_rows(X_train, how_many=num_queries)
+    try:
+        true_nn = np.load(which_dataset.TRUTH)
+    except AttributeError:
+        true_nn = None
+
+    return X_train, Q, X_test, true_nn
+
+
+def _ground_truth_for_dataset(which_dataset):
+    return None  # TODO
+
+
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
-                 num_queries=1):
-    if which_dataset == Datasets.RAND_UNIF:
-        X = np.random.rand(N, D)
-        q = np.random.rand(num_queries, D)
-    elif which_dataset == Datasets.RAND_GAUSS:
-        X = np.random.randn(N, D)
-        q = np.random.randn(num_queries, D)
-    elif which_dataset == Datasets.RAND_WALK:
-        X = np.random.randn(N, D)
-        X = np.cumsum(X, axis=1)
-        q = np.random.randn(num_queries, D)
-        q = np.cumsum(q, axis=-1)
+                 num_queries=1, Ntrain=-1):
+    true_nn = None
 
-    elif which_dataset == Datasets.GLOVE:
-        X = cached_load_txt(Glove.TEST)
-    elif which_dataset == Datasets.GLOVE_100:
-        X = cached_load_txt(Glove.TEST_100)
-    elif which_dataset == Datasets.GLOVE_200:
-        X = cached_load_txt(Glove.TEST_200)
+    # randomly generated datasets
+    if which_dataset == Random.UNIFORM:
+        X_test = np.random.rand(N, D)
+        X_train = np.random.rand(Ntrain, D) if Ntrain > 0 else X_test
+        Q = np.random.rand(num_queries, D)
+    elif which_dataset == Random.GAUSS:
+        X_test = np.random.randn(N, D)
+        X_train = np.random.randn(Ntrain, D) if Ntrain > 0 else X_test
+        Q = np.random.randn(num_queries, D)
+    elif which_dataset == Random.WALK:
+        X_test = np.random.randn(N, D)
+        X_test = np.cumsum(X_test, axis=1)
+        X_train = X_test
+        if Ntrain > 0:
+            X_train = np.random.randn(Ntrain, D)
+            X_train = np.cumsum(X_train)
+        Q = np.random.randn(num_queries, D)
+        Q = np.cumsum(Q, axis=-1)
+    elif which_dataset == Random.BLOBS:
+        # centers is D x D, and centers[i, j] = (i + j)
+        centers = np.arange(D)
+        centers = np.sum(np.meshgrid(centers, centers), axis=0)
+        X_test, _ = make_blobs(n_samples=N, centers=centers)
+        X_train = X_test
+        if Ntrain > 0:
+            X_train, _ = make_blobs(n_samples=Ntrain, centers=centers)
+        Q, true_nn = make_blobs(n_samples=num_queries, centers=centers)
 
-    elif which_dataset == Datasets.SIFT:
-        X = cached_load_txt(Sift.TEST)
-    elif which_dataset == Datasets.SIFT_100:
-        X = cached_load_txt(Sift.TEST_100)
-    elif which_dataset == Datasets.SIFT_200:
-        X = cached_load_txt(Sift.TEST_200)
+    # datasets that are just one block of a "real" dataset
+    elif isinstance(which_dataset, str):
+        X_test = load_file(which_dataset)
+        X_test, Q = extract_random_rows(X_test, how_many=num_queries)
+        X_train = X_test
+        true_nn = _ground_truth_for_dataset(which_dataset)
 
-    elif which_dataset == Datasets.GIST:
-        X = np.load(Gist.TEST)
-    elif which_dataset == Datasets.GIST_100:
-        X = np.load(Gist.TEST_100)
-    elif which_dataset == Datasets.GIST_200:
-        X = np.load(Gist.TEST_200)
+    # "real" datasets with predefined train, test, queries, truth
+    elif which_dataset in (Glove, Gist, Sift1M, Sift10M):
+        X_train, Q, X_test, true_nn = _load_complete_dataset(which_dataset)
 
     else:
         raise ValueError("unrecognized dataset {}".format(which_dataset))
 
-    # if N > 0 and N < X.shape[0]:
-    #     X = X[:N, :]
-
-    if which_dataset in Datasets.FILE_DATASETS:
-        X, q = extract_random_rows(X, how_many=num_queries)
-
-        N = X.shape[0] if N < 1 else N
-        D = X.shape[1] if D < 1 else D
-        X = X[:N, :D]
-        if len(q.shape) > 1:
-            q = q[:, :D]
-        else:
-            q = q[:D]
-
-    # if which_dataset in Datasets.FILE_DATASETS:
-    #     if N > 0 and N < X.shape[0]:
-    #         X = X[:N, :]
-    #         X, q = extract_random_rows
-    #     else:
-    #         X = X[:-1, :]
-    #         # q = np.copy(X[-1])
-    #         # q = np.random.randn(X.shape[1])
-    #         idx = np.random.randint(X.shape[1] - 1)
-    #         q = np.copy(X[idx])
-    #         q[64:] = X[idx + 1, 64:]  # mix 2 examples so differs from both
-    #         print "start of q: ", q[:10]
+    N = X_test.shape[0] if N < 1 else N
+    D = X_test.shape[1] if D < 1 else D
+    X_test, X_train = X_test[:N, :D], X_train[:N, :D]
+    Q = Q[:, :D] if len(Q.shape) > 1 else Q[:D]
 
     if norm_mean:
-        means = np.mean(X, axis=0)
-        X -= means
-        q -= means
+        means = np.mean(X_train, axis=0)
+        X_train -= means
+        if X_train is not X_test:
+            X_test -= means
+        Q -= means
     if norm_len:
-        X /= np.linalg.norm(X, axis=1, keepdims=True)
-        q /= np.linalg.norm(q, axis=-1, keepdims=True)
+        X_test /= np.linalg.norm(X_test, axis=1, keepdims=True)
+        if X_train is not X_test:
+            X_train /= np.linalg.norm(X_train, axis=1, keepdims=True)
+        Q /= np.linalg.norm(Q, axis=-1, keepdims=True)
 
-    return X.astype(np.float32), np.squeeze(q.astype(np.float32))
+    # TODO don't convert datasets that are originally uint8s to floats
+    X_train = X_train.astype(np.float32)
+    X_test = X_test.astype(np.float32)
+    Q = np.squeeze(Q.astype(np.float32))
+
+    return X_train, Q, X_test, true_nn
 
 
 def read_yael_vecs(path, c_contiguous=True, limit_rows=-1, dtype=None):
