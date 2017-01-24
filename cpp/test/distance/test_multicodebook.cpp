@@ -10,12 +10,7 @@
 #include "debug_utils.hpp"
 #include "bit_ops.hpp"
 #include "memory.hpp"
-//#include "slice.hpp"
 
-using Eigen::Matrix;
-using Eigen::Dynamic;
-
-// static const int AlignBytes = 32;
 
 TEST_CASE("popcnt", "[mcq]") {
     int nblocks = 3;
@@ -106,7 +101,7 @@ TEST_CASE("popcnt", "[mcq]") {
         // 2) ensure that lookups with it are same as popcnt
         // 3) profile both
         // 4) variant of lut function that just uses one LUT, cuz that's all it needs
-        
+
         static const uint8_t mask_low4b = 0x0F;
 
         // tile this so that we instead have a collection of luts
@@ -131,23 +126,23 @@ TEST_CASE("popcnt", "[mcq]") {
 //            printf("d, d_lut = %d, %d\n", d, d_lut);
             REQUIRE(d == d_lut);
         }
-        
+
         aligned_free(popcount_luts);
     }
-    
+
     SECTION("8B codes, vectorized lookup table") {
         REQUIRE(true);
-        
+
         static const uint8_t mask_low4b = 0x0F;
         static const uint8_t block_sz_rows = 32;
-        
+
         int nblocks = N / block_sz_rows;
 //        std::cout << "nblocks: " << nblocks << "\n";
         assert(N % block_sz_rows == 0);
-        
+
         uint8_t* popcount_luts = aligned_alloc<uint8_t>(M * 2 * block_sz_rows);
         uint8_t* block_codes = aligned_alloc<uint8_t>(N * M);
-        
+
         // copy row-major codes to col-major in blocks of 32
         for (int nn = 0; nn < nblocks; nn++) { // for each block
             auto block_start_idx = nn * block_sz_rows * M;
@@ -161,7 +156,7 @@ TEST_CASE("popcnt", "[mcq]") {
                 }
             }
         }
-        
+
         // create 32B luts for vectorized lookups
         REQUIRE(block_sz_rows == 32); // following loop assumes this is true
         for (uint8_t j = 0; j < M; j++) {
@@ -176,9 +171,9 @@ TEST_CASE("popcnt", "[mcq]") {
                 lut_ptr[i + 48] = popcount(i ^ high_bits);
             }
         }
-        
+
         uint8_t* dists_vect = aligned_alloc<uint8_t>(N);
-        
+
         // check whether we got the dists right using a naive impl
         dist::naive_block_lut_dists_32x8B_4b(block_codes, popcount_luts, dists_vect, nblocks);
         for (int i = 0; i < N; i++) {
@@ -187,7 +182,7 @@ TEST_CASE("popcnt", "[mcq]") {
 //            printf("%d) d, d_vect = %d, %d\n", i, d, d_vect);
             REQUIRE(d == d_vect);
         }
-        
+
         // check whether we got the dists right using vectorized impl
         dist::block_lut_dists_32x8B_4b(block_codes, popcount_luts, dists_vect, nblocks);
         for (int i = 0; i < N; i++) {
@@ -196,11 +191,12 @@ TEST_CASE("popcnt", "[mcq]") {
 //            printf("%d) d, d_vect = %d, %d\n", i, d, d_vect);
             REQUIRE(d == d_vect);
         }
-        
+
         aligned_free<uint8_t>(popcount_luts);
         aligned_free<uint8_t>(block_codes);
+        aligned_free<uint8_t>(dists_vect);
     }
-    
+
     aligned_free<uint8_t>(codes);
     aligned_free<uint8_t>(q);
 }

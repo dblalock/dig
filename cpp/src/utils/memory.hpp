@@ -10,8 +10,7 @@
 #define __DIG_MEMORY_HPP
 
 
-
-#include "Dense"
+#include "Core"  // minimal subset of EIGEN that will compile
 
 static constexpr int kDefaultAlignBytes = EIGEN_DEFAULT_ALIGN_BYTES;
 static_assert(kDefaultAlignBytes == 32, "EIGEN_DEFAULT_ALIGN_BYTES is not 32!");

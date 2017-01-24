@@ -11,25 +11,13 @@
 #define __MULTI_CODEBOOK_HPP
 
 #include <sys/types.h>
-
-#include "Dense"
+#include "immintrin.h"
 
 #include "macros.hpp"
-#include "eigen_utils.hpp"
-
-#include "bit_ops.hpp"  // TODO rm
 
 namespace dist {
 
 static const uint8_t mask_low4b = 0x0F;
-
-// class multi_codebook
-// {
-// public:
-//     multi_codebook();
-//     ~multi_codebook();
-
-// };
 
 template<class T>
 inline __m256i load_si256i(T* ptr) {
@@ -37,11 +25,11 @@ inline __m256i load_si256i(T* ptr) {
 }
 
 inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
-    uint8_t* dists_out, int nblocks)
+    uint8_t* dists_out, int64_t nblocks)
 {
     static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
 
-    for (int i = 0; i < nblocks; i++) {
+    for (int64_t i = 0; i < nblocks; i++) {
         auto totals = _mm256_setzero_si256();
         for (uint8_t j = 0; j < 8; j++) {
             auto x_col = load_si256i(codes);
@@ -67,8 +55,8 @@ inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
             codes += 32;
             luts += 64;
         }
-        // _mm256_store_si256((__m256i*)dists_out, totals);
-        _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
+        _mm256_store_si256((__m256i*)dists_out, totals);
+        // _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
         luts -= 8 * 64;
         dists_out += 32;
     }
@@ -76,9 +64,9 @@ inline void block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
 
 // for debugging; should have same behavior as above func
 inline void naive_block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* luts,
-    uint8_t* dists_out, int nblocks)
+    uint8_t* dists_out, int64_t nblocks)
 {
-    for (int b = 0; b < nblocks; b++) {
+    for (int64_t b = 0; b < nblocks; b++) {
         // auto totals = _mm256_setzero_si256();
         for (uint8_t i = 0; i < 32; i++) {
             dists_out[i] = 0;
@@ -111,9 +99,9 @@ inline void naive_block_lut_dists_32x8B_4b(const uint8_t* codes, const uint8_t* 
 // luts must be of size [16][16]
 template<class dist_t>
 inline void lut_dists_8B_4b(const uint8_t* codes, const dist_t* luts,
-    dist_t* dists_out, int N)
+    dist_t* dists_out, int64_t N)
 {
-    for (int i = 0; i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
         dists_out[i] = 0;
         auto lut_ptr = luts;
 //        auto lut_ptr_right = luts + 16;
@@ -144,9 +132,9 @@ inline void lut_dists_8B_4b(const uint8_t* codes, const dist_t* luts,
 
 template<int NBytes, class dist_t>
 inline void lut_dists_8b(const uint8_t* codes, const dist_t* luts,
-    dist_t* dists_out, int N)
+    dist_t* dists_out, int64_t N)
 {
-    for (int i = 0; i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
         dists_out[i] = 0;
         for (int j = 0; j < NBytes; j++) {
             dists_out[i] += luts[j][codes[j]];
@@ -157,13 +145,13 @@ inline void lut_dists_8b(const uint8_t* codes, const dist_t* luts,
 
 template<class dist_t>
 inline void lut_dists_8B_8b_stride4b(const uint8_t* codes,
-    const dist_t* luts, dist_t* dists_out, int N)
+    const dist_t* luts, dist_t* dists_out, int64_t N)
 {
     // sum LUT distances both along byte boundaries and shifted by 4 bits
     // note that the shifted lookups assume that the corresponding LUT entries
     // are after the 8 entries for the non-shifted lookups
     static const int NBytes = 8;
-    for (int i = 0; i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
         dists_out[i] = 0;
         for (int j = 0; j < NBytes; j++) {
             dists_out[i] += luts[j][codes[j]];
@@ -180,9 +168,9 @@ inline void lut_dists_8B_8b_stride4b(const uint8_t* codes,
 }
 
 inline void popcount_8B(const uint8_t* codes, const uint64_t q,
-    uint8_t* dists_out, int N)
+    uint8_t* dists_out, int64_t N)
 {
-    for (int i = 0; i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
         auto row_ptr = reinterpret_cast<const uint64_t*>(codes + (8 * i));
         dists_out[i] = __builtin_popcountll((*row_ptr) ^ q);
     }
