@@ -162,18 +162,37 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
     return X.astype(np.float32), np.squeeze(q.astype(np.float32))
 
 
-def read_yael_vecs(path, c_contiguous=True, dtype=np.float32, limit=-1):
-    """note that this probably won't work unless dtype is 4 bytes"""
-    fv = np.fromfile(path, dtype=dtype, count=limit)
-    if fv.size == 0:
-        return np.zeros((0, 0))
-    dim = fv.view(np.int32)[0]
+def read_yael_vecs(path, c_contiguous=True, limit_rows=-1, dtype=None):
+    dim = np.fromfile(path, dtype=np.int32, count=2)[0]
     print "vector length = {}".format(dim)
+
+    if dtype is None:
+        if 'fvecs' in path:
+            dtype = np.float32
+        elif 'ivecs' in path:
+            dtype = np.int32
+        elif 'bvecs' in path:
+            dtype = np.uint8
+        else:
+            raise ValueError("couldn't infer dtype from path {}".format(path))
+    itemsize = np.dtype(dtype).itemsize
+
     assert dim > 0
-    fv = fv.reshape(-1, 1 + dim)
+    assert itemsize in (1, 2, 4)
+
+    cols_for_dim = 4 // itemsize
+    row_size_bytes = 4 + dim * itemsize
+    row_size_elems = row_size_bytes // itemsize
+    limit = int(limit_rows) * row_size_elems if limit_rows > 0 else -1
+
+    fv = np.fromfile(path, dtype=dtype, count=limit)
+    fv = fv.reshape((-1, row_size_elems))
+
     if not all(fv.view(np.int32)[:, 0] == dim):
         raise IOError("Non-uniform vector sizes in " + path)
-    fv = fv[:, 1:]
+
+    fv = fv[:, cols_for_dim:]
+
     if c_contiguous:
         fv = fv.copy()
     return fv
@@ -182,7 +201,7 @@ def read_yael_vecs(path, c_contiguous=True, dtype=np.float32, limit=-1):
 if __name__ == '__main__':
     pass
 
-    # Clean up gist data
+    # c------------------------ lean up gist
     #
     # path = Paths.DATA_DIR + '/gist/gist_base.fvecs'
     # path = Paths.DATA_DIR + '/gist/gist_learn.fvecs'
@@ -201,7 +220,65 @@ if __name__ == '__main__':
     # print X.shape
     # np.save(out_path, X)
 
-    # clean up LabelMe
+    # ------------------------ clean up sift1b (bigann)
+    # data_dir = '/Volumes/MacHDD/datasets/sift1b/'
+    # out_dir = '/Volumes/MacSSD_OS/Users/davis/Desktop/datasets/sift1b/'
+    # path = data_dir + 'bigann_learn.bvecs'
+    # path = data_dir + 'bigann_base.bvecs'
+    # path = data_dir + 'queries.bvecs'
+    # out_path = out_dir + 'big_ann_learn_1M.npy'
+    # out_path = out_dir + 'big_ann_learn_10M.npy'
+    # out_path = out_dir + 'sift_10M.npy'
+    # out_path = out_dir + 'sift_queries.npy'
+    # limit_rows = int(1e6)
+    # limit_rows = int(10e6)
+    # X = read_yael_vecs(path, limit_rows=limit_rows)
+    # X = read_yael_vecs(path)
+    # print X.shape
+    # np.save(out_path, X)
+
+    # truth_dir = data_dir + 'gnd/'
+    # # truth_idxs_files = ['idx_1M', 'idx_10M', 'idx_100M']
+    # truth_idxs_files = ['idx_1000M']
+    # for f in truth_idxs_files:
+    #     path = truth_dir + f + '.ivecs'
+    #     out_path = out_dir + f + '.npy'
+    #     print "unpacking {} to {}".format(path, out_path)
+    #     X = read_yael_vecs(path)
+    #     print X.shape
+    #     np.save(out_path, X)
+
+    # ------------------------ clean up sift1m
+    data_dir = '/Volumes/MacHDD/datasets/sift1m/'
+    out_dir = '/Volumes/MacSSD_OS/Users/davis/Desktop/datasets/sift1m/'
+    for fname in os.listdir(data_dir):
+        in_path = data_dir + fname
+        out_path = out_dir + fname.split('.')[0] + '.npy'
+        print "unpacking {} to {}".format(in_path, out_path)
+        X = read_yael_vecs(in_path)
+        print X.shape
+        np.save(out_path, X)
+
+    # ------------------------ clean up deep1b
+    # data_dir = '/Volumes/MacHDD/datasets/deep1b/'
+    # out_dir = '/Volumes/MacSSD_OS/Users/davis/Desktop/datasets/deep1b/'
+
+    # # expected_cols = 96
+    # # equivalent_elements_in_first_1M = int(1e6) * (1 + expected_cols)
+    # arrays = []
+    # # arrays.append(('deep1B_queries.fvecs', 'deep_queries.npy', -1))
+    # # arrays.append(('deep1B_groundtruth.ivecs', 'deep_true_nn_idxs.npy', -1))
+    # # arrays.append(('deep10M.fvecs', 'deep_1M.npy', 1e6))
+    # arrays.append(('deep10M.fvecs', 'deep_10M.npy', -1))
+    # for in_file, out_file, limit in arrays:
+    #     in_path = data_dir + in_file
+    #     out_path = out_dir + out_file
+    #     X = read_yael_vecs(in_path, limit_rows=limit)
+    #     print "unpacking {} to {}".format(in_path, out_path)
+    #     print X.shape
+    #     np.save(out_path, X)
+
+    # ------------------------ clean up LabelMe
     #
     # >>> for k, v in d.iteritems():
     # ...     try:
