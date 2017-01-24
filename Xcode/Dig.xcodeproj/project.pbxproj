@@ -11,6 +11,7 @@
 		721FC9CE1DAC00AE00EF824F /* neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 721FC9CD1DAC00AE00EF824F /* neighbors.cpp */; };
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
+		725C74DF1E36D6F700037244 /* profile_multicodebook.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */; };
 		727207DD1DBFEF520014F72B /* profile_neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727207DC1DBFEF520014F72B /* profile_neighbors.cpp */; };
 		728E9D951E35966300BDAB82 /* test_multicodebook.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728E9D941E35966300BDAB82 /* test_multicodebook.cpp */; };
 		728F85E01C55B565004E4AA0 /* tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728F85DE1C55B565004E4AA0 /* tree.cpp */; };
@@ -67,6 +68,7 @@
 		72247DB11C87A5F600B74A64 /* dist.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = dist.hpp; sourceTree = "<group>"; };
 		722E1C5A1DC7E3AE004BD70A /* preproc.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = preproc.hpp; sourceTree = "<group>"; };
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
+		725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_multicodebook.cpp; sourceTree = "<group>"; };
 		727207DC1DBFEF520014F72B /* profile_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_neighbors.cpp; sourceTree = "<group>"; };
 		727A342F1CB35D0B009A54CE /* circular.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = circular.hpp; sourceTree = "<group>"; };
 		727A34301CB35D26009A54CE /* flock_batch.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = flock_batch.hpp; sourceTree = "<group>"; };
@@ -1272,6 +1274,7 @@
 			isa = PBXGroup;
 			children = (
 				728E9D941E35966300BDAB82 /* test_multicodebook.cpp */,
+				725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */,
 				72C57CB31DDA69AA0019C906 /* profile_euclidean.cpp */,
 				72DED7591DB546FC00F3301F /* test_distance_speed.cpp */,
 				72A789D31DA1F372004F2D18 /* test_cluster.cpp */,
@@ -1391,6 +1394,7 @@
 				72C81BF11C93629D00639302 /* test_subseq.cpp in Sources */,
 				72C419641C5337AD004689A2 /* math_utils.c in Sources */,
 				727207DD1DBFEF520014F72B /* profile_neighbors.cpp in Sources */,
+				725C74DF1E36D6F700037244 /* profile_multicodebook.cpp in Sources */,
 				72E714791DAFE6DB00CE06EC /* test_neighbors.cpp in Sources */,
 				72C81BE81C90B6EE00639302 /* flock.cpp in Sources */,
 				72C57CB41DDA69AA0019C906 /* profile_euclidean.cpp in Sources */,
