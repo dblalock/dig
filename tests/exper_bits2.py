@@ -722,7 +722,7 @@ class OPQEncoder(PQEncoder):
 
     def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
                  nsubvects=-1, elemwise_dist_func=dists_elemwise_sq,
-                 opq_iters=20):
+                 opq_iters=20, **opq_kwargs):
         X = dataset.X
         self.elemwise_dist_func = elemwise_dist_func
 
@@ -736,7 +736,7 @@ class OPQEncoder(PQEncoder):
 
         self.centroids, _, self.R = pq.learn_opq(
             X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
-            niters=opq_iters)
+            niters=opq_iters, **opq_kwargs)
 
     def encode_X(self, X, **sink):
         X = pq.opq_rotate(X, self.R)
@@ -760,6 +760,31 @@ class OPQEncoder(PQEncoder):
         # PQEncoder.fit_query(self, q)
         self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
                                      elemwise_dist_func=self.elemwise_dist_func)
+
+        if False:
+            import seaborn as sb
+            _, axes = plt.subplots(3, figsize=(9, 11))
+            sb.violinplot(data=self.q_dists_, inner="box", cut=0, ax=axes[0])
+            axes[0].set_xlabel('Codebook')
+            axes[0].set_ylabel('Distance to query')
+            axes[0].set_ylim([0, np.max(self.q_dists_)])
+
+            sb.heatmap(data=self.q_dists_, ax=axes[1], cbar=False, vmin=0)
+            axes[1].set_xlabel('Codebook')
+            axes[1].set_ylabel('Centroid')
+
+            sb.distplot(self.q_dists_.ravel(), hist=False, rug=True, vertical=False, ax=axes[2])
+            axes[2].set_xlabel('Centroid dist to query')
+            axes[2].set_ylabel('Fraction of centroids')
+            axes[2].set_xlim([0, np.max(self.q_dists_) + .5])
+
+            # plot where the mean is
+            mean_dist = np.mean(self.q_dists_)
+            ylim = axes[2].get_ylim()
+            axes[2].plot([mean_dist, mean_dist], ylim, 'r--')
+            axes[2].set_ylim(ylim)
+
+            plt.show()
 
     # def dists_enc(self, X_enc, q_unused):
     #     dists = np.zeros(X_enc.shape[0])
@@ -882,14 +907,17 @@ def main():
 
     # N = -1  # set this to not limit real datasets to first N entries
     N = 10 * 1000
+    # N = 20 * 1000
     # N = 50 * 1000
     # N = 100 * 1000
     # N = 1000 * 1000
-    D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
     # D = 32
     num_centroids = 256
-    num_queries = 128
+    # num_queries = 128
+    num_queries = 3
     # num_queries = 2
+    # num_queries = 8
 
     dataset_func = functools.partial(load_dataset_and_groups,
                                      num_centroids=num_centroids, N=N, D=D,
@@ -945,15 +973,39 @@ def main():
     # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=6)
     # eval_encoder(dataset, encoder)
 
-    print "------------------------ pq l2, 16x4 bit centroid idxs"
-    encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
-    eval_encoder(dataset, encoder)
+    # print "------------------------ pq l2, 16x4 bit centroid idxs"
+    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
+    # eval_encoder(dataset, encoder)
 
-    print "------------------------ opq l2, 16x4 bit centroid idxs"
-    encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
-    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # print "------------------------ opq l2, 24x4 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=24, bits_per_subvect=4, opq_iters=5)
+    # # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # # eval_encoder(dataset, encoder, plot=True)
+    # eval_encoder(dataset, encoder)
+
+    # print "------------------------ opq l2, 16x4 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
+    # # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # # eval_encoder(dataset, encoder, plot=True)
+    # eval_encoder(dataset, encoder)
+
+    print "------------------------ opq l2, 8x8 bit centroid idxs"
+    encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5)
+    # encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5, init='identity')
     # eval_encoder(dataset, encoder, plot=True)
     eval_encoder(dataset, encoder)
+
+    # print "------------------------ opq l2, 6x10 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=6, bits_per_subvect=10, opq_iters=5)
+    # # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # # eval_encoder(dataset, encoder, plot=True)
+    # eval_encoder(dataset, encoder)
+
+    # print "------------------------ opq l2, 6x11 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=6, bits_per_subvect=11, opq_iters=5)
+    # # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
+    # # eval_encoder(dataset, encoder, plot=True)
+    # eval_encoder(dataset, encoder)
 
     # # print "------------------------ pca l1"
     # # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
