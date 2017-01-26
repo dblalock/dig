@@ -13,9 +13,9 @@
 
 
 TEST_CASE("popcnt", "[mcq]") {
-    int nblocks = 3;
-    int N = 32 * nblocks;
-    int M = 8;  // must be 8 for tests that cast to uint64_t
+    static constexpr int nblocks = 3;
+    static constexpr int N = 32 * nblocks;
+    static constexpr int M = 8;  // must be 8 for tests that cast to uint64_t
 
     // TODO aligned alloc if we test vectorized version
     // uint8_t X_[N * M];
@@ -45,7 +45,8 @@ TEST_CASE("popcnt", "[mcq]") {
 
     // compute distances using our function
     uint8_t dists[N];
-    dist::popcount_8B(codes, q_uint, &dists[0], N);
+    // dist::popcount_8B(codes, q_uint, &dists[0], N);
+    dist::popcount_generic<M>(codes, q_uint, &dists[0], N);
 
     // compute distances by casting to int64 arrays
     // std::cout << "bit diffs:\n";
@@ -118,7 +119,7 @@ TEST_CASE("popcnt", "[mcq]") {
 
         RowVector<uint8_t> _dists_lut(N);
         auto dists_lut = _dists_lut.data();
-        dist::lut_dists_8B_4b(codes, popcount_luts, dists_lut, N);
+        dist::lut_dists_4b<M>(codes, popcount_luts, dists_lut, N);
 
         for (int i = 0; i < N; i++) {
             int d_lut = dists_lut[i];
@@ -141,7 +142,7 @@ TEST_CASE("popcnt", "[mcq]") {
         assert(N % block_sz_rows == 0);
 
         uint8_t* block_codes = aligned_alloc<uint8_t>(N * M);
-        
+
         // copy row-major codes to col-major in blocks of 32
         for (int nn = 0; nn < nblocks; nn++) { // for each block
             auto block_start_idx = nn * block_sz_rows * M;
@@ -155,11 +156,11 @@ TEST_CASE("popcnt", "[mcq]") {
                 }
             }
         }
-        
+
         // try having 32B (unpacked) luts and 16B luts that need unpacking
         uint8_t* popcount_luts16 = aligned_alloc<uint8_t>(M * block_sz_rows);
         uint8_t* popcount_luts32 = aligned_alloc<uint8_t>(M * 2 * block_sz_rows);
-        
+
         // create 32B luts for vectorized lookups
         // EDIT: and 16B luts for vectorized lookups that unpack luts
         REQUIRE(block_sz_rows == 32); // following loop assumes this is true
@@ -167,14 +168,14 @@ TEST_CASE("popcnt", "[mcq]") {
             uint8_t byte = q[j];
             uint8_t low_bits = byte & mask_low4b;
             uint8_t high_bits = byte >> 4;
-            
+
             // 16B lut
             auto lut_ptr = popcount_luts16 + block_sz_rows * j;
             for (uint8_t i = 0; i < 16; i++) {
                 lut_ptr[i +  0] = popcount(i ^ low_bits);
                 lut_ptr[i + 16] = popcount(i ^ high_bits);
             }
-            
+
             // 32B lut
             lut_ptr = popcount_luts32 + block_sz_rows * 2 * j;
 //            auto lut_ptr = popcount_luts32 + block_sz_rows * 2 * j;
@@ -189,7 +190,7 @@ TEST_CASE("popcnt", "[mcq]") {
         uint8_t* dists_vect = aligned_alloc<uint8_t>(N);
 
         // check whether we got the dists right using a naive impl
-        dist::naive_block_lut_dists_32x8B_4b(block_codes, popcount_luts32, dists_vect, nblocks);
+        dist::debug_lut_dists_block32_4b<M>(block_codes, popcount_luts32, dists_vect, nblocks);
         for (int i = 0; i < N; i++) {
             int d_vect = dists_vect[i];
             int d = dists[i];
@@ -198,7 +199,7 @@ TEST_CASE("popcnt", "[mcq]") {
         }
 
         // check whether we got the dists right using vectorized impl
-        dist::block_lut_dists_32x8B_4b(block_codes, popcount_luts32, dists_vect, nblocks);
+        dist::lut_dists_block32_4b<M>(block_codes, popcount_luts32, dists_vect, nblocks);
         for (int i = 0; i < N; i++) {
             int d_vect = dists_vect[i];
             int d = dists[i];
@@ -207,13 +208,13 @@ TEST_CASE("popcnt", "[mcq]") {
         }
 
         // check whether we got the dists right using unpacking vectorized impl
-        dist::block_lut_dists_32x8B_4b_unpack(block_codes, popcount_luts16, dists_vect, nblocks);
+        dist::lut_dists_block32_4b_unpack<M>(block_codes, popcount_luts16, dists_vect, nblocks);
         for (int i = 0; i < N; i++) {
             int d_vect = dists_vect[i];
             int d = dists[i];
             REQUIRE(d == d_vect);
         }
-        
+
         aligned_free<uint8_t>(popcount_luts16);
         aligned_free<uint8_t>(popcount_luts32);
         aligned_free<uint8_t>(block_codes);
