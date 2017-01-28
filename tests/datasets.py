@@ -72,12 +72,18 @@ def load_file(fname, *args, **kwargs):
     return np.load(fname, *args, **kwargs)
 
 
-def extract_random_rows(X, how_many):
-    which_rows = np.random.randint(len(X), size=how_many)
-    rows = np.copy(X[which_rows])
-    mask = np.ones(len(X), dtype=np.bool)
-    mask[which_rows] = False
-    return X[mask], rows
+def extract_random_rows(X, how_many, remove_from_X=True):
+    split_start = np.random.randint(len(X) - how_many - 1)
+    split_end = split_start + how_many
+    rows = np.copy(X[split_start:split_end])
+    if remove_from_X:
+        return np.vstack((X[:split_start], X[split_end:])), rows
+    return X, rows
+    # which_rows = np.random.randint(len(X), size=how_many)
+    # rows = np.copy(X[which_rows])
+    # mask = np.ones(len(X), dtype=np.bool)
+    # mask[which_rows] = False
+    # return X[mask].copy(), rows
 
 
 def _load_complete_dataset(which_dataset, num_queries=1):
@@ -102,7 +108,7 @@ def _ground_truth_for_dataset(which_dataset):
     return None  # TODO
 
 
-@_memory.cache
+# @_memory.cache
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
                  num_queries=1, Ntrain=-1):
     true_nn = None
@@ -154,15 +160,27 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
     X_test, X_train = X_test[:N, :D], X_train[:N, :D]
     Q = Q[:, :D] if len(Q.shape) > 1 else Q[:D]
 
+    train_is_test = X_train.base is X_test or X_test.base is X_train
+    train_is_test = train_is_test or np.array_equal(X_train[:100], X_test[:100])
+
+    if train_is_test:
+        print "WARNING: Training data is also the test data!"
+
     if norm_mean:
+        # means = np.zeros(X_train.shape[1]) + 1000
+        # means = np.ones(X_train.shape[1])
+        # print "subtracting off means with shape", means.shape
+        # print "Xtrain and Xtest starts:"
+        # print X_train[:5, :5]
+        # print X_test[:5, :5]
         means = np.mean(X_train, axis=0)
         X_train -= means
-        if X_train is not X_test:
+        if not train_is_test:
             X_test -= means
         Q -= means
     if norm_len:
         X_test /= np.linalg.norm(X_test, axis=1, keepdims=True)
-        if X_train is not X_test:
+        if not train_is_test:
             X_train /= np.linalg.norm(X_train, axis=1, keepdims=True)
         Q /= np.linalg.norm(Q, axis=-1, keepdims=True)
 
