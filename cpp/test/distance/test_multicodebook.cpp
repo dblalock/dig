@@ -40,21 +40,25 @@ TEST_CASE("popcnt", "[mcq]") {
     // uint8_t* q = &q_[0];
 
 //    std::cout << "q:\n";
-    uint64_t q_uint = *(uint64_t*)q;
+//    uint64_t q_uint = *(uint64_t*)q;
 //    dumpEndianBits(q_uint);
+    const uint64_t* q64 = reinterpret_cast<const uint64_t*>(q);
 
     // compute distances using our function
     uint8_t dists[N];
     // dist::popcount_8B(codes, q_uint, &dists[0], N);
-    dist::popcount_generic<M>(codes, q_uint, &dists[0], N);
+    dist::popcount_generic<M>(codes, q, &dists[0], N);
 
     // compute distances by casting to int64 arrays
     // std::cout << "bit diffs:\n";
     for (int i = 0; i < N; i++) {
-        uint64_t x = *(uint64_t*)(codes + M * i);
-        auto diffs = x ^ q_uint;
-        // dumpEndianBits(diffs);
-        int count = popcount(diffs);
+        int count = 0;
+        for (int b = 0; b < M; b += 8) {
+            uint64_t x = *(uint64_t*)(codes + M * i + b);
+            auto q_uint = *(q64 + b);
+            auto diffs = x ^ q_uint;
+            count += popcount(diffs);
+        }
         REQUIRE(count == dists[i]);
         // std::cout << "global dist: " << count << "\n";
     }
@@ -106,20 +110,46 @@ TEST_CASE("popcnt", "[mcq]") {
         static const uint8_t mask_low4b = 0x0F;
 
         // tile this so that we instead have a collection of luts
-        uint8_t* popcount_luts = aligned_alloc<uint8_t>(M * 2 * 16);
-        for (uint8_t j = 0; j < 2*M; j++) {
-            REQUIRE(M <= 8);
-            uint8_t q_bits = static_cast<uint8_t>((q_uint >> (4 * j)) & mask_low4b);
-            auto lut_ptr = popcount_luts + 16 * j;
-//            printf("j, q bits: %d, %d\n", j, q_bits); // yep, j == q_bits
+//        uint8_t* popcount_luts = aligned_alloc<uint8_t>(M * 2 * 16);
+        uint8_t* popcount_luts16 = aligned_alloc<uint8_t>(M * 32);
+        uint8_t* popcount_luts32 = aligned_alloc<uint8_t>(M * 2 * 32);
+        
+        for (uint8_t j = 0; j < M; j++) {
+            uint8_t byte = q[j];
+            uint8_t low_bits = byte & mask_low4b;
+            uint8_t high_bits = (byte >> 4) & mask_low4b;
+            
+            // just a sequence of 16B LUTs
+            auto lut_ptr16 = popcount_luts16 + 16 * 2 * j;
             for (uint8_t i = 0; i < 16; i++) {
-                lut_ptr[i] = popcount(i ^ q_bits);
+                lut_ptr16[i +  0] = popcount(i ^ low_bits);
+                lut_ptr16[i + 16] = popcount(i ^ high_bits);
+            }
+            
+            // two consecutive copies of each LUT, to fill 32B
+            auto lut_ptr32 = popcount_luts32 + 32 * 2 * j;
+            for (uint8_t i = 0; i < 16; i++) {
+                lut_ptr32[i +  0] = popcount(i ^ low_bits);
+                lut_ptr32[i + 16] = popcount(i ^ low_bits);
+                lut_ptr32[i + 32] = popcount(i ^ high_bits);
+                lut_ptr32[i + 48] = popcount(i ^ high_bits);
             }
         }
+        
+//        for (uint8_t j = 0; j < 2*M; j++) {
+//            
+////            REQUIRE(M <= 8);
+//            uint8_t q_bits = static_cast<uint8_t>((q_uint >> (4 * j)) & mask_low4b);
+//            auto lut_ptr = popcount_luts + 16 * j;
+////            printf("j, q bits: %d, %d\n", j, q_bits); // yep, j == q_bits
+//            for (uint8_t i = 0; i < 16; i++) {
+//                lut_ptr[i] = popcount(i ^ q_bits);
+//            }
+//        }
 
         RowVector<uint8_t> _dists_lut(N);
         auto dists_lut = _dists_lut.data();
-        dist::lut_dists_4b<M>(codes, popcount_luts, dists_lut, N);
+        dist::lut_dists_4b<M>(codes, popcount_luts16, dists_lut, N);
 
         for (int i = 0; i < N; i++) {
             int d_lut = dists_lut[i];
@@ -128,7 +158,8 @@ TEST_CASE("popcnt", "[mcq]") {
             REQUIRE(d == d_lut);
         }
 
-        aligned_free(popcount_luts);
+        aligned_free(popcount_luts16);
+        aligned_free(popcount_luts32);
     }
 
     SECTION("8B codes, vectorized lookup table") {
