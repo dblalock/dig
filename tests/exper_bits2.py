@@ -18,6 +18,7 @@ from utils import dists_sq, kmeans, orthonormalize_rows, top_k_idxs
 from joblib import Memory
 _memory = Memory('.', verbose=0)
 
+np.set_printoptions(precision=3)
 
 # ================================================================ Distances
 
@@ -175,20 +176,23 @@ def groups_from_labels(X, labels, num_centroids):
         groups[lbl].append(X[i])
 
     for i, g in enumerate(groups[:]):
-        groups[i] = np.array(g, order='F')
+        # groups[i] = np.array(g, order='F')
+        groups[i] = np.array(g)
 
     return groups
 
 
-@_memory.cache  # TODO use X_train and X_test separately, as well as truth idxs
+# @_memory.cache  # TODO use X_train and X_test separately, as well as truth idxs
 def load_dataset_and_groups(which_dataset, num_centroids=256,
                             **load_dataset_kwargs):
     X_train, q, X_test, true_nn = datasets.load_dataset(
         which_dataset, **load_dataset_kwargs)
     X = X_train  # TODO use train vs test
     assert q.shape[-1] == X.shape[-1]
-    centroids, labels = kmeans(X, num_centroids)
-    groups = groups_from_labels(X, labels, num_centroids)
+    # centroids, labels = kmeans(X, num_centroids)
+    # groups = groups_from_labels(X, labels, num_centroids)
+    centroids = None
+    groups = None
 
     return Dataset(X, q, X, X_test, true_nn, centroids, groups)
 
@@ -663,7 +667,7 @@ def _fit_opq_lut(q, centroids, elemwise_dist_func):
     q = q.reshape((1, nsubvects, subvect_len))
     q_dists_ = elemwise_dist_func(centroids, q)
     q_dists_ = np.sum(q_dists_, axis=-1)
-    return np.asfortranarray(q_dists_)
+    return np.asfortranarray(q_dists_)  # ncentroids, nsubvects, col-major
 
 
 class PQEncoder(object):
@@ -710,7 +714,7 @@ class PQEncoder(object):
     #             dists[i] += self.q_dists_[idx, j]
     #     return dists
 
-    def dists_enc(self, X_enc, q_unused):
+    def dists_enc(self, X_enc, q_unused=None):
         # this line has each element of X_enc index into the flattened
         # version of q's distances to the centroids; we had to add
         # offsets to each col of X_enc above for this to work
@@ -722,9 +726,10 @@ class OPQEncoder(PQEncoder):
 
     def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
                  nsubvects=-1, elemwise_dist_func=dists_elemwise_sq,
-                 opq_iters=20, **opq_kwargs):
+                 opq_iters=20, quantize_lut=False, **opq_kwargs):
         X = dataset.X
         self.elemwise_dist_func = elemwise_dist_func
+        self.quantize_lut = quantize_lut
 
         tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
                                      bits_per_subvect=bits_per_subvect,
@@ -737,6 +742,142 @@ class OPQEncoder(PQEncoder):
         self.centroids, _, self.R = pq.learn_opq(
             X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
             niters=opq_iters, **opq_kwargs)
+
+        # learn appropriate offsets and shared scale factor for quantization
+        self.lut_offsets = np.zeros(self.nsubvects)
+        self.order_idxs = np.arange(self.nsubvects, dtype=np.int)
+        # for _ in range(5): # TODO rm
+        if self.quantize_lut:
+            # temporary initial values for encoding of sampled queries
+            # self.scale_by = 1
+            # self.dist_offset = 0
+
+            # TODO use more queries and rows of X
+            # X, queries = datasets.extract_random_rows(X, how_many=100)
+            # queries = dataset.q   # WAT THE **** THIS SHOULD NOT FIX THIS DISTANCE DISCREPANCIES
+            # print "dataset q:", np.mean(queries), np.std(queries), queries.shape, queries.dtype
+            # _, queries = datasets.extract_random_rows(X[10000:, :], how_many=1000)
+            _, queries = datasets.extract_random_rows(
+                X[10000:], how_many=1000, remove_from_X=False)
+            # print "sampled q:", np.mean(queries), np.std(queries), queries.shape, queries.dtype
+            X = X[:10000]  # limit to first 10k rows of X for now
+
+            # compute approximated nn distances between the queries
+            # and the training set
+            X_enc = self.encode_X(X)
+            num_neighbors = 10  # TODO accept as param
+            all_enc_dists = np.empty((len(queries), num_neighbors))
+            all_true_dists = np.empty((len(queries), num_neighbors))
+            for i, q in enumerate(queries):
+                # dists_true = dists_sq(X, X[i])
+                # knn_idxs = top_k_idxs(dists_true, 10, smaller_better=True)
+                # print "true knn dists opq:", dists_true[knn_idxs]
+
+                self.fit_query(q, quantize=False)
+                dists_true = self.dists_true(X, q)
+                dists_enc = self.dists_enc(X_enc)
+                # if i == 0:
+                #     print "dists_true [:100]", dists_true[:100]
+                knn_idxs = top_k_idxs(dists_true, num_neighbors, smaller_better=True)
+                all_enc_dists[i] = dists_enc[knn_idxs]
+                all_true_dists[i] = dists_true[knn_idxs]  # TODO rm
+
+            max_enc_dists_for_queries = np.max(all_enc_dists, axis=1)
+            min_enc_dists_for_queries = np.min(all_enc_dists, axis=1)
+
+            lower_cutoff = np.percentile(min_enc_dists_for_queries, 5)
+            upper_cutoff = np.percentile(max_enc_dists_for_queries, 95)
+
+            self.lut_offsets += (lower_cutoff / float(self.nsubvects))
+            self.scale_by = (1. / (upper_cutoff - lower_cutoff)) * 255
+
+            # print "lower cutoff (true):", lower_cutoff
+            # print "upper cutoff (true):", upper_cutoff
+            # print "lower cutoff (enc):", lower_cutoff * self.scale_by
+            # print "upper cutoff (enc):", upper_cutoff * self.scale_by
+            # # print "knn enc dists[:100]:", all_enc_dists[:100]
+            # print "knn true dists[:20]:", all_true_dists[:20]
+            # # print "opq knn true dists:", all_true_dists
+
+            # # compute average dist contribution from each codebook
+            # # stds = np.zeros(self.nsubvects)
+            # # mean_dist = 0
+            # all_dists = np.empty(len(queries))
+            # subvect_means = np.zeros(self.nsubvects)
+            # # subvect_mins = np.zeros(self.nsubvects)
+            # # subvect_stds = np.zeros(self.)
+            # for i, q in enumerate(queries):
+            #     lut = self._fit_query(q)
+            #     mean_dists = np.mean(lut, axis=0)
+            #     # min_dists = np.min(lut, axis=0)
+            #     # self.quantize_offsets += mean_dists
+            #     subvect_means += mean_dists
+            #     all_dists[i] = np.sum(mean_dists)
+            #     # stds += np.std(lut, axis=0)
+            # subvect_means /= len(queries)
+            # # self.quantize_offsets /= len(queries)
+            # self.order_idxs = np.argsort(subvect_means)[::-1]
+
+            # # scale such that closest points (5sigma below mean) will clip
+            # # at 0, and avg point will clip at 255
+            # std = np.std(all_dists)
+            # mean_dist = np.mean(all_dists)
+            # # lower_cutoff = max(0, mean_dist - 5 * std)
+            # lower_cutoff = max(0, mean_dist - 5 * std)
+            # upper_cutoff = mean_dist
+            # width = upper_cutoff - lower_cutoff
+            # scale_by = 255. / width
+            # adjusted_dists = (all_dists - lower_cutoff) * scale_by
+
+            # self.scale_by = scale_by
+            # self.dist_offset = lower_cutoff
+
+            # if False:
+            #     data = adjusted_dists
+            #     ax = sb.distplot(data, hist=False, rug=True)
+            #     ax.set_xlabel('Query dist to random centroids (estimated dist)')
+            #     ax.set_ylabel('Fraction of queries')
+
+            #     # plot where the mean and median are; note that this
+            #     # numbers are basically identical, with median *slightly* lower
+            #     mean_dist = np.mean(data)
+            #     ylim = ax.get_ylim()
+            #     median_dist = np.median(data)
+            #     ax.plot([mean_dist, mean_dist], ylim, 'r--')
+            #     ax.plot([median_dist, median_dist], ylim, 'g--')
+            #     ax.set_ylim(ylim)
+
+            #     # xlim = ax.get_xlim()
+            #     # ax.set_xlim([0, xlim[1]])
+            #     ax.set_xlim([0, 256])
+
+            #     plt.show()
+
+    def _fit_query(self, q, quantize=False, subtract_mins=False):
+        qR = pq.opq_rotate(q, self.R).ravel()
+        lut = _fit_opq_lut(qR, centroids=self.centroids,
+                           elemwise_dist_func=self.elemwise_dist_func)
+        if subtract_mins:
+            lut -= np.min(lut, axis=0)
+
+        if quantize:
+            # print "quantizing query!"
+            if False:  # roughly laplace distro, reaching all the way to 0
+                ax = sb.distplot(lut.ravel(), hist=False, rug=True)
+                ax.set_xlabel('Query dist to centroids (lut dist histogram)')
+                ax.set_ylabel('Fraction of queries')
+                plt.show()
+
+            # return np.floor(lut * self.scale_by)
+            # print "max lut value: np.max(lut * self.scale_by)"
+            lut = np.maximum(0, lut - self.lut_offsets)
+            lut = np.floor(lut * self.scale_by)
+            return np.minimum(lut, 255)
+            # lut = np.floor((lut - self.dist_offset) * self.scale_by)
+            # return np.maximum(0, lut)
+
+        # print "not quantizing query!"
+        return lut
 
     def encode_X(self, X, **sink):
         X = pq.opq_rotate(X, self.R)
@@ -752,17 +893,14 @@ class OPQEncoder(PQEncoder):
         return idxs + self.offsets  # offsets let us index into raveled dists
         # return idxs
 
-    def fit_query(self, q, **sink):
-        # orig_norm = np.linalg.norm(q)
-        q = pq.opq_rotate(q, self.R).ravel()
-        # print "norm before and after: ", orig_norm, np.linalg.norm(q)  # same
-
-        # PQEncoder.fit_query(self, q)
-        self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
-                                     elemwise_dist_func=self.elemwise_dist_func)
+    def fit_query(self, q, quantize=True, **sink):
+        quantize = quantize and self.quantize_lut
+        self.q_dists_ = self._fit_query(q, quantize=quantize)
+        # self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
+        #                              elemwise_dist_func=self.elemwise_dist_func)
+        # self.q_dists_ -= np.min(self.q_dists_)
 
         if False:
-            import seaborn as sb
             _, axes = plt.subplots(3, figsize=(9, 11))
             sb.violinplot(data=self.q_dists_, inner="box", cut=0, ax=axes[0])
             axes[0].set_xlabel('Codebook')
@@ -785,6 +923,9 @@ class OPQEncoder(PQEncoder):
             axes[2].set_ylim(ylim)
 
             plt.show()
+
+        # if self.quantize_lut:
+
 
     # def dists_enc(self, X_enc, q_unused):
     #     dists = np.zeros(X_enc.shape[0])
@@ -815,11 +956,16 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     centroids = dataset.centroids
     groups = dataset.groups
 
+    X, q = datasets.extract_random_rows(X, how_many=100)
+
+    # for i, q in enumerate(queries[:1]):
+    #     dists_true = encoder.dists_true(X[:100], q)
+    #     print "dists_true[:100] eval", dists_true
+    # print "X[:20, :20]", X[:20, :20]
+    # return
+
     if len(queries.shape) == 1:
         queries = [queries]
-
-    # TODO: just encode dataset once, since we end up hitting each group
-    # more than one time when using many queries
 
     if dist_func_true is None:
         dist_func_true = encoder.dists_true
@@ -828,34 +974,64 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
 
     t0 = time.time()
 
-    search_k = 20
+    # precompute_encodings = len(queries) > 10
+    # if precompute_encodings:
+    #     encodings = {i: encoder.encode_X(group) for i, group in enumerate(groups)}
+
+    # search_k = 20
+    # search_k = 100
+    # search_k = len(groups)  # search everything
     fracs = []
+    # X_ = X[:10000]  # TODO rm
+
+    X = X[:10000]
+    X_enc = encoder.encode_X(X)
     for i, q in enumerate(queries):
+
+        # if i < 10:
+        #     dists_true = dists_sq(X_, X_[i])
+        #     # print "eval dists_true shape", dists_true.shape
+        #     # print "q shape", X[i].shape
+        #     knn_idxs = top_k_idxs(dists_true, 10, smaller_better=True)
+        #     print "true knn dists eval:", dists_true[knn_idxs]
 
         q_enc = encoder.encode_q(q)
         encoder.fit_query(q)
+        # all_true_dists = dist_func_true(X, q)
+        all_true_dists = dists_sq(X, q)
+        all_enc_dists = dist_func_enc(X_enc, q_enc)
 
-        all_true_dists = []
-        all_enc_dists = []
+        # print "nn dist: ", np.min(all_true_dists)
 
-        dists_to_centroids = dist_func_true(centroids, q)
-        idxs = top_k_idxs(dists_to_centroids, search_k, smaller_better=True)
-        for idx in idxs:
-            X = groups[idx]
-            if len(X) == 0:
-                print "Warning: group at idx {} had no elements!".format(idx)
-                continue
+        # print "shapes of q, true dists, enc dists"
+        # print q.shape
+        # print all_true_dists.shape
+        # print all_enc_dists.shape
 
-            true_dists = dist_func_true(X, q)
-            all_true_dists.append(true_dists)
+        # all_true_dists = []
+        # all_enc_dists = []
 
-            X_enc = encoder.encode_X(X, idx=idx)
+        # dists_to_centroids = dist_func_true(centroids, q)
+        # idxs = top_k_idxs(dists_to_centroids, search_k, smaller_better=True)
+        # for idx in idxs:
+        #     X = groups[idx]
+        #     if len(X) == 0:
+        #         print "Warning: group at idx {} had no elements!".format(idx)
+        #         continue
 
-            enc_dists = dist_func_enc(X_enc, q_enc)
-            all_enc_dists.append(enc_dists)
+        #     true_dists = dist_func_true(X, q)
+        #     all_true_dists.append(true_dists)
 
-        all_true_dists = np.hstack(all_true_dists)
-        all_enc_dists = np.hstack(all_enc_dists)
+        #     if precompute_encodings:
+        #         X_enc = encodings[idx]
+        #     else:
+        #         X_enc = encoder.encode_X(X, idx=idx)
+
+        #     enc_dists = dist_func_enc(X_enc, q_enc)
+        #     all_enc_dists.append(enc_dists)
+
+        # all_true_dists = np.hstack(all_true_dists)
+        # all_enc_dists = np.hstack(all_enc_dists)
 
         # ------------------------ begin analysis / reporting code
 
@@ -885,6 +1061,10 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
             grid.y = [max_bit_dist, max_bit_dist]
             grid.plot_joint(plt.plot, color='k', linestyle='--')
 
+        if i < 10:
+            # print "true nn dists: ", all_true_dists[knn_idxs]
+            print "approx nn dists: ", np.sort(knn_bit_dists)
+
     if plot:
         plt.show()
 
@@ -906,30 +1086,34 @@ def main():
     N, D = -1, -1
 
     # N = -1  # set this to not limit real datasets to first N entries
-    N = 10 * 1000
+    # N = 10 * 1000
     # N = 20 * 1000
-    # N = 50 * 1000
+    N = 50 * 1000
     # N = 100 * 1000
     # N = 1000 * 1000
-    # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 126  # for 6 subvects on SIFT
+    D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
     # D = 32
     num_centroids = 256
-    # num_queries = 128
-    num_queries = 3
-    # num_queries = 2
+    num_queries = 128
+    # num_queries = 1
+    # num_queries = 3
     # num_queries = 8
+    norm_len = False
+    norm_mean = True
 
     dataset_func = functools.partial(load_dataset_and_groups,
                                      num_centroids=num_centroids, N=N, D=D,
-                                     num_queries=num_queries)
+                                     num_queries=num_queries,
+                                     norm_len=norm_len, norm_mean=norm_mean)
 
-    # dataset = dataset_func(datasets.Random.WALK, norm_len=True)
-    # dataset = dataset_func(datasets.Random.UNIF, norm_len=True)
-    # dataset = dataset_func(datasets.Random.GAUSS, norm_len=True)
-    # dataset = dataset_func(datasets.Random.BLOBS, norm_len=True)
-    dataset = dataset_func(datasets.Glove.TEST_100, norm_mean=True)
-    # dataset = dataset_func(datasets.Sift1M.TEST_100, norm_mean=True)
-    # dataset = dataset_func(datasets.Gist.TEST_100, norm_mean=True)
+    # dataset = dataset_func(datasets.Random.WALK)
+    # dataset = dataset_func(datasets.Random.UNIF)
+    # dataset = dataset_func(datasets.Random.GAUSS)
+    # dataset = dataset_func(datasets.Random.BLOBS)
+    # dataset = dataset_func(datasets.Glove.TEST_100)
+    dataset = dataset_func(datasets.Sift1M.TEST_100)
+    # dataset = dataset_func(datasets.Gist.TEST_100)
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -991,8 +1175,11 @@ def main():
 
     print "------------------------ opq l2, 8x8 bit centroid idxs"
     encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5)
-    # encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5, init='identity')
     # eval_encoder(dataset, encoder, plot=True)
+    eval_encoder(dataset, encoder)
+
+    print "------------------------ opq l2, 8x8 bit centroid idxs, 8bit dists"
+    encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5, quantize_lut=True)
     eval_encoder(dataset, encoder)
 
     # print "------------------------ opq l2, 6x10 bit centroid idxs"
@@ -1007,15 +1194,23 @@ def main():
     # # eval_encoder(dataset, encoder, plot=True)
     # eval_encoder(dataset, encoder)
 
+    # print "------------------------ opq l2, 5x12 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=5, bits_per_subvect=12, opq_iters=5)
+    # eval_encoder(dataset, encoder)
+
+    # print "------------------------ opq l2, 5x12 bit centroid idxs, 8b dists "
+    # encoder = OPQEncoder(dataset, nsubvects=5, bits_per_subvect=12, opq_iters=5)
+    # eval_encoder(dataset, encoder)
+
     # # print "------------------------ pca l1"
     # # encoder = PcaSketch(dataset.X, 32)    # mu, 90th on gist100? 0.023 0.040
-    # encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
+    encoder = PcaSketch(dataset.X, 64)      # mu, 90th on gist100? .011, .017
     # # encoder = PcaSketch(dataset.X, 128)   # mu, 90th on gist100? .007 .001
     # # encoder = PcaSketch(dataset.X, 256)   # mu, 90th on gist100? .005 .007
     # # encoder = PcaSketch(dataset.X, 512)   # mu, 90th on gist100? .004, .006
     # # eval_encoder(dataset, encoder, dist_func_enc=dists_l1)
-    # print "------------------------ pca l2"  # much better than quantized
-    # eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
+    print "------------------------ pca l2"  # much better than quantized
+    eval_encoder(dataset, encoder, dist_func_enc=dists_sq)
 
     # print "------------------------ quantile l1"  # yep, same performance as gauss
     # # # # encoder = QuantizedRandomIsoHash(dataset.X, 64, nbits=2,
