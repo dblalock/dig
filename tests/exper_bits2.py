@@ -655,7 +655,9 @@ def _parse_codebook_params(D, code_bits=-1, bits_per_subvect=-1, nsubvects=-1):
     subvect_len = D / nsubvects
 
     assert code_bits % bits_per_subvect == 0
-    assert D % subvect_len == 0  # TODO rm this constraint
+    if D % subvect_len:
+        print "D, nsubvects, subvect_len = ", D, nsubvects, subvect_len
+        assert D % subvect_len == 0  # TODO rm this constraint
 
     return nsubvects, ncentroids, subvect_len
 
@@ -1091,13 +1093,17 @@ def main():
     # N = -1  # set this to not limit real datasets to first N entries
     # N = 10 * 1000
     # N = 20 * 1000
-    # N = 50 * 1000
+    N = 50 * 1000
     # N = 100 * 1000
     # N = 1000 * 1000
+    D = 954    # for 6 and 9 subvects on Gist
     # D = 125  # for 5 subvects on SIFT
-    # D = 126  # for 6 subvects on SIFT
+    # D = 126  # for 6 (possibly with 9) subvects on SIFT
+    # D = 120  # for 6 and 8 subvects on SIFT
+    # D = 120  # for 6 and 9 subvects on SIFT
     # D = 96  # NOTE: this should be uncommented if using GLOVE + PQ
-    # D = 80  # NOTE: this should be uncommented if using GLOVE + PQ
+    # D = 90
+    # D = 80
     # D = 32
     num_centroids = 256
     num_queries = 128
@@ -1116,10 +1122,10 @@ def main():
     # dataset = dataset_func(datasets.Random.UNIF)
     # dataset = dataset_func(datasets.Random.GAUSS)
     # dataset = dataset_func(datasets.Random.BLOBS)
-    dataset = dataset_func(datasets.Glove.TEST_100)
+    # dataset = dataset_func(datasets.Glove.TEST_100)
     # dataset = dataset_func(datasets.Sift1M.TEST_100)
-    # dataset = dataset_func(datasets.Gist.TEST_100)
-    print "Using dataset: {} ({}x{})".format(dataset.name, N, D)
+    dataset = dataset_func(datasets.Gist.TEST_100)
+    print "=== Using Dataset: {} ({}x{})".format(dataset.name, N, D)
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -1194,6 +1200,15 @@ def main():
     # encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5, quantize_lut=True)
     # eval_encoder(dataset, encoder)
 
+    print "------------------------ opq l2, 9x8 bit centroid idxs"
+    encoder = OPQEncoder(dataset, nsubvects=9, bits_per_subvect=8, opq_iters=5)
+    # eval_encoder(dataset, encoder, plot=True)
+    eval_encoder(dataset, encoder)
+
+    print "------------------------ opq l2, 9x8 bit centroid idxs, 8bit dists"
+    encoder = OPQEncoder(dataset, nsubvects=9, bits_per_subvect=8, opq_iters=5, quantize_lut=True)
+    eval_encoder(dataset, encoder)
+
     # print "------------------------ opq l2, 6x10 bit centroid idxs"
     # encoder = OPQEncoder(dataset, nsubvects=6, bits_per_subvect=10, opq_iters=5)
     # # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=0)
@@ -1206,12 +1221,20 @@ def main():
     # # eval_encoder(dataset, encoder, plot=True)
     # eval_encoder(dataset, encoder)
 
-    print "------------------------ opq l2, 5x12 bit centroid idxs"
-    encoder = OPQEncoder(dataset, nsubvects=5, bits_per_subvect=12, opq_iters=5)
+    # print "------------------------ opq l2, 5x12 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=5, bits_per_subvect=12, opq_iters=5)
+    # eval_encoder(dataset, encoder)
+
+    # print "------------------------ opq l2, 5x12 bit centroid idxs, 8b dists "
+    # encoder = OPQEncoder(dataset, nsubvects=5, bits_per_subvect=12, opq_iters=5, quantize_lut=True)
+    # eval_encoder(dataset, encoder)
+
+    print "------------------------ opq l2, 6x12 bit centroid idxs"
+    encoder = OPQEncoder(dataset, nsubvects=6, bits_per_subvect=12, opq_iters=5)
     eval_encoder(dataset, encoder)
 
-    print "------------------------ opq l2, 5x12 bit centroid idxs, 8b dists "
-    encoder = OPQEncoder(dataset, nsubvects=5, bits_per_subvect=12, opq_iters=5, quantize_lut=True)
+    print "------------------------ opq l2, 6x12 bit centroid idxs, 8b dists "
+    encoder = OPQEncoder(dataset, nsubvects=6, bits_per_subvect=12, opq_iters=5, quantize_lut=True)
     eval_encoder(dataset, encoder)
 
     # # print "------------------------ pca l1"

@@ -108,7 +108,7 @@ def _ground_truth_for_dataset(which_dataset):
     return None  # TODO
 
 
-# @_memory.cache
+@_memory.cache
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
                  num_queries=1, Ntrain=-1):
     true_nn = None
