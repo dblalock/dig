@@ -628,7 +628,8 @@ def opq_initialize(X_train, ncodebooks, init='gauss'):
 # https://github.com/arbabenko/Quantizations/blob/master/opqCoding.py
 # @_memory.cache
 def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
-              initial_kmeans_iters=1, init='gauss', debug=False):
+              initial_kmeans_iters=1, init='gauss', max_nonzeros=-1,
+              debug=False):
     """init in {'gauss', 'identity', 'random'}"""
 
     print "OPQ: Using init '{}'".format(init)
@@ -705,6 +706,9 @@ def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
         #     break  # computation is diverging
         # prev_err = err
 
+        plt.figure()
+        sb.heatmap(R)
+
         # update rotation matrix based on reconstruction errors
         U, s, V = np.linalg.svd(np.dot(X_hat.T, X), full_matrices=False)
         R = np.dot(U, V)
@@ -734,6 +738,9 @@ def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
     t = time.time() - t0
     print "---- OPQ {}x{}b final mse / variance = {:.5f} ({:.3f}s)".format(
         ncodebooks, codebook_bits, err, t)
+
+    # if max_nonzeros > 0:
+        # TODO: pick up here by running hard_threshold_pursuit
 
     return codebooks, assignments, R
 
@@ -1036,6 +1043,108 @@ def reconstruct_X_rpq(compressed_assignments, codebooks, log_factors,
     return reconstruct_X_pq(assigs, codebooks)
 
 
+# ================================================================ Sparse
+
+# def hard_threshold_pursuit(A, y, s, init='zeros', niters=5,
+def hard_threshold_pursuit(A, y, s, init='least_squares', niters=5,
+                           normalized=True, eps=1e-6):
+    """Solves argmin_x ||y - Ax||_2^2, ||x||_0 <= s
+    For details, see:
+        http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.705.4207&rep=rep1&type=pdf
+    And for a matlab implementation, see:
+        https://github.com/foucart/HTP/blob/master/HTPCode/HTP.m
+
+    eps (float): elements with absolute values of eps times the largest
+        absolute value in the intermediate solutions are rounded to 0
+    """
+    s = int(s)
+    N, D = A.shape
+    y = y.reshape((N, 1))  # column vector
+    # x0 = x0.ravel() if x0 is not None else np.zeros(D, dtype=np.float32)
+    try:
+        if init is None or isinstance(init, str):
+            raise Exception()  # jump to the except
+        x0 = np.asarray(init)
+    except:
+        if init == 'least_squares':
+            x_ideal, residual, _, _ = np.linalg.lstsq(A, y.ravel())
+            x0 = x_ideal
+        elif init == 'zeros':
+            x0 = np.zeros(D)
+        else:
+            raise ValueError("init must be one of "
+                             " {an array, 'least_squares', 'zeros'}")
+
+    assert s > 0
+    assert len(A.shape) == 2
+    assert len(y) == N
+    assert len(x0) == D
+    assert len(np.squeeze(x0).shape) == 1
+
+    # quantities to precompute
+    B = np.dot(A.T, A)  # [D x N] * [N x D] = D x D
+    Ay = np.dot(A.T, y)  # [D x N] * [N x 1] = [D x 1]
+
+    # initialize the solution and nonzero indices
+    idxs = np.argsort(np.abs(x0))[-s:].ravel()  # idxs is 'S' in the paper
+    idxs = np.sort(idxs)
+    x = x0.reshape((-1, 1))
+
+    # print "idxs: ", idxs
+
+    # print "s = ", s
+    # print "A.shape", A.shape
+    # print "B.shape", B.shape
+    # print "Ay.shape", Ay.shape
+    # print "B.X shape", np.dot(B, x).shape
+
+    # diffs = y - np.dot(A, x)
+    # print "HTP: initial idxs: ", idxs
+    # print "HTP: initial (pre-thresholding) squared loss: ", np.sum(diffs * diffs)
+
+    old_idxs = np.copy(idxs)
+    for t in range(niters):
+        update = Ay - np.dot(B, x)  # = A.T(y - Ax); [D x 1] - [D x 1]
+
+        # print "update.shape", update.shape
+        # print "A.shape", A.shape
+        # print "A[:, idxs].shape", A[:, idxs].shape
+        # print "x.shape", A.shape
+
+        # if False:  # compute step size
+        if normalized:  # compute step size
+            numerator = np.linalg.norm(update[idxs])
+            denominator = np.linalg.norm(np.dot(A[:, idxs], update[idxs]))
+            mu = (numerator / denominator) ** 2
+        else:
+            mu = 1
+
+        x += mu * update
+        old_idxs = np.copy(idxs)
+        idxs = np.argsort(np.abs(x.ravel()))[-s:]
+        idxs = np.sort(idxs)
+
+        x[:] = 0
+        solution, _, _, _ = np.linalg.lstsq(A[:, idxs], y.ravel())
+        # print "solution.shape", solution.shape
+        x[idxs, 0] = solution  # specify 0 because x a col vector
+
+        # print "HTP iter {}: idxs: {}".format(t, idxs)
+        diffs = y - np.dot(A, x)
+        print "HTP: iter {} squared loss = {}".format(t, np.sum(diffs * diffs))
+
+        if np.array_equal(old_idxs, idxs):
+            print "HTP: converged after {} iterations".format(t + 1)
+            break
+
+    x_ideal, residual, _, _ = np.linalg.lstsq(A, y.ravel())
+    diffs = y.ravel() - np.dot(A, x_ideal)
+    print "HTP: least squares squared loss (as comparison): {}".format(
+        np.sum(diffs * diffs))
+
+    return x.ravel()
+
+
 # ================================================================ Main
 
 def test_rpq():  # TODO put in a real unit test
@@ -1074,9 +1183,27 @@ def test_permutation_to_rotation():
     # print np.dot(X, R.T)
 
 
+def test_hard_threshold_pursuit():
+    np.random.seed(123)
+    N = 100
+    D = 60
+    s = D // 2
+    A = np.random.randn(N, D) + np.arange(D)
+    y = np.random.randn(N) + np.arange(N) / 10 - N/2
+
+    x = hard_threshold_pursuit(A=A, y=y, s=s)
+    assert np.sum(np.abs(x) > .0001) == s
+
+    # print np.linalg.norm(x)
+    # print "x = ", x
+
+
 def main():
-    np.set_printoptions(formatter={'float':lambda x: '{:.3f}'.format(x)})
+    np.set_printoptions(formatter={'float': lambda x: '{:.3f}'.format(x)})
     # # np.set_printoptions(formatter={'float':lambda x: '{}'.format(int(x))})
+
+    test_hard_threshold_pursuit()
+    return
 
     # test_permutation_to_rotation()
     # return
@@ -1101,9 +1228,9 @@ def main():
         # datasets.Random.GAUSS, N=5, D=64)
         # datasets.Random.UNIFORM, N=10, D=64)
         # datasets.Glove.TEST_100, N=1000, norm_mean=True)
-        # datasets.Glove.TEST_100, N=10000, D=96, norm_mean=True)
-        datasets.Sift1M.TEST_100, N=200, D=32, norm_mean=True)
-        # datasets.Sift1M.TEST_100, N=20000, norm_mean=True)
+        datasets.Glove.TEST_100, N=10000, D=96, norm_mean=True)
+        # datasets.Sift1M.TEST_100, N=200, D=32, norm_mean=True)
+        # datasets.Sift1M.TEST_100, N=50000, norm_mean=True)
         # datasets.Sift1M.TEST_100, N=10000)
         # datasets.Gist.TEST_100, N=1000, D=480, norm_mean=True)
         # datasets.Gist.TEST_100, N=10000, D=480, norm_mean=True)
@@ -1165,10 +1292,10 @@ def main():
     # X_train = X_train[:, perm]
 
     # # in terms of reconstruction err, gaussian < identity < random = gauss_flat
-    # niters = 5
+    niters = 10
     # # niters = 0
-    # M = 16
-    # bits = 4
+    M = 16
+    bits = 4
     # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='random')
     # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='identity')
     # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='gauss')
@@ -1176,6 +1303,15 @@ def main():
     # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='gauss_flat')
     # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=8, niters=niters, init='gauss')
     # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=8, niters=niters, init='gauss_flat')
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='gauss')
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='identity')
+
+    # _, axes = plt.subplots(1, 2, figsize=(10, 5))
+    plt.figure()
+    sb.heatmap(R)
+    # R_covs = np.cov(R.T)
+    # sb.heatmap(R_covs)
+    plt.show()
 
     # am I right that this will undo a rotation? EDIT: yes
     # R = random_rotation(4)
