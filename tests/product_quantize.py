@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import functools
 import heapq
 import itertools
 import time
@@ -626,7 +627,7 @@ def opq_initialize(X_train, ncodebooks, init='gauss'):
 
 # loosely based on:
 # https://github.com/arbabenko/Quantizations/blob/master/opqCoding.py
-# @_memory.cache
+@_memory.cache
 def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
               initial_kmeans_iters=1, init='gauss', max_nonzeros=-1,
               debug=False):
@@ -706,8 +707,8 @@ def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
         #     break  # computation is diverging
         # prev_err = err
 
-        plt.figure()
-        sb.heatmap(R)
+        # plt.figure()
+        # sb.heatmap(R)
 
         # update rotation matrix based on reconstruction errors
         U, s, V = np.linalg.svd(np.dot(X_hat.T, X), full_matrices=False)
@@ -739,13 +740,332 @@ def learn_opq(X_train, ncodebooks, codebook_bits=8, niters=20,
     print "---- OPQ {}x{}b final mse / variance = {:.5f} ({:.3f}s)".format(
         ncodebooks, codebook_bits, err, t)
 
-    # if max_nonzeros > 0:
-        # TODO: pick up here by running hard_threshold_pursuit
+    if max_nonzeros > 0:  # This seems kinda bad; don't use it
+        norms = np.linalg.norm(R, axis=1)
+        print "old rotation mat norms mean, std", np.mean(norms), np.std(norms)
+
+        norms = np.empty(D)
+        for j in range(D):
+            y = X_hat[:, j]
+            v0 = R[j, :]  # initialize with corresponding projection from R
+            R[j, :] = hard_threshold_pursuit(A=X, y=y, init=v0, s=max_nonzeros)
+            norms[j] = np.linalg.norm(R[j, :])  # TODO rm
+
+        norms = np.linalg.norm(R, axis=1)
+        print "new rotation mat norms mean, std", np.mean(norms), np.std(norms)
+
+        R /= norms.reshape((-1, 1))
+        # print "new R norms after rescaling: ", np.linalg.norm(R, axis=1)
+
+        X_rotated_orig = X_rotated
+        X_rotated = opq_rotate(X, R)
+        assignments = _encode_X_pq(X_rotated, codebooks)
+        codebooks = _update_centroids_opq(X_rotated, assignments, ncentroids)
+
+        X_hat = reconstruct_X_pq(assignments, codebooks)
+        # err = compute_reconstruction_error(X_rotated, X_hat)
+        err = compute_reconstruction_error(X_rotated_orig, X_hat)
+        print " -- OPQ {}x{}b {}-sparse mse / variance = {:.5f} ({:.3f}s)" \
+            .format(ncodebooks, codebook_bits, max_nonzeros, err, t)
 
     return codebooks, assignments, R
 
 
-# ================================================================ mine
+# ================================================================ thresh pq
+
+def learn_htpq(X, ncodebooks, codebook_bits=8, niters=20,
+               initial_kmeans_iters=1, max_nonzeros=4):
+
+    t0 = time.time()
+
+    X = X.astype(np.float32)
+    N, D = X.shape
+    ncentroids = int(2 ** codebook_bits)
+    subvect_len = D // ncodebooks
+
+    assert D % subvect_len == 0  # equal number of dims for each codebook
+
+    # initialize codebooks by running kmeans on each rotated dim; this way,
+    # setting niters=0 corresponds to normal PQ
+    codebooks, assignments = learn_pq(X, ncentroids=ncentroids,
+                                      nsubvects=ncodebooks,
+                                      subvect_len=subvect_len,
+                                      max_kmeans_iters=3)
+                                      # max_kmeans_iters=1)
+
+    R = np.zeros((D, D), dtype=np.float32)
+    X_rotated = X
+
+    for it in np.arange(niters):
+        X_hat = reconstruct_X_pq(assignments, codebooks)
+        residuals = X - X_hat
+        # residuals = X_rotated - X_hat
+
+        # compute reconstruction errors
+        # err = compute_reconstruction_error(X_rotated, X_hat)
+        err = compute_reconstruction_error(X, X_hat)
+        print "---- HTPQ {}x{}b t={}: mse / variance, resids = {:.5f}, {:.2f}" \
+            .format(ncodebooks, codebook_bits, it, err,
+                    np.sum(residuals * residuals))
+
+        # TODO think I have to do AQ decoding here
+        #   -the problem as far as not being monotonic is that
+        #   updating the centroids improves the encoding of X_rotated,
+        #   but that doesn't necessarily reduce the residuals
+        #   -should write out the math for this, approaching it as an AQ
+        #   problem
+
+        # print "max_nonzeros: ", max_nonzeros
+
+        # update rotation matrix
+        for j in range(D):
+            targets = residuals[:, j]
+            # v, _, _, _ = np.linalg.lstsq(X, targets)
+            v = hard_threshold_pursuit(  # works with niters=0, which is lstsq
+                A=X, y=targets, init='least_squares', s=max_nonzeros-1, niters=5)
+                # A=X, y=targets, init='least_squares', s=max_nonzeros-1, niters=5, verbosity=1)
+                # A=X, y=targets, init='least_squares', s=max_nonzeros-1, niters=0)
+
+            assert np.sum(v != 0) == (max_nonzeros - 1)
+
+            orig_err = np.sum(targets * targets)
+            y_hat = np.dot(X, v)
+            new_err = np.sum((targets - y_hat)**2)
+            # print "orig err, new err (ratio: {:.4f}, {:.4f} ({:.4f})".format(
+            #     orig_err, new_err, new_err / orig_err)
+            assert new_err <= orig_err
+
+            R[j, :] = v
+
+            # v0 = R[j, :]
+            # R[j, :] = hard_threshold_pursuit(
+            #     A=X, y=targets, init='least_squares', s=max_nonzeros-1, niters=0)
+
+            # if R[j, j] != 0:
+            #     print "bad row {}:".format(j), R[j, :]
+            # assert R[j, j] == 0
+
+        # update assignments and codebooks
+        X_rotated = X + np.dot(X, R.T)
+        assignments = _encode_X_pq(X_rotated, codebooks)
+        codebooks = _update_centroids_opq(X_rotated, assignments, ncentroids)
+
+    X_hat = reconstruct_X_pq(assignments, codebooks)
+    # err = compute_reconstruction_error(X, X_hat)
+    err = compute_reconstruction_error(X, X_hat)
+    t = time.time() - t0
+    print " -- HTPQ {}x{}b {}-sparse mse / variance = {:.5f} ({:.3f}s)" \
+        .format(ncodebooks, codebook_bits, max_nonzeros, err, t)
+
+    # we have that X_hat is a reconstruction of X(R + I)
+    # X_hat -=
+
+    # # X_hat = reconstruct_X_pq(assignments, codebooks)
+    # # err = compute_reconstruction_error(X, X_hat)
+    # err = compute_reconstruction_error(X, X_hat)
+    # t = time.time() - t0
+    # print " -- HTPQ {}x{}b {}-sparse mse / variance = {:.5f} ({:.3f}s)" \
+    #     .format(ncodebooks, codebook_bits, max_nonzeros, err, t)
+
+    return codebooks, assignments, R + np.eye(D)
+
+
+# ================================================================ perm pq
+
+def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
+    N, D = X_perm.shape
+    M = assignments.shape[1]
+    assert D == X_hat.shape[1]
+    assert D == len(perm)
+    assert D == len(np.unique(perm))
+    assert D % subvect_len == 0
+    assert D / subvect_len == M
+    perm = np.copy(perm)
+
+    labels = np.unique(assignments)
+    L = len(labels)
+
+    assert labels[0] == 0
+    assert labels[-1] == L - 1
+    # print "labels: ", labels
+
+    # X_reconstruct =
+    means = np.empty((M, L, D))
+    # err_upper_bounds = np.zeros((M, L, D))
+    # current_errs = np.zeros((M, L, subvect_len))
+    # compute feature means conditioned on centroid assignments
+    for m in range(M):
+
+        # _, counts = np.unique(assignments, return_counts=True)
+        # print "code counts in codebook {}".format(m), counts
+
+        for ll, lbl in enumerate(labels):
+            which_rows = assignments[:, m] == lbl
+            rows = X_perm[which_rows, :]
+            # print "rows.shape", rows.shape
+            means[m, ll, :] = np.mean(rows, axis=0)
+
+            # # compute err upper bound
+            # which_rows = assignments == lbl
+            # variances = np.variance(X[which_rows], axis=0)
+            # err_upper_bounds[m, ll, :] = variances * len(which_rows)
+
+            # # compute label-conditional error using current perm; the
+            # # "upper bound" for cu
+            # start = m * subvect_len
+            # end = start + subvect_len
+            # X_subspace = X[:, start:end]
+            # variances = np.variance(X_subspace[which_rows], axis=0)
+            # # current_errs[m, ll, :] = variances * len(which_rows)
+
+    diffs = X_perm - X_hat
+    residuals = np.sum(diffs * diffs, axis=0)
+
+    # figure out whether there are any pairs of cols we should swap
+    nswaps = 0
+    already_swapped = np.zeros(D, dtype=np.bool)
+    # TODO iterate thru in decreasing order of residual so stuff with
+    # bigger errors gets first crack at getting swapped
+
+    print "did we already swap anything?", np.any(already_swapped)
+
+    # print "D: ", D
+
+    for i in range(D):
+        best_err_decrease = 0
+        best_swap_idx = -1
+
+        m_i = int(i / subvect_len)
+        assigs_i = assignments[:, m_i]
+        means_i = means[m_i, :, i]
+
+        assert means_i.shape == (L,)
+
+        if already_swapped[i]:
+            continue  # only swap one time per iter
+
+        for j in range(i + 1, D):
+            m_j = int(j / subvect_len)
+            means_j = means[m_i, :, j]
+            assigs_j = assignments[:, m_j]
+
+            assert means_j.shape == (L,)
+
+            if m_i == m_j:
+                continue  # switching dims in same subspace doesn't help
+
+            if already_swapped[j]:
+                continue  # only swap one time per iter
+
+            col_i_reconstruction = means_j[assigs_i]
+            col_j_reconstruction = means_i[assigs_j]
+
+            assert col_i_reconstruction.shape == (N,)
+            assert col_j_reconstruction.shape == (N,)
+
+            diffs_i = X_perm[:, i] - col_i_reconstruction
+            diffs_j = X_perm[:, j] - col_j_reconstruction
+
+            current_err = residuals[i] + residuals[j]
+            new_err = np.sum(diffs_j * diffs_i) + np.sum(diffs_j * diffs_j)
+            err_decrease = current_err - new_err
+
+            if i % 20 == 0 and j % 20 == 0:
+                print "curr err, new err = {:.3g}, {:.3g}".format(current_err, new_err)
+
+            if err_decrease > 0 and err_decrease > best_err_decrease:
+                best_err_decrease = err_decrease
+                best_swap_idx = j
+
+        if best_err_decrease > 0:
+            print "swapping cols {} and {}".format(i, best_swap_idx)
+            assert best_swap_idx > i
+
+            nswaps += 1
+            perm[i], perm[best_swap_idx] = perm[best_swap_idx], perm[i]
+
+            already_swapped[i] = True
+            already_swapped[best_swap_idx] = True
+
+    # # below is correct, but bound is too loose so it never swaps anything
+    # pairwise_errs = np.zeros((D, D))
+    # for i in range(D):
+    #     for j in range(D):
+    #         if i % subvect_len == j % subvect_len:
+    #             continue  # switching dims in same subspace doesn't help
+    #         diffs = X[:, i] - X_hat[:, j]
+    #         pairwise_errs[i, j] = np.sum(diffs * diffs)
+
+    # nswaps = 0
+    # pairwise_errs += pairwise_errs.T
+    # for i in range(D):
+    #     for j in range(i + 1, D):
+    #         current_err = pairwise_errs[i, i] + pairwise_errs[j, j]
+    #         new_err = pairwise_errs[i, j]  # err [j, i] added by transpose
+    #         if new_err < current_err:
+    #             nswaps += 1
+    #             perm[i], perm[j] = perm[j], perm[i]
+
+    print "_update_permutation: performed {} column swaps".format(nswaps)
+
+    return perm
+
+
+def learn_ppq(X, ncodebooks, codebook_bits=8, niters=20,
+              initial_kmeans_iters=1, max_nonzeros=4):
+
+    t0 = time.time()
+
+    X = X.astype(np.float32)
+    N, D = X.shape
+    ncentroids = int(2 ** codebook_bits)
+    subvect_len = D // ncodebooks
+
+    assert D % subvect_len == 0  # equal number of dims for each codebook
+
+    # initialize codebooks by running kmeans on each rotated dim; this way,
+    # setting niters=0 corresponds to normal PQ
+    codebooks, assignments = learn_pq(X, ncentroids=ncentroids,
+                                      nsubvects=ncodebooks,
+                                      subvect_len=subvect_len,
+                                      # max_kmeans_iters=3)
+                                      max_kmeans_iters=1)
+
+    # R = np.zeros((D, D), dtype=np.float32)
+    X_rotated = X
+    perm = np.arange(D, dtype=np.int)
+
+    for it in np.arange(niters):
+        X_hat = reconstruct_X_pq(assignments, codebooks)
+        # residuals = X - X_hat
+
+        # compute reconstruction errors
+        # err = compute_reconstruction_error(X_rotated, X_hat)
+        residuals = X_rotated - X_hat
+        err = compute_reconstruction_error(X_rotated, X_hat)
+        print "---- PPQ {}x{}b t={}: mse / variance, resids = {:.5f}, {:.2f}" \
+            .format(ncodebooks, codebook_bits, it, err,
+                    np.sum(residuals * residuals))
+
+        perm = _update_permutation(X, X_hat, assignments=assignments,
+                                   perm=perm, subvect_len=subvect_len)
+
+        # update assignments and codebooks
+        X_rotated = X[:, perm]
+        codebooks = _update_centroids_opq(X_rotated, assignments, ncentroids)
+        assignments = _encode_X_pq(X_rotated, codebooks)
+
+    X_hat = reconstruct_X_pq(assignments, codebooks)
+    # err = compute_reconstruction_error(X, X_hat)
+    err = compute_reconstruction_error(X_rotated, X_hat)
+    t = time.time() - t0
+    print " -- PPQ {}x{}b mse / variance = {:.5f} ({:.3f}s)" \
+        .format(ncodebooks, codebook_bits, max_nonzeros, err, t)
+
+    return codebooks, assignments, perm
+
+
+# ================================================================ redundant pq
 
 # @_memory.cache
 def learn_rpq(X_train, ncodebooks, observed_bits=4, latent_bits=2,
@@ -1046,8 +1366,9 @@ def reconstruct_X_rpq(compressed_assignments, codebooks, log_factors,
 # ================================================================ Sparse
 
 # def hard_threshold_pursuit(A, y, s, init='zeros', niters=5,
+@_memory.cache
 def hard_threshold_pursuit(A, y, s, init='least_squares', niters=5,
-                           normalized=True, eps=1e-6):
+                           normalized=True, eps=1e-6, verbosity=0):
     """Solves argmin_x ||y - Ax||_2^2, ||x||_0 <= s
     For details, see:
         http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.705.4207&rep=rep1&type=pdf
@@ -1126,21 +1447,27 @@ def hard_threshold_pursuit(A, y, s, init='least_squares', niters=5,
 
         x[:] = 0
         solution, _, _, _ = np.linalg.lstsq(A[:, idxs], y.ravel())
-        # print "solution.shape", solution.shape
         x[idxs, 0] = solution  # specify 0 because x a col vector
 
-        # print "HTP iter {}: idxs: {}".format(t, idxs)
-        diffs = y - np.dot(A, x)
-        print "HTP: iter {} squared loss = {}".format(t, np.sum(diffs * diffs))
+        if verbosity > 1:
+            diffs = y - np.dot(A, x)
+            print "HTP: iter {} squared loss = {}".format(t, np.sum(diffs * diffs))
 
         if np.array_equal(old_idxs, idxs):
-            print "HTP: converged after {} iterations".format(t + 1)
+            if verbosity > 1:
+                print "HTP: converged after {} iterations".format(t + 1)
             break
 
-    x_ideal, residual, _, _ = np.linalg.lstsq(A, y.ravel())
-    diffs = y.ravel() - np.dot(A, x_ideal)
-    print "HTP: least squares squared loss (as comparison): {}".format(
-        np.sum(diffs * diffs))
+    if verbosity > 0:
+        diffs = y - np.dot(A, x)
+        loss_htp = np.sum(diffs * diffs)
+        x_ideal, residual, _, _ = np.linalg.lstsq(A, y.ravel())
+        diffs = y.ravel() - np.dot(A, x_ideal)
+        loss_least_squares = np.sum(diffs * diffs)
+        ratio = loss_htp / loss_least_squares
+        print "HTP: loss via HTP, loss via least squares = " \
+            "{:.3f},\t{:.3f}\t({:.3f}x)".format(
+                loss_htp, loss_least_squares, ratio)
 
     return x.ravel()
 
@@ -1202,8 +1529,8 @@ def main():
     np.set_printoptions(formatter={'float': lambda x: '{:.3f}'.format(x)})
     # # np.set_printoptions(formatter={'float':lambda x: '{}'.format(int(x))})
 
-    test_hard_threshold_pursuit()
-    return
+    # test_hard_threshold_pursuit()
+    # return
 
     # test_permutation_to_rotation()
     # return
@@ -1228,15 +1555,20 @@ def main():
         # datasets.Random.GAUSS, N=5, D=64)
         # datasets.Random.UNIFORM, N=10, D=64)
         # datasets.Glove.TEST_100, N=1000, norm_mean=True)
-        datasets.Glove.TEST_100, N=10000, D=96, norm_mean=True)
-        # datasets.Sift1M.TEST_100, N=200, D=32, norm_mean=True)
+        # datasets.Glove.TEST_100, N=10000, D=96, norm_mean=True)
+        # datasets.Sift1M.TEST_100, N=10000, D=32, norm_mean=True)
         # datasets.Sift1M.TEST_100, N=50000, norm_mean=True)
-        # datasets.Sift1M.TEST_100, N=10000)
+        datasets.Sift1M.TEST_100, N=10000, norm_mean=True)
         # datasets.Gist.TEST_100, N=1000, D=480, norm_mean=True)
         # datasets.Gist.TEST_100, N=10000, D=480, norm_mean=True)
         # datasets.Glove.TEST_100, D=96)
         # datasets.Random.BLOBS, N=10000, D=32)
 
+    learn_ppq(X_train, ncodebooks=8, niters=10)
+
+    # learn_htpq(X_train, ncodebooks=8, max_nonzeros=32, niters=10)
+    # learn_htpq(X_train, ncodebooks=8, max_nonzeros=4, niters=10)
+    # learn_htpq(X_train, ncodebooks=8, max_nonzeros=3, niters=10)
 
     # learn_rpq(X_train, ncodebooks=8, observed_bits=4, latent_bits=0)
     # learn_rpq(X_train, ncodebooks=8, observed_bits=4, latent_bits=2)
@@ -1291,27 +1623,27 @@ def main():
     # perm = random_permutation(X_train.shape[1], 8)
     # X_train = X_train[:, perm]
 
-    # # in terms of reconstruction err, gaussian < identity < random = gauss_flat
-    niters = 10
-    # # niters = 0
-    M = 16
-    bits = 4
-    # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='random')
-    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='identity')
-    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='gauss')
-    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='permute')
-    # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=4, niters=niters, init='gauss_flat')
-    # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=8, niters=niters, init='gauss')
-    # # codebooks, assignments, R = learn_opq(X_train, ncodebooks=8, niters=niters, init='gauss_flat')
-    codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='gauss')
-    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=M, codebook_bits=bits, niters=niters, init='identity')
+    # # # in terms of reconstruction err, gaussian < identity < random = gauss_flat
+    # # niters = 10
+    # niters = 5
+    # # # niters = 0
+    # M = 16
+    # bits = 4
+    # learn_func = functools.partial(learn_opq, ncodebooks=M, codebook_bits=bits, niters=niters)
+    # # codebooks, assignments, R = learn_func(X_train, init='identity')
+    # # codebooks, assignments, R = learn_func(X_train, init='gauss_flat')
+    # # codebooks, assignments, R = learn_func(X_train, init='random')
+    # # codebooks, assignments, R = learn_func(X_train, init='gauss')
+    # # codebooks, assignments, R = learn_func(X_train, init='gauss', max_nonzeros=32)
+    # codebooks, assignments, R = learn_func(X_train, init='identity', max_nonzeros=16)
+    # # codebooks, assignments, R = learn_func(X_train, init='identity', max_nonzeros=4)
 
-    # _, axes = plt.subplots(1, 2, figsize=(10, 5))
-    plt.figure()
-    sb.heatmap(R)
-    # R_covs = np.cov(R.T)
-    # sb.heatmap(R_covs)
-    plt.show()
+    # # _, axes = plt.subplots(1, 2, figsize=(10, 5))
+    # plt.figure()
+    # sb.heatmap(R)
+    # # R_covs = np.cov(R.T)
+    # # sb.heatmap(R_covs)
+    # plt.show()
 
     # am I right that this will undo a rotation? EDIT: yes
     # R = random_rotation(4)
