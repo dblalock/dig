@@ -872,9 +872,15 @@ def learn_htpq(X, ncodebooks, codebook_bits=8, niters=20,
 
 # ================================================================ perm pq
 
-def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
-    N, D = X_perm.shape
+def _learn_permutation(X, X_hat, assignments, subvect_len):
+    # N, D = X_perm.shape
+    N, D = X.shape
     M = assignments.shape[1]
+
+    # if perm is None:
+        # perm = np.arange(D, dtype=np.int)
+    perm = np.arange(D, dtype=np.int)
+
     assert D == X_hat.shape[1]
     assert D == len(perm)
     assert D == len(np.unique(perm))
@@ -901,7 +907,8 @@ def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
 
         for ll, lbl in enumerate(labels):
             which_rows = assignments[:, m] == lbl
-            rows = X_perm[which_rows, :]
+            # rows = X_perm[which_rows, :]
+            rows = X[which_rows, :]
             # print "rows.shape", rows.shape
             means[m, ll, :] = np.mean(rows, axis=0)
 
@@ -918,7 +925,8 @@ def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
             # variances = np.variance(X_subspace[which_rows], axis=0)
             # # current_errs[m, ll, :] = variances * len(which_rows)
 
-    diffs = X_perm - X_hat
+    # diffs = X_perm - X_hat
+    diffs = X - X_hat
     residuals = np.sum(diffs * diffs, axis=0)
 
     # figure out whether there are any pairs of cols we should swap
@@ -927,19 +935,26 @@ def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
     # TODO iterate thru in decreasing order of residual so stuff with
     # bigger errors gets first crack at getting swapped
 
-    print "did we already swap anything?", np.any(already_swapped)
-
-    # print "D: ", D
+    # X_new = np.full(X.shape, 9999, dtype=np.float32)
+    X_new = np.copy(X)
 
     for i in range(D):
         best_err_decrease = 0
-        best_swap_idx = -1
+        best_j = -1
+
+        # if nswaps > -1:
+        if nswaps > 0:
+            break
 
         m_i = int(i / subvect_len)
         assigs_i = assignments[:, m_i]
         means_i = means[m_i, :, i]
 
         assert means_i.shape == (L,)
+
+        # TODO rm
+        best_col_i_reconstruction = None
+        best_col_j_reconstruction = None
 
         if already_swapped[i]:
             continue  # only swap one time per iter
@@ -957,37 +972,73 @@ def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
             if already_swapped[j]:
                 continue  # only swap one time per iter
 
+            # okay, so ya, centroids are the means conditioned on assignments
+            # print "reconstructions: "
+            # actual_i_recons = means_i[assigs_i]
+            # print actual_i_recons[:10], X_hat[:10, i]
+            # assert np.all(np.abs(actual_i_recons - X_hat[:, i]) - .0001)
+            # actual_j_recons = means_j[assigs_j]
+            # assert np.all(np.abs(actual_j_recons - X_hat[:, j]) - .0001)
+
             col_i_reconstruction = means_j[assigs_i]
             col_j_reconstruction = means_i[assigs_j]
 
             assert col_i_reconstruction.shape == (N,)
             assert col_j_reconstruction.shape == (N,)
 
-            diffs_i = X_perm[:, i] - col_i_reconstruction
-            diffs_j = X_perm[:, j] - col_j_reconstruction
+            # diffs_i = X_perm[:, i] - col_i_reconstruction
+            # diffs_j = X_perm[:, j] - col_j_reconstruction
+            diffs_i = X[:, i] - col_i_reconstruction
+            diffs_j = X[:, j] - col_j_reconstruction
 
             current_err = residuals[i] + residuals[j]
-            new_err = np.sum(diffs_j * diffs_i) + np.sum(diffs_j * diffs_j)
+            new_err = np.sum(diffs_i * diffs_i) + np.sum(diffs_j * diffs_j)
             err_decrease = current_err - new_err
 
-            if i % 20 == 0 and j % 20 == 0:
-                print "curr err, new err = {:.3g}, {:.3g}".format(current_err, new_err)
+            # if i % 20 == 0 and j % 20 == 0:
+            #     print "curr err, new err = {:.3g}, {:.3g}".format(current_err, new_err)
 
+            # if False:
             if err_decrease > 0 and err_decrease > best_err_decrease:
                 best_err_decrease = err_decrease
-                best_swap_idx = j
+                best_j = j
+
+                best_col_i_reconstruction = np.copy(col_i_reconstruction)
+                best_col_j_reconstruction = np.copy(col_j_reconstruction)
 
         if best_err_decrease > 0:
-            print "swapping cols {} and {}".format(i, best_swap_idx)
-            assert best_swap_idx > i
+            # if i % 5 == 0:
+            if True:
+                print "swapping cols {} and {}; err decrease = {:.3f}" \
+                    .format(i, best_j, best_err_decrease)
+            assert best_j > i
 
             nswaps += 1
-            perm[i], perm[best_swap_idx] = perm[best_swap_idx], perm[i]
+            # perm[i] , perm[best_j] = perm[best_j], perm[i]
+            tmp = perm[i]
+            perm[i] = perm[best_j]
+            perm[best_j] = tmp
 
             already_swapped[i] = True
-            already_swapped[best_swap_idx] = True
+            already_swapped[best_j] = True
 
-    # # below is correct, but bound is too loose so it never swaps anything
+            # TODO rm after debug
+            X_new[:, i] = best_col_i_reconstruction
+            X_new[:, best_j] = best_col_j_reconstruction
+
+    # TODO rm
+    if np.any(already_swapped):
+        diffs_old = X[:, already_swapped] - X_hat[:, already_swapped]
+        diffs_new = X[:, already_swapped] - X_new[:, already_swapped]
+        residuals_old = np.sum(diffs_old * diffs_old, axis=0)
+        residuals_new = np.sum(diffs_new * diffs_new, axis=0)
+        old_err, new_err = np.sum(residuals_old), np.sum(residuals_new)
+        print "old err, new err = ", old_err, new_err
+        assert new_err <= old_err - .0001
+
+
+    # # below is (seemingly) correct, but bound is too loose so it never
+    # # swaps anything
     # pairwise_errs = np.zeros((D, D))
     # for i in range(D):
     #     for j in range(D):
@@ -1006,9 +1057,14 @@ def _update_permutation(X_perm, X_hat, assignments, perm, subvect_len):
     #             nswaps += 1
     #             perm[i], perm[j] = perm[j], perm[i]
 
-    print "_update_permutation: performed {} column swaps".format(nswaps)
+    print "_learn_permutation: performed {} column swaps".format(nswaps)
 
     return perm
+
+
+def _inverse_permutation(perm):
+    idxs = np.arange(len(perm))
+    return idxs[perm]
 
 
 def learn_ppq(X, ncodebooks, codebook_bits=8, niters=20,
@@ -1031,6 +1087,10 @@ def learn_ppq(X, ncodebooks, codebook_bits=8, niters=20,
                                       # max_kmeans_iters=3)
                                       max_kmeans_iters=1)
 
+    # ensure centroids actually means of their clusters (cuz using minibatch)
+    codebooks = _update_centroids_opq(X, assignments, ncentroids)
+
+
     # R = np.zeros((D, D), dtype=np.float32)
     X_rotated = X
     perm = np.arange(D, dtype=np.int)
@@ -1047,20 +1107,34 @@ def learn_ppq(X, ncodebooks, codebook_bits=8, niters=20,
             .format(ncodebooks, codebook_bits, it, err,
                     np.sum(residuals * residuals))
 
-        perm = _update_permutation(X, X_hat, assignments=assignments,
-                                   perm=perm, subvect_len=subvect_len)
+        X_hat = X_hat[:, _inverse_permutation(perm)]
+        perm = _learn_permutation(X, X_hat, assignments=assignments,
+                                  subvect_len=subvect_len)
+                                  # perm=None, subvect_len=subvect_len)
 
         # update assignments and codebooks
         X_rotated = X[:, perm]
+
+        # TODO uncomment
         codebooks = _update_centroids_opq(X_rotated, assignments, ncentroids)
         assignments = _encode_X_pq(X_rotated, codebooks)
 
+        # # did this actually reduce the error?
+        # X_hat = reconstruct_X_pq(assignments, codebooks)
+        # new_residuals = X_rotated - X_hat
+        # new_resids = np.sum(new_residuals * new_residuals)
+        # new_err = compute_reconstruction_error(X_rotated, X_hat)
+        # print "Debug PPQ {}x{}b t={}: new mse / variance, resids = {:.5f}, {:.2f}".format(
+        #     ncodebooks, codebook_bits, it, new_err, new_resids)
+        # assert new_err <= err
+
     X_hat = reconstruct_X_pq(assignments, codebooks)
     # err = compute_reconstruction_error(X, X_hat)
+    X_rotated = X[:, perm]
     err = compute_reconstruction_error(X_rotated, X_hat)
     t = time.time() - t0
-    print " -- PPQ {}x{}b mse / variance = {:.5f} ({:.3f}s)" \
-        .format(ncodebooks, codebook_bits, max_nonzeros, err, t)
+    print " -- PPQ {}x{}b final mse / variance = {:.5f} ({:.3f}s)" \
+        .format(ncodebooks, codebook_bits, err, t)
 
     return codebooks, assignments, perm
 
@@ -1558,13 +1632,20 @@ def main():
         # datasets.Glove.TEST_100, N=10000, D=96, norm_mean=True)
         # datasets.Sift1M.TEST_100, N=10000, D=32, norm_mean=True)
         # datasets.Sift1M.TEST_100, N=50000, norm_mean=True)
-        datasets.Sift1M.TEST_100, N=10000, norm_mean=True)
+        # datasets.Sift1M.TEST_100, N=10000, norm_mean=True)
         # datasets.Gist.TEST_100, N=1000, D=480, norm_mean=True)
         # datasets.Gist.TEST_100, N=10000, D=480, norm_mean=True)
         # datasets.Glove.TEST_100, D=96)
+        # datasets.Glove, D=32)
         # datasets.Random.BLOBS, N=10000, D=32)
+        # datasets.Mnist, N=10000, norm_mean=True)
+        # datasets.Mnist, N=10000)
+        # datasets.Convnet1M, N=10000, norm_mean=True)
+        # datasets.Deep1M, N=10000, norm_mean=True)  # breaks gauss init
+        # datasets.LabelMe, norm_mean=True, num_queries=500)
+        datasets.LabelMe, norm_mean=True)
 
-    learn_ppq(X_train, ncodebooks=8, niters=10)
+    # learn_ppq(X_train, ncodebooks=16, codebook_bits=4, niters=10)
 
     # learn_htpq(X_train, ncodebooks=8, max_nonzeros=32, niters=10)
     # learn_htpq(X_train, ncodebooks=8, max_nonzeros=4, niters=10)
@@ -1623,20 +1704,31 @@ def main():
     # perm = random_permutation(X_train.shape[1], 8)
     # X_train = X_train[:, perm]
 
-    # # # in terms of reconstruction err, gaussian < identity < random = gauss_flat
-    # # niters = 10
-    # niters = 5
-    # # # niters = 0
-    # M = 16
-    # bits = 4
-    # learn_func = functools.partial(learn_opq, ncodebooks=M, codebook_bits=bits, niters=niters)
-    # # codebooks, assignments, R = learn_func(X_train, init='identity')
-    # # codebooks, assignments, R = learn_func(X_train, init='gauss_flat')
-    # # codebooks, assignments, R = learn_func(X_train, init='random')
-    # # codebooks, assignments, R = learn_func(X_train, init='gauss')
-    # # codebooks, assignments, R = learn_func(X_train, init='gauss', max_nonzeros=32)
+    # # yep, mnist looks right
+    # sb.heatmap(  Q[3].reshape((28, 28)))  # noqa
+    # print np.min(Q[3])
+    # print np.max(Q[3])
+    # plt.show()
+    # return
+
+    # print Q.shape
+    # return
+
+    # # in terms of reconstruction err, gaussian < identity < random = gauss_flat
+    # niters = 10
+    niters = 5
+    # # niters = 0
+    M = 16
+    bits = 4
+    learn_func = functools.partial(learn_opq, ncodebooks=M, codebook_bits=bits, niters=niters)
+    # codebooks, assignments, R = learn_func(X_train, init='identity')
+    # codebooks, assignments, R = learn_func(X_train, init='gauss_flat')
+    # codebooks, assignments, R = learn_func(X_train, init='random')
+    # codebooks, assignments, R = learn_func(X_train, init='gauss')
+    # codebooks, assignments, R = learn_func(Q, init='gauss')
+    # codebooks, assignments, R = learn_func(X_train, init='gauss', max_nonzeros=32)
     # codebooks, assignments, R = learn_func(X_train, init='identity', max_nonzeros=16)
-    # # codebooks, assignments, R = learn_func(X_train, init='identity', max_nonzeros=4)
+    # codebooks, assignments, R = learn_func(X_train, init='identity', max_nonzeros=4)
 
     # # _, axes = plt.subplots(1, 2, figsize=(10, 5))
     # plt.figure()

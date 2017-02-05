@@ -18,8 +18,18 @@ def dists_l1(X, q):
     return np.sum(diffs, axis=-1)
 
 
+def element_size_bytes(x):
+    return np.dtype(x.dtype).itemsize
+
+
 def sq_dists_to_vectors(X, queries, rowNorms=None, queryNorms=None):
     Q = queries.shape[0]
+
+    mat_size = X.shape[0] * Q
+    mat_size_bytes = element_size_bytes(X[0] + queries[0])
+    if mat_size_bytes > int(1e9):
+        print "WARNING: sq_dists_to_vectors: attempting to create a matrix" \
+            "of size {} ({}B)".format(mat_size, mat_size_bytes)
 
     if rowNorms is None:
         rowNorms = np.sum(X * X, axis=1, keepdims=True)
@@ -48,13 +58,46 @@ def all_eq(x, y):
     return np.max(np.abs(x - y)) < .001
 
 
-def top_k_idxs(elements, k, smaller_better=True):
+def top_k_idxs(elements, k, smaller_better=True, axis=-1):
     if smaller_better:  # return indices of lowest elements
         which_nn = np.arange(k)
-        return np.argpartition(elements, kth=which_nn)[:k]
+        return np.argpartition(elements, kth=which_nn, axis=axis)[:k]
     else:  # return indices of highest elements
         which_nn = len(elements) - 1 - np.arange(k)
-        return np.argpartition(elements, kth=which_nn)[-k:][::-1]
+        return np.argpartition(elements, kth=which_nn, axis=axis)[-k:][::-1]
+
+
+def compute_true_knn(X, Q, k=1000, print_every=5, block_sz=128):
+    nqueries = Q.shape[0]
+    nblocks = int(np.ceil(nqueries / float(block_sz)))
+
+    truth = np.full((nqueries, k), -999, dtype=np.int32)
+
+    if nqueries <= block_sz:
+        dists = sq_dists_to_vectors(Q, X)
+        for i in range(nqueries):
+            truth[i, :] = top_k_idxs(dists[i, :], k)
+        return truth
+
+    for b in range(nblocks):
+        # recurse to fill in knn for each block
+        start = b * block_sz
+        end = min(start + block_sz, nqueries)
+        rows = Q[start:end, :]
+        truth[start:end, :] = compute_true_knn(X, rows, k=k, block_sz=block_sz)
+
+        if b % print_every == 0:
+            print "computing top k for query block " \
+                "{} (queries {}-{})...".format(b, start, end)
+
+    # for i in range(nqueries):
+    #     if i % print_every == 0:
+    #         print "computing top k for query {}...".format(i)
+    #     truth[i, :] = top_k_idxs(dists[i, :], k)
+    print "done"
+
+    assert np.all(truth != -999)
+    return truth
 
 
 def knn(X, q, k, dist_func=dists_sq):

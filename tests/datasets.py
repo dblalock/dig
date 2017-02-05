@@ -49,16 +49,54 @@ class Sift10M:
     TRUTH    = join(DIR, 'true_nn_idxs_10M.npy')    # noqa
 
 
+class Deep1M:
+    """256D PCA of convnet activations; see OTQ paper supporting
+    webiste, http://sites.skoltech.ru/compvision/projects/aqtq/"""
+    DIR         = join(DATA_DIR, 'deep1m')              # noqa
+    TRAIN       = join(DIR, 'deep1M_learn.npy')         # noqa
+    TEST        = join(DIR, 'deep1M_base.npy')          # noqa
+    QUERIES     = join(DIR, 'deep1M_queries.npy')       # noqa
+    TRUTH_TRAIN = join(DIR, 'deep1M_truth_train.npy')   # noqa
+    TRUTH   = join(DIR, 'deep1M_groundtruth.npy')       # noqa
+
+
+class Convnet1M:
+    DIR         = join(DATA_DIR, 'convnet1m')           # noqa
+    TRAIN       = join(DIR, 'convnet_train.npy')        # noqa
+    TEST        = join(DIR, 'convnet_test.npy')         # noqa
+    TEST_100    = join(DIR, 'convnet_test_100k.npy')    # noqa
+    QUERIES     = join(DIR, 'convnet_queries.npy')      # noqa
+    TRUTH_TRAIN = join(DIR, 'truth_train.npy')          # noqa
+    TRUTH       = join(DIR, 'truth_test.npy')           # noqa
+
+
+class Mnist:
+    # following other papers (eg, "revisiting additive quantization"),
+    # use mnist test set as queries and training set as database
+    DIR     = join(DATA_DIR, 'mnist')                   # noqa
+    TEST    = join(DIR, 'X_train.npy')                  # noqa
+    QUERIES = join(DIR, 'X_test.npy')                   # noqa
+    TRUTH   = join(DIR, 'truth_Q=test_X=train.npy')     # noqa
+
+
 class LabelMe:
-    DIR = join(DATA_DIR, 'labelme')
-    # TODO pull out train and test, write out as files, and precompute truth
+    DIR     = join(DATA_DIR, 'labelme')         # noqa
+    TRAIN   = join(DIR, 'labelme_train.npy')    # noqa
+    TEST    = join(DIR, 'labelme_train.npy')    # noqa
+    TRUTH   = join(DIR, 'labelme_truth.npy')    # noqa
 
 
 class Glove:
-    DIR = join(DATA_DIR, 'glove')
-    TEST     = join(DIR, 'glove.txt')           # noqa
+    DIR      = join(DATA_DIR, 'glove')          # noqa
+    TEST     = join(DIR, 'glove_test.npy')      # noqa
     TEST_100 = join(DIR, 'glove_100k.txt')      # noqa
     TEST_200 = join(DIR, 'glove_200k.txt')      # noqa
+    QUERIES  = join(DIR, 'glove_queries.npy')   # noqa
+    TRUTH    = join(DIR, 'glove_truth.npy')     # noqa
+
+
+ALL_REAL_DATASETS = [
+    Gist, Sift1M, Sift10M, Deep1M, Convnet1M, Mnist, LabelMe, Glove]
 
 
 # @_memory.cache  # cache this more efficiently than as text
@@ -86,11 +124,14 @@ def extract_random_rows(X, how_many, remove_from_X=True):
     # return X[mask].copy(), rows
 
 
-def _load_complete_dataset(which_dataset, num_queries=1):
+# @_memory.cache
+def _load_complete_dataset(which_dataset, num_queries=10):
     X_test = np.load(which_dataset.TEST)
     try:
         X_train = np.load(which_dataset.TRAIN)
+        print "using separate test set!"
     except AttributeError:
+        print "No training set found for dataset {}".format(str(which_dataset))
         X_train = X_test
     try:
         Q = np.load(which_dataset.QUERIES)
@@ -108,9 +149,9 @@ def _ground_truth_for_dataset(which_dataset):
     return None  # TODO
 
 
-@_memory.cache
+# @_memory.cache
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
-                 num_queries=1, Ntrain=-1):
+                 num_queries=10, Ntrain=-1):
     true_nn = None
 
     # randomly generated datasets
@@ -149,8 +190,9 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
         true_nn = _ground_truth_for_dataset(which_dataset)
 
     # "real" datasets with predefined train, test, queries, truth
-    elif which_dataset in (Glove, Gist, Sift1M, Sift10M):
-        X_train, Q, X_test, true_nn = _load_complete_dataset(which_dataset)
+    elif which_dataset in ALL_REAL_DATASETS:
+        X_train, Q, X_test, true_nn = _load_complete_dataset(
+            which_dataset, num_queries=num_queries)
 
     else:
         raise ValueError("unrecognized dataset {}".format(which_dataset))
@@ -167,12 +209,6 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
         print "WARNING: Training data is also the test data!"
 
     if norm_mean:
-        # means = np.zeros(X_train.shape[1]) + 1000
-        # means = np.ones(X_train.shape[1])
-        # print "subtracting off means with shape", means.shape
-        # print "Xtrain and Xtest starts:"
-        # print X_train[:5, :5]
-        # print X_test[:5, :5]
         means = np.mean(X_train, axis=0)
         X_train -= means
         if not train_is_test:
@@ -231,25 +267,6 @@ def read_yael_vecs(path, c_contiguous=True, limit_rows=-1, dtype=None):
 if __name__ == '__main__':
     pass
 
-    # c------------------------ lean up gist
-    #
-    # path = Paths.DATA_DIR + '/gist/gist_base.fvecs'
-    # path = Paths.DATA_DIR + '/gist/gist_learn.fvecs'
-    # path = Paths.DATA_DIR + '/gist/gist_queries.fvecs'
-    # path = Paths.DATA_DIR + '/gist/gist_groundtruth.ivecs'
-    # out_path = Paths.GIST_100
-    # out_path = Paths.GIST_200
-    # out_path = Paths.GIST_TRAIN
-    # out_path = Paths.GIST_QUERIES
-    # out_path = Paths.GIST_TRUTH
-    # X = read_yael_vecs(path)[:100000]
-    # X = read_yael_vecs(path)[:200000]
-    # X = read_yael_vecs(path)
-    # X = read_yael_vecs(path, dtype=np.int32)
-    # print X[:2]
-    # print X.shape
-    # np.save(out_path, X)
-
     # ------------------------ clean up sift1b (bigann)
     # data_dir = '/Volumes/MacHDD/datasets/sift1b/'
     # out_dir = '/Volumes/MacSSD_OS/Users/davis/Desktop/datasets/sift1b/'
@@ -279,15 +296,37 @@ if __name__ == '__main__':
     #     np.save(out_path, X)
 
     # ------------------------ clean up sift1m
-    data_dir = '/Volumes/MacHDD/datasets/sift1m/'
-    out_dir = '/Volumes/MacSSD_OS/Users/davis/Desktop/datasets/sift1m/'
-    for fname in os.listdir(data_dir):
-        in_path = data_dir + fname
-        out_path = out_dir + fname.split('.')[0] + '.npy'
-        print "unpacking {} to {}".format(in_path, out_path)
-        X = read_yael_vecs(in_path)
-        print X.shape
-        np.save(out_path, X)
+    # data_dir = '/Volumes/MacHDD/datasets/sift1m/'
+    # out_dir = '/Volumes/MacSSD_OS/Users/davis/Desktop/datasets/sift1m/'
+    # for fname in os.listdir(data_dir):
+    #     in_path = data_dir + fname
+    #     out_path = out_dir + fname.split('.')[0] + '.npy'
+    #     print "unpacking {} to {}".format(in_path, out_path)
+    #     X = read_yael_vecs(in_path)
+    #     print X.shape
+    #     np.save(out_path, X)
+
+    # # ------------------------ clean up Deep1M
+    # data_dir = os.path.expanduser('~/Desktop/datasets/nn-search/deep1M-raw/')
+    # out_dir = os.path.expanduser('~/Desktop/datasets/nn-search/deep1M/')
+    # print "in dir, out dir:", data_dir, out_dir
+    # for fname in os.listdir(data_dir):
+    #     in_path = data_dir + fname
+    #     out_path = out_dir + fname.split('.')[0] + '.npy'
+    #     print "unpacking {} to {}".format(in_path, out_path)
+    #     X = read_yael_vecs(in_path)
+    #     print X.shape
+    #     np.save(out_path, X)
+
+    # # ------------------------ clean up Convnet1M
+    # >>> import numpy as np
+    # >>> from scipy.io import loadmat
+    # >>> d = loadmat('features_m_128.mat')
+    # >>> contig = np.ascontiguousarray
+    # >>> savedir = '../convnet1m/'
+    # >>> np.save(savedir + 'convnet_train.npy', contig(d['feats_m_128_train']))
+    # >>> np.save(savedir + 'convnet_test.npy', contig(d['feats_m_128_test']))
+    # >>> np.save(savedir + 'convnet_base.npy', contig(d['feats_m_128_base']))
 
     # ------------------------ clean up deep1b
     # data_dir = '/Volumes/MacHDD/datasets/deep1b/'
@@ -309,7 +348,8 @@ if __name__ == '__main__':
     #     np.save(out_path, X)
 
     # ------------------------ clean up LabelMe
-    #
+    # >>> from scipy.io import loadmat
+    # >>> d = loadmat('LabelMe_gist.mat')
     # >>> for k, v in d.iteritems():
     # ...     try:
     # ...             print k, v.shape
@@ -331,4 +371,5 @@ if __name__ == '__main__':
     # >>> np.save('labelme_train_idxs', d['ndxtrain']) # training data idxs
     # >>> np.save('labelme_test_idxs', d['ndxtest'])   # test data idxs
     # >>> np.save('labelme_all_gists', d['gist'])     # actual gist descriptors
+
 
