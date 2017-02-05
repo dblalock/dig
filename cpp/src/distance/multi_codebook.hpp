@@ -34,22 +34,6 @@ inline __m256i stream_load_si256i(T* ptr) {
     return _mm256_stream_load_si256((__m256i *)ptr);
 }
 
-// template<int NBytes>
-// inline void sum_block32(const uint8_t* codes,
-//     const uint8_t* luts_unused, uint8_t* dists_out, int64_t nblocks)
-// {
-//     static_assert(NBytes > 0, "Code length <= 0 is not valid");
-//     for (int64_t i = 0; i < nblocks; i++) {
-//         auto totals = _mm256_setzero_si256();
-//         for (uint8_t j = 0; j < NBytes; j++) {
-//             auto x_col = stream_load_si256i(codes);
-//             codes += 32;
-//             totals = _mm256_adds_epu8(totals, x_col);
-//         }
-//         _mm256_stream_si256((__m256i*)dists_out, totals);
-//         dists_out += 32;
-//     }
-// }
 
 // experimental version to see what bottlenecks are; this one assumes 4b codes
 // are already unpacked (so no need to shift or mask); NOTE: this impl requires
@@ -172,6 +156,70 @@ inline void incorrect_lut_dists_block32_4b(const uint8_t* codes, const uint8_t* 
     }
 }
 
+// unpacks 16B LUTs into 32B to cut out half the loads, and computes dists
+// in blocks; note that this requires reordering the codes into striped blocks
+template<int B, int NBytes>
+inline void lut_dists_block32_4b_vertical(const uint8_t* codes,
+    const uint8_t* luts, uint8_t* dists_out, int64_t N)
+{
+    static constexpr int packet_width = 32; // how many vecs we operate on at once
+    static constexpr int nstripes = B / packet_width; // # of rows of 32B per block
+    static_assert(B % packet_width == 0, "B must be a multiple of packet_width");
+    static_assert(B > 0, "B must be > 0");
+    static_assert(NBytes > 0, "Code length <= 0 is not valid");
+
+    // static_assert(nstripes == 1, "TODO rm after debug"); // TODO rm
+
+    static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
+    const int64_t nblocks = N / B;
+    assert(N % B == 0);
+
+    // load up luts into SIMD registers
+    __m256i luts_ar[NBytes * 2];
+    auto lut_ptr = luts;
+    for (uint8_t j = 0; j < NBytes; j++) {
+        auto both_luts = load_si256i(lut_ptr);
+        lut_ptr += 32;
+        auto lut0 = _mm256_permute2x128_si256(both_luts, both_luts, 0 + (0 << 4));
+        auto lut1 = _mm256_permute2x128_si256(both_luts, both_luts, 1 + (1 << 4));
+        luts_ar[2 * j] = lut0;
+        luts_ar[2 * j + 1] = lut1;
+    }
+
+    __m256i accumulators[nstripes];
+
+    for (int64_t b = 0; b < nblocks; b++) { // for each block
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = _mm256_setzero_si256(); // zero dists
+        }
+        for (int j = 0; j < NBytes; j++) { // for each col (1 byte, 2 codes)
+
+            // TODO also try loading from lut* (ie, not having luts_ar)
+            auto lut_low = luts_ar[2 * j];
+            auto lut_high = luts_ar[2 * j + 1];
+
+            for (int i = 0; i < nstripes; i++) { // for each stripe
+                auto x_col = stream_load_si256i(codes);
+                codes += 32;
+
+                auto x_low = _mm256_and_si256(x_col, low_4bits_mask);
+                auto x_shft = _mm256_srli_epi16(x_col, 4);
+                auto x_high = _mm256_and_si256(x_shft, low_4bits_mask);
+
+                auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
+                auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
+
+                accumulators[i] = _mm256_adds_epu8(accumulators[i], dists_low);
+                accumulators[i] = _mm256_adds_epu8(accumulators[i], dists_high);
+            }
+        }
+        for (uint8_t i = 0; i < nstripes; i++) { // for each stripe
+            _mm256_store_si256((__m256i*)dists_out, accumulators[i]);
+            dists_out += packet_width;
+        }
+    } // for each block
+}
+
 // version that unpacks 16B LUTs into 32B to cut out half the loads
 template<int NBytes>
 inline void lut_dists_block32_4b_unpack(const uint8_t* codes,
@@ -196,6 +244,7 @@ inline void lut_dists_block32_4b_unpack(const uint8_t* codes,
         for (uint8_t j = 0; j < NBytes; j++) {
             // auto x_col = load_si256i(codes);
             auto x_col = stream_load_si256i(codes);
+            codes += 32;
 
             auto lut_low = luts_ar[2 * j];
             auto lut_high = luts_ar[2 * j + 1];
@@ -214,24 +263,20 @@ inline void lut_dists_block32_4b_unpack(const uint8_t* codes,
             // we have to mask out the upper bit because the shuffle
             // instruction will zero the corresponding byte if this bit is set
             auto x_low = _mm256_and_si256(x_col, low_4bits_mask);
-            auto x_high = _mm256_srli_epi16(x_col, 4);
-            x_high = _mm256_and_si256(x_high, low_4bits_mask);
+            auto x_shft = _mm256_srli_epi16(x_col, 4);
+            auto x_high = _mm256_and_si256(x_shft, low_4bits_mask);
 
             auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
             auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
 
             totals = _mm256_adds_epu8(totals, dists_low);
             totals = _mm256_adds_epu8(totals, dists_high);
-
-            codes += 32;
-            // luts += 64;
-            luts += 32;
         }
         // _mm256_store_si256((__m256i*)dists_out, totals);
         _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
-        // luts -= 8 * 64;
-        luts -= NBytes * 32;
         dists_out += 32;
+        // luts -= 8 * 64;
+        // luts -= NBytes * 32;
     }
 }
 
@@ -364,6 +409,38 @@ inline void lut_dists_8b(const uint8_t* codes, const dist_t* luts,
     }
 }
 
+
+template<int B, int NBytes, class dist_t> // block size, number of dimensions of each vector
+inline void lut_dists_8b_vertical(const uint8_t* codes, const dist_t* luts,
+   dist_t* dists_out, int64_t N)
+{
+    static constexpr int lut_sz = 256;
+    static constexpr int nstripes = B; // # of rows of per block
+    static_assert(B > 0, "Block size B must be > 0");
+    const int64_t nblocks = N / B;
+    assert(N % B == 0);
+
+    dist_t accumulators[nstripes];
+
+    for (int64_t b = 0; b < nblocks; b++) { // for each block
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = 0; // zero dists
+        }
+        for (int j = 0; j < NBytes; j++) { // for each pair of dimensions
+            auto lut_ptr = luts + lut_sz * j;
+            for (int i = 0; i < nstripes; i++) { // for each stripe
+                auto idx = *codes;
+                codes++;
+                accumulators[i] += lut_ptr[idx];
+            }
+        }
+        for (int i = 0; i < nstripes; i++) { // for each stripe
+            dists_out[i] = accumulators[i];
+        }
+        dists_out += nstripes;
+    }
+}
+
 template<int NBytes, class dist_t>
 inline void lut_dists_12b(const uint8_t* codes, const dist_t* luts,
     dist_t* dists_out, int64_t N)
@@ -389,13 +466,15 @@ inline void lut_dists_12b(const uint8_t* codes, const dist_t* luts,
             // codes[j]             codes[j+1]           codes[j+2]
             // -------------------- ----------|---------- --------------------
             //       idx0[:8]       idx0[8:12] idx1[8:12]       idx1[:8]
-            uint16_t low_bits = codes[j+1] & low_4bits_mask;
-            uint16_t high_bits = codes[j+1] & high_4bits_mask;
-            uint16_t idx0 = codes[j] + (low_bits << 8);
-            uint16_t idx1 = codes[j+2] + (high_bits << 4);
+            uint16_t low_bits = codes[3*j+1] & low_4bits_mask;
+            uint16_t high_bits = codes[3*j+1] & high_4bits_mask;
+            uint16_t idx0 = codes[3*j] + (low_bits << 8);
+            uint16_t idx1 = codes[3*j+2] + (high_bits << 4);
 
             dists_out[i] += lut_ptr0[idx0];
             dists_out[i] += lut_ptr1[idx1];
+
+            // codes += 3;
         }
         if (ncodewords % 2 != 0) {
             auto lut_ptr = luts + codebook_sz * (ncodewords - 1);
@@ -403,6 +482,73 @@ inline void lut_dists_12b(const uint8_t* codes, const dist_t* luts,
             auto idx = codes[NBytes-2] + (low_bits << 8); // use 2nd to last byte
             dists_out[i] += lut_ptr[idx];
         }
+        codes += NBytes;
+        // codes += (NBytes % 3);
+    }
+}
+template<int B, int NBytes, class dist_t>
+inline void lut_dists_12b_vertical(const uint8_t* codes, const dist_t* luts,
+    dist_t* dists_out, int64_t N)
+{
+    static constexpr int ncodebook_bits = 12;
+    static constexpr int nstripes = B; // # of rows of per block
+    static constexpr int total_bits = 8 * NBytes;
+    static constexpr int ncodewords = total_bits / ncodebook_bits;
+    static constexpr int codebook_sz = 1 << ncodebook_bits;
+    static constexpr bool nbytes_multiple_of_8 = NBytes % 8 == 0;
+    static constexpr uint16_t idx_mask = (1 << ncodebook_bits) - 1;
+    static constexpr uint8_t low_4bits_mask = 0x0F;
+    static constexpr uint8_t high_4bits_mask = 0xF0;
+    static_assert(NBytes >= 2, "NBytes < 2 is not meaningful");
+    // static_assert(NBytes % 2 == 0, "Odd NBytes not implemented!");
+    // static_assert(NBytes % 3 == 0)
+    static_assert(B > 0, "Block size B must be > 0");
+    const int64_t nblocks = N / B;
+    assert(N % B == 0);
+
+    dist_t accumulators[nstripes];
+
+    for (int64_t b = 0; b < nblocks; b++) { // for each block
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = 0; // zero dists
+        }
+        for (int j = 0; j < ncodewords; j += 2) { // for each pair of bytes
+            auto lut_ptr0 = luts + codebook_sz * j;
+            auto lut_ptr1 = lut_ptr0 + codebook_sz;
+
+            for (int i = 0; i < nstripes; i++) { // for each stripe
+
+                // packed indices format:
+                //
+                // codes[j]             codes[j+1]           codes[j+2]
+                // -------------------- ----------|---------- --------------------
+                //       idx0[:8]       idx0[8:12] idx1[8:12]       idx1[:8]
+                uint16_t low_bits = codes[3*j+1] & low_4bits_mask;
+                uint16_t high_bits = codes[3*j+1] & high_4bits_mask;
+                uint16_t idx0 = codes[3*j] + (low_bits << 8);
+                uint16_t idx1 = codes[3*j+2] + (high_bits << 4);
+
+                accumulators[i] += lut_ptr0[idx0];
+                accumulators[i] += lut_ptr1[idx1];
+
+                // codes += 3;
+            }
+        }
+        if (NBytes % 3 == 2) {  // one more codeword in the final 2 bytes
+            auto lut_ptr = luts + codebook_sz * (ncodewords - 1);
+            for (int i = 0; i < nstripes; i++) {
+                uint16_t low_bits = codes[NBytes-1] & low_4bits_mask; // use last byte
+                auto idx = codes[NBytes-2] + (low_bits << 8); // use 2nd to last byte
+                accumulators[i] += lut_ptr[idx];
+            }
+        }
+        // codes += (NBytes % 3);
+        codes += NBytes;
+
+        for (int i = 0; i < nstripes; i++) { // for each stripe
+            dists_out[i] = accumulators[i];
+        }
+        dists_out += nstripes;
     }
 }
 
@@ -413,16 +559,48 @@ inline void lut_dists_16b(const uint16_t* codes, const dist_t* luts,
 {
     // std::cout << "lut dists 16b: using N = " << N << "\n";
     static_assert(NBytes % 2 == 0, "Odd NBytes not implemented!");
-    static constexpr int codebook_sz = (1 << 16);
+    static constexpr int lut_sz = (1 << 16);
     static constexpr int ncodewords = NBytes / 2;
 
     for (int64_t i = 0; i < N; i++) {
         dists_out[i] = 0;
         for (int j = 0; j < ncodewords; j++) {
-            auto lut_ptr = luts + codebook_sz * j;
+            auto lut_ptr = luts + lut_sz * j;
             dists_out[i] += lut_ptr[codes[j]];
         }
         codes += ncodewords;
+    }
+}
+template<int B, int NBytes, class dist_t> // block size, number of dimensions of each vector
+inline void lut_dists_16b_vertical(const uint16_t* codes, const dist_t* luts,
+   dist_t* dists_out, int64_t N)
+{
+    static constexpr int lut_sz = 1 << 16;
+    static constexpr int nstripes = B; // # of rows of per block
+    static constexpr int ncodewords = NBytes / 2;
+    static_assert(NBytes % 2 == 0, "Odd NBytes not implemented!");
+    static_assert(B > 0, "Block size B must be > 0");
+    const int64_t nblocks = N / B;
+    assert(N % B == 0);
+
+    dist_t accumulators[nstripes];
+
+    for (int64_t b = 0; b < nblocks; b++) { // for each block
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = 0; // zero dists
+        }
+        for (int j = 0; j < ncodewords; j++) { // for each pair of bytes
+            auto lut_ptr = luts + lut_sz * j;
+            for (int i = 0; i < nstripes; i++) { // for each stripe
+                auto idx = *codes;
+                codes++;
+                accumulators[i] += lut_ptr[idx];
+            }
+        }
+        for (int i = 0; i < nstripes; i++) { // for each stripe
+            dists_out[i] = accumulators[i];
+        }
+        dists_out += nstripes;
     }
 }
 
@@ -566,7 +744,7 @@ inline void float_dists_vertical(const float* X, const float* q,
     static constexpr int nstripes = B / packet_width; // # of rows of 32B per block
     static_assert(B % packet_width == 0, "B must be a multiple of packet_width");
     static_assert(B > 0, "B must be > 0");
-    static const int64_t nblocks = N / B;
+    const int64_t nblocks = N / B;
     assert(N % B == 0);
 
     __m256 accumulators[nstripes];
@@ -595,19 +773,19 @@ inline void float_dists_vertical(const float* X, const float* q,
 }
 
 template<int B, int D> // block size, number of dimensions of each vector
-inline void byte_dists_vertical(const int8_t* X, const int8_t* q,
+inline void byte_dists_vertical(const uint8_t* X, const uint8_t* q,
     uint16_t* dists_out, int64_t N)
 {
     static constexpr int packet_width = 32; // how many vecs we operate on at once
     static constexpr int nstripes = B / packet_width; // # of rows of 32B per block
     static_assert(B % packet_width == 0, "B must be a multiple of packet_width");
     static_assert(B > 0, "B must be > 0");
-    static const int64_t nblocks = N / B * 2;
+    const int64_t nblocks = N / B * 2;
     assert(N % B == 0);
 
     // we assume that pairs of bytes are from the same vector for our
     // maddubs; so pretending q points to int16s makes broadcasting pairs work
-    const int16_t* q16 = reinterpret_cast<const int16_t*>(q);
+    const uint16_t* q16 = reinterpret_cast<const uint16_t*>(q);
 
     __m256i accumulators[nstripes];
 
@@ -638,48 +816,39 @@ inline void byte_dists_vertical(const int8_t* X, const int8_t* q,
     }
 }
 
-//template<int B, int D> // block size, number of dimensions of each vector
-//inline void sum_inputs(const int8_t* X, const int8_t* q,
-//    uint16_t* dists_out, int64_t nblocks)
-//{
-//    static const int packet_width = 32; // how many vecs we operate on at once
-//    static const int nstripes = B / packet_width; // # of rows of 32B per block
-//    static_assert(B % packet_width == 0, "B must be a multiple of packet_width");
-//    static_assert(B > 0, "B must be > 0");
-//
-//    // we assume that pairs of bytes are from the same vector for our
-//    // maddubs; so pretending q points to int16s makes broadcasting pairs work
-//    const int16_t* q16 = reinterpret_cast<const int16_t*>(q);
-//
-//    __m256i accumulators[nstripes];
-//
-//    for (int64_t b = 0; b < nblocks; b++) { // for each block
-//        for (int i = 0; i < nstripes; i++) {
-//            accumulators[i] = _mm256_setzero_si256(); // zero dists
-//        }
-//        for (int j = 0; j < D / 2; j++) { // for each pair of dimensions
-//            auto q_broadcast = _mm256_set1_epi16(q16[j]);
-//            for (int i = 0; i < nstripes; i++) { // for each stripe
-//                auto x_col = _mm256_load_si256((__m256i*)X);
-//                X += packet_width;
-//
-//                auto diffs = _mm256_sub_epi8(q_broadcast, x_col);
-//                // auto abs_diffs = _mm256_abs_epi8(diffs);
-//                // auto prods = _mm256_maddubs_epi16(abs_diffs, abs_diffs);
-//                auto prods = _mm256_maddubs_epi16(diffs, diffs);
-//                accumulators[i] = _mm256_adds_epi16(accumulators[i], prods);
-//            }
-//        }
-//        for (uint8_t i = 0; i < nstripes; i++) { // for each stripe
-//            _mm256_store_si256((__m256i*)dists_out, accumulators[i]);
-//            // we compute 16 dists because we assume that adjacent pairs of
-//            // bytes belong to the same vector; this is necessary for the
-//            // maddubs to be meaningful
-//            dists_out += packet_width / 2;
-//        }
-//    }
-//}
+// just sums up the inputs and stores results; upper bound on how fast
+// any of these functions could be
+template<int B, int D> // block size, number of dimensions of each vector
+inline void sum_inputs(const uint8_t* X, const uint8_t* q_unused,
+   uint8_t* dists_out, int64_t N)
+{
+    static constexpr int packet_width = 32; // how many vecs we operate on at once
+    static constexpr int nstripes = B / packet_width; // # of rows of 32B per block
+    static_assert(B % packet_width == 0, "B must be a multiple of packet_width");
+    static_assert(B > 0, "B must be > 0");
+    const int64_t nblocks = N / B;
+    assert(N % B == 0);
 
+    __m256i accumulators[nstripes];
+
+    for (int64_t b = 0; b < nblocks; b++) { // for each block
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = _mm256_setzero_si256(); // zero dists
+        }
+        for (int j = 0; j < D; j++) { // for each pair of dimensions
+            for (int i = 0; i < nstripes; i++) { // for each stripe
+                // auto x_col = _mm256_load_si256((__m256i*)X);
+                auto x_col = stream_load_si256i((__m256i*)X);
+                X += packet_width;
+                accumulators[i] = _mm256_adds_epi16(accumulators[i], x_col);
+            }
+        }
+        for (uint8_t i = 0; i < nstripes; i++) { // for each stripe
+            _mm256_store_si256((__m256i*)dists_out, accumulators[i]);
+            dists_out += packet_width;
+        }
+    }
+}
 
 } // namespace dist
 #endif // __MULTI_CODEBOOK_HPP
