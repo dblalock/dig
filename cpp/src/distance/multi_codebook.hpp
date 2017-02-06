@@ -761,8 +761,9 @@ inline void float_dists_vertical(const float* X, const float* q,
                 X += packet_width;
 
                 auto diff = _mm256_sub_ps(q_broadcast, x_col);
-                auto prods = fma(diff, diff, accumulators[i]);
-                accumulators[i] = _mm256_add_ps(accumulators[i], prods);
+                accumulators[i] = fma(diff, diff, accumulators[i]);
+                // auto prods = fma(diff, diff, accumulators[i]);
+                // accumulators[i] = _mm256_add_ps(accumulators[i], prods);
             }
         }
         for (uint8_t i = 0; i < nstripes; i++) { // for each stripe

@@ -189,7 +189,10 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
  * @tparam NBytes Byte length of Bolt encoding
  */
 template<int NBytes>
-void bolt_lut_l2(const float* q, int len, const __m256* centroids, __m256i* out) {
+// void bolt_lut_l2(const float* q, int len, const float* centroids, float* out) {
+void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) {
+// void bolt_lut_l2(const float* q, int len, const float* centroids, uint16_t* out) {
+// void bolt_lut_l2(const float* q, int len, const float* centroids, int32_t* out) {
     static constexpr int lut_sz = 16;
     static constexpr int packet_width = 8; // objs per simd register
     static constexpr int nstripes = lut_sz / packet_width;
@@ -207,49 +210,93 @@ void bolt_lut_l2(const float* q, int len, const __m256* centroids, __m256i* out)
             accumulators[i] = _mm256_setzero_ps();
         }
         for (int j = 0; j < subvect_len; j++) { // for each dim in subvect
-            auto q_broadcast = _mm256_set1_ps(q[j]);
+            auto q_broadcast = _mm256_set1_ps(q[(m * subvect_len) + j]);
             for (int i = 0; i < nstripes; i++) { // for upper 8, lower 8 floats
-                auto centroids_col = _mm256_load_ps((float*)centroids);
+                auto centroids_col = _mm256_load_ps(centroids);
                 centroids += packet_width;
 
                 auto diff = _mm256_sub_ps(q_broadcast, centroids_col);
-                auto prods = fma(diff, diff, accumulators[i]);
-                accumulators[i] = _mm256_add_ps(accumulators[i], prods);
+                accumulators[i] = fma(diff, diff, accumulators[i]);
+                // auto prods = fma(diff, diff, accumulators[i]);
+                // accumulators[i] = _mm256_add_ps(accumulators[i], prods);
             }
         }
-        // nevermind, second pack undoes first one's shuffling
-        // static constexpr __m256i shuffle_idxs = _mm256_set_epi8(
-        //     31, 30, 29, 28, 27, 26, 25, 24,
-        //     15, 14, 13, 12, 11, 10, 9,  8,
-        //     23, 22, 21, 20, 19, 18, 17, 16,
-        //     7,  6,  5,  4,  3,  2,  1,  0);
+
+        // // TODO rm
+        // for (uint8_t i = 0; i < nstripes; i++) { // for each stripe
+        //     _mm256_store_ps(out, accumulators[i]);
+        //     out += packet_width;
+        // }
+        // continue;
+
+        // static const __m256i shuffle_idxs = _mm256_set_epi8(
+        //     31, 30, 29, 28, 15, 14, 13, 12,
+        //     27, 26, 25, 24, 11, 10,  9,  8,
+        //     23, 22, 21, 20,  7,  6,  5,  4,
+        //     19, 18, 17, 16,  3,  2,  1,  0);
+        // static const __m256i shuffle_idxs = _mm256_set1_epi8(0);
+
+
+        // // TODO rm
+        // // okay, so writing converting to ints is working; so something
+        // // lower down is the problem
+        // for (uint8_t i = 0; i < nstripes; i++) { // for each stripe
+        //     _mm256_stream_si256((__m256i*)out, dists_int32_low);
+        //     out += 8;
+        //     _mm256_stream_si256((__m256i*)out, dists_int32_high);
+        //     out += 8;
+        // }
+
+
+        // // TODO rm
+        // // let's try with uint16s to check what pack is doing
+        // // ya, this also seems to be doing the right thing
+        // auto dists_uint16 = _mm256_packus_epi32(dists_int32_low, dists_int32_high);
+        // for (uint8_t i = 0; i < nstripes; i++) { // for each stripe
+        //     _mm256_stream_si256((__m256i*)out, dists_uint16);
+        //     out += 16;
+        // }
+
 
         // convert the floats to ints
         auto dists_int32_low = _mm256_cvtps_epi32(accumulators[0]);
         auto dists_int32_high = _mm256_cvtps_epi32(accumulators[1]);
 
+        // indices to undo packus_epi32 followed by packus_epi16, once we've
+        // swapped 64-bit blocks 1 and 2
+        static const __m256i shuffle_idxs = _mm256_set_epi8(
+            31-16, 30-16, 29-16, 28-16, 23-16, 22-16, 21-16, 20-16,
+            27-16, 26-16, 25-16, 24-16, 19-16, 18-16, 17-16, 16-16,
+            15- 0, 14- 0, 13- 0, 12- 0, 7 - 0, 6 - 0, 5 - 0, 4 - 0,
+            11- 0, 10- 0, 9 - 0, 8 - 0, 3 - 0, 2 - 0, 1 - 0, 0 - 0);
+
         // because we saturate to uint8s, we only get 32 objs to write after
         // two 16-element codebooks
+        auto dists_uint16 = _mm256_packus_epi32(dists_int32_low, dists_int32_high);
         if (m % 2) {
             // if odd-numbered codebook, combine dists from previous codebook
             // with these dists
-            auto dists_uint16_1 = _mm256_packus_epi32(dists_int32_low, dists_int32_high);
-            auto dists_uint8 = _mm256_packus_epi16(dists_uint16_0, dists_uint16_1);
-            _mm256_store_si256((__m256i*)out, dists_uint8);
-            // out += packet_width;
-            out++; // just increment by one because type is __mm26i*
+            auto dists_uint8 = _mm256_packus_epi16(dists_uint16_0, dists_uint16);
+
+            // undo the weird shuffling caused by the pack operations
+            auto dists_perm = _mm256_permute4x64_epi64(
+                dists_uint8, _MM_SHUFFLE(3,1,2,0));
+            auto dists = _mm256_shuffle_epi8(dists_perm, shuffle_idxs);
+
+            _mm256_store_si256((__m256i*)out, dists);
+            out += 32;
         } else {
             // if even-numbered codebook, just store these dists to be combined
             // when we look at the next codebook
-            dists_uint16_0 = _mm256_packus_epi32(dists_int32_low, dists_int32_high);
+            dists_uint16_0 = dists_uint16;
         }
     }
 }
 
 // basically just a transpose with known centroid sizes
 // note that this doesn't have to be fast because we do it once after training
-template<int NBytes>
-void bolt_encode_centroids(const float* centroids, int ncols, float* out) {
+template<int NBytes, class data_t>
+void bolt_encode_centroids(const data_t* centroids, int ncols, data_t* out) {
     static constexpr int lut_sz = 16;
     static constexpr int ncodebooks = 2 * NBytes;
     static_assert(NBytes > 0, "Code length <= 0 is not valid");
@@ -265,6 +312,7 @@ void bolt_encode_centroids(const float* centroids, int ncols, float* out) {
             for (int j = 0; j < subvect_len; j++) { // for each dim
                 auto in_ptr = in_row_ptr + j;
                 auto out_ptr = out + (16 * j) + i;
+                *out_ptr = *in_ptr;
             }
         }
         centroids += 16 * subvect_len;
