@@ -152,7 +152,7 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
                 }
             }
             // printf("\n");
-            printf("min idx, min val = %d, %.0f\n", min_idx, min_val);
+            // printf("min idx, min val = %d, %.0f\n", min_idx, min_val);
             // uint8_t min_idx = msb_idx_u32(indicators);
 
             if (m % 2) {
