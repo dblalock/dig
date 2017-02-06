@@ -10,7 +10,7 @@
 #ifndef __BOLT_HPP
 #define __BOLT_HPP
 
-// #include <iostream> // TODO rm
+#include <iostream> // TODO rm
 
 #include <assert.h>
 #include <sys/types.h>
@@ -84,7 +84,7 @@ inline __m256i stream_load_si256i(T* ptr) {
  */
 template<int NBytes>
 void bolt_encode(const float* X, int64_t nrows, int ncols,
-    const __m256* centroids, uint8_t* out)
+    const float* centroids, uint8_t* out)
 {
     static constexpr int lut_sz = 16;
     static constexpr int packet_width = 8; // objs per simd register
@@ -100,29 +100,30 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
 
     for (int64_t n = 0; n < nrows; n++) { // for each row of X
         auto x_ptr = X + n * ncols;
-        for (int i = 0; i < nstripes; i++) {
-            accumulators[i] = _mm256_setzero_ps();
-        }
 
-        for (int m = 0; m < NBytes * 2; m++) { // for each codebook
+        auto centroids_ptr = centroids;
+        for (int m = 0; m < 2 * NBytes; m++) { // for each codebook
+            for (int i = 0; i < nstripes; i++) {
+                accumulators[i] = _mm256_setzero_ps();
+            }
             // compute distances to each of the centroids, which we assume
             // are in column major order; this takes 2 packets per col
-            auto centroids_ptr = centroids;
             for (int j = 0; j < subvect_len; j++) { // for each encoded dim
+                // printf("q value: %.0f\n", *x_ptr);
                 auto x_j_broadcast = _mm256_set1_ps(*x_ptr);
                 for (int i = 0; i < nstripes; i++) { // for upper and lower 8
                     auto centroids_half_col = _mm256_load_ps((float*)centroids_ptr);
-                    // centroids_ptr += packet_width;
-                    centroids_ptr++;
+                    centroids_ptr += packet_width;
+                    // centroids_ptr++;
                     auto diff = _mm256_sub_ps(x_j_broadcast, centroids_half_col);
-                    auto prods = fma(diff, diff, accumulators[i]);
-                    accumulators[i] = _mm256_add_ps(accumulators[i], prods);
+                    accumulators[i] = fma(diff, diff, accumulators[i]);
 
                     _mm256_store_ps(
                         argmin_storage + packet_width * i, accumulators[i]);
                 }
                 x_ptr++;
             }
+            // centroids += lut_sz;
 
             // compute argmax; we just write out the array and iterate thru
             // it because max reduction, then broadcast, then movemask, then
@@ -139,8 +140,10 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
             auto min_val = argmin_storage[0];
             uint8_t min_idx = 0;
             // uint32_t indicators = 1;
+            // printf("(0, %.0f)", min_val);
             for (int i = 1; i < lut_sz; i++) {
                 auto val = argmin_storage[i];
+                // printf("(%d, %.0f)", i, val);
                 // min_val = min_val < val ? val : min_val;
                 // indicators |= static_cast<uint64_t>(val < min_val) << i;
                 if (val < min_val) {
@@ -148,14 +151,17 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
                     min_idx = i;
                 }
             }
+            // printf("\n");
+            printf("min idx, min val = %d, %.0f\n", min_idx, min_val);
             // uint8_t min_idx = msb_idx_u32(indicators);
 
             if (m % 2) {
-                out[m] |= min_idx << 4; // odds -> store in upper 4 bits
+                out[m / 2] |= min_idx << 4; // odds -> store in upper 4 bits
             } else {
                 // TODO pretty sure we don't actually need to mask
-                out[m] = min_idx & 0x0F; // evens -> store in lower 4 bits
+                out[m / 2] = min_idx & 0x0F; // evens -> store in lower 4 bits
             }
+            // printf("out[m/2] = %d\n", out[m / 2]);
         }
         out += NBytes;
     }
@@ -321,7 +327,7 @@ void bolt_encode_centroids(const data_t* centroids, int ncols, data_t* out) {
 }
 
 template<int NBytes>
-inline void bolt_scan_l2(const uint8_t* codes,
+inline void bolt_scan(const uint8_t* codes,
     const uint8_t* luts, uint8_t* dists_out, int64_t nblocks)
 {
     static_assert(NBytes > 0, "Code length <= 0 is not valid");
@@ -342,7 +348,6 @@ inline void bolt_scan_l2(const uint8_t* codes,
     for (int64_t i = 0; i < nblocks; i++) {
         auto totals = _mm256_setzero_si256();
         for (uint8_t j = 0; j < NBytes; j++) {
-            // auto x_col = load_si256i(codes);
             auto x_col = stream_load_si256i(codes);
             codes += 32;
 
@@ -365,8 +370,7 @@ inline void bolt_scan_l2(const uint8_t* codes,
             totals = _mm256_adds_epu8(totals, dists_low);
             totals = _mm256_adds_epu8(totals, dists_high);
         }
-        // _mm256_store_si256((__m256i*)dists_out, totals);
-        _mm256_stream_si256((__m256i*)dists_out, totals); // "non-temporal memory hint"
+        _mm256_stream_si256((__m256i*)dists_out, totals);
         dists_out += 32;
     }
 }

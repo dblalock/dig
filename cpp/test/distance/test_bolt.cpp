@@ -33,6 +33,13 @@ RowMatrix<T> create_rowmajor_centroids(int start_coeff=10) {
     return C;
 }
 
+ColMatrix<float> create_bolt_centroids(int start_coeff=1) {
+    auto centroids_rowmajor = create_rowmajor_centroids<float>(start_coeff);
+    ColMatrix<float> centroids(ncentroids, total_len);
+    bolt_encode_centroids<M>(centroids_rowmajor.data(), total_len, centroids.data());
+    return centroids;
+}
+
 
 TEST_CASE("bolt_smoketest", "[mcq][bolt]") {
     // TODO instantiate bolt encoder object here
@@ -89,10 +96,10 @@ TEST_CASE("bolt_lut_l2", "[mcq][bolt]") {
     //    lut_out.fill(42); // there should be none of these when we print it
     bolt_lut_l2<M>(q.data(), total_len, centroids.data(), lut_out.data());
     
-    std::cout << centroids_rowmajor << "\n\n";
-    std::cout << centroids << "\n\n";
-    std::cout << q << "\n";
-    std::cout << lut_out.cast<int>() << "\n";
+//    std::cout << centroids_rowmajor << "\n\n";
+//    std::cout << centroids << "\n\n";
+//    std::cout << q << "\n";
+//    std::cout << lut_out.cast<int>() << "\n";
     
     for (int m = 0; m < ncodebooks; m++) {
         for (int i = 0; i < ncentroids; i++) {
@@ -109,8 +116,69 @@ TEST_CASE("bolt_lut_l2", "[mcq][bolt]") {
     }
 }
 
+TEST_CASE("bolt_encode", "[mcq][bolt]") {
+    auto centroids = create_bolt_centroids(1);
+    
+    SECTION("encode one vector") {
+        // for 4 codebooks, subvect_len = 3, q =
+        // [0, 1, 2, 18, 19, 20, 36, 37, 38, 54, 55, 56]
+        RowVector<float> q(total_len);
+        for (int m = 0; m < ncodebooks; m++) {
+            for (int j = 0; j < subvect_len; j++) {
+                auto idx = m * subvect_len + j;
+                // add on a 2m at the end so which centroid it is changes by
+                // 2 for each codebook
+                q(idx) = ncentroids * m + j + (2 * m);
+            }
+        }
+        
+        RowVector<uint8_t> encoding_out(M);
+        bolt_encode<M>(q.data(), 1, total_len, centroids.data(), encoding_out.data());
+        
+//        std::cout << "q: " << q << "\n";
+//        std::cout << "centroids:\n" << centroids << "\n";
+//        std::cout << "raw encoding bytes: " << encoding_out.cast<int>() << "\n";
+//        std::cout << "encoding:\n";
+        
+        for(int m = 0; m < 2 * M; m++) {
+            int byte = encoding_out(m / 2);
+            int idx = m % 2 ? byte >> 4 : byte &0x0F;
+            REQUIRE(idx == 2 * m);
+        }
+//        std::cout << "\n";
+    }
+    
+    SECTION("encode rows of matrix") {
+        static constexpr int nrows = 10;
+        RowMatrix<float> X(nrows, total_len);
+        for (int i = 0; i < nrows; i++) {
+            for (int m = 0; m < ncodebooks; m++) {
+                for (int j = 0; j < subvect_len; j++) {
+                    auto idx = m * subvect_len + j;
+                    // add on m at the end so which centroid it is changes by
+                    // 1 for each codebook; also add on i so that each row
+                    // will pick centroids 1 higher the previous ones
+                    X(i, idx) = ncentroids * m + j + m + (i % 5);
+                }
+            }
+        }
 
+        RowMatrix<uint8_t> encoding_out(nrows, M);
+        bolt_encode<M>(X.data(), nrows, total_len, centroids.data(), encoding_out.data());
+        
+        for (int i = 0; i < nrows; i++) {
+            for(int m = 0; m < 2 * M; m++) {
+                int byte = encoding_out(i, m / 2);
+                int idx = m % 2 ? byte >> 4 : byte &0x0F;
+                REQUIRE(idx == m + (i % 5));
+            }
+        }
+    }
+}
 
-
+TEST_CASE("bolt_scan", "[mcq][bolt]") {
+    
+    
+}
 
 
