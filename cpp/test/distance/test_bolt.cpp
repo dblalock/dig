@@ -118,8 +118,6 @@ TEST_CASE("bolt_encode", "[mcq][bolt]") {
                 // indices are packed into upper and lower 4 bits
                 int byte = encoding_out(i, m / 2);
                 int idx = m % 2 ? byte >> 4 : byte & 0x0F;
-                CAPTURE(i);
-                CAPTURE(m);
                 REQUIRE(idx == m + (i % 5)); // i % 5 from how we designed mat
             }
         }

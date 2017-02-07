@@ -16,6 +16,8 @@
 #include <sys/types.h>
 #include "immintrin.h"
 
+#include "bit_ops.hpp" // TODO rm
+
 //#include "macros.hpp"
 // #include "multi_codebook.hpp"
 
@@ -138,22 +140,24 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
             // TODO try storing val < min_val in a bit, with
             // minval = min(minval, val) to get min, then find last 1
             auto min_val = argmin_storage[0];
-            uint8_t min_idx = 0;
-            // uint32_t indicators = 1;
-            // printf("(0, %.0f)", min_val);
+            // uint8_t min_idx = 0;
+            uint32_t indicators = 1;
+            // printf("(0: %.0f)", min_val);
             for (int i = 1; i < lut_sz; i++) {
                 auto val = argmin_storage[i];
-                // printf("(%d, %.0f)", i, val);
-                // min_val = min_val < val ? val : min_val;
-                // indicators = indicators | (static_cast<uint32_t>(val < min_val) << i);
-                if (val < min_val) {
-                    min_val = val;
-                    min_idx = i;
-                }
+                // printf("(%d: %.0f)", i, val);
+                bool less = val < min_val;
+                min_val = less ? val : min_val;
+                indicators = indicators | (static_cast<uint32_t>(less) << i);
+                // if (val < min_val) {
+                //     min_val = val;
+                //     min_idx = i;
+                // }
             }
-            // printf("\n");
-            // printf("min idx, min val = %d, %.0f\n", min_idx, min_val);
-            // uint8_t min_idx = msb_idx_u32(indicators);
+            uint8_t min_idx = msb_idx_u32(indicators);
+            // printf("\nindicator bits: ");
+            // dumpEndianBits(indicators);
+            // printf("\nmin idx, min val = %d, %.0f\n", min_idx, min_val);
 
             if (m % 2) {
                 out[m / 2] |= min_idx << 4; // odds -> store in upper 4 bits
