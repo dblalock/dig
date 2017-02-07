@@ -198,13 +198,13 @@ TEST_CASE("bolt_encode", "[mcq][bolt]") {
 }
 
 TEST_CASE("bolt_scan", "[mcq][bolt]") {
-    static constexpr int nblocks = 1;
+    static constexpr int nblocks = 1; // arbitrary number
     static constexpr int nrows = 32 * nblocks;
     
     // create random codes from in [0, 15]
-    RowMatrix<uint8_t> X(nrows, total_len);
+    ColMatrix<uint8_t> X(nrows, ncodebooks);
     X.setRandom();
-    RowMatrix<uint8_t> codes = X / 16;
+    ColMatrix<uint8_t> codes = X / 16;
     
     // create centroids
     ColMatrix<float> centroids = create_bolt_centroids(1);
@@ -220,30 +220,54 @@ TEST_CASE("bolt_scan", "[mcq][bolt]") {
 //    PRINTLN_VAR(q);
     
     // do the scan to compute the distances
-    auto dists_out = aligned_alloc<uint8_t>(nrows);
-    bolt_scan<M>(codes.data(), luts.data(), dists_out, nblocks);
+    RowVector<uint8_t> dists_u8(nrows);
+    RowVector<uint16_t> dists_u16(nrows);
+    RowVector<uint16_t> dists_u16_safe(nrows);
+    bolt_scan<M>(codes.data(), luts.data(), dists_u8.data(), nblocks);
+    bolt_scan<M>(codes.data(), luts.data(), dists_u16.data(), nblocks);
+    bolt_scan<M, true>(codes.data(), luts.data(), dists_u16_safe.data(), nblocks);
     
+//    PRINTLN_VAR(dists_u8.cast<int>());
+    
+//    printf("dists true:\n");
     for (int b = 0; b < nblocks; b++) {
-        auto dist_ptr = dists_out + b * 32;
+        auto dist_ptr_u8 = dists_u8.data() + b * 32;
+        auto dist_ptr_u16 = dists_u16.data() + b * 32;
+        auto dist_ptr_u16_safe = dists_u16_safe.data() + b * 32;
         for (int i = 0; i < 32; i++) {
-            int dist = dist_ptr[i];
+            int dist_u8 = dist_ptr_u8[i];
+            int dist_u16 = dist_ptr_u16[i];
+            int dist_u16_safe = dist_ptr_u16_safe[i];
             
-            // compute dist this should have returned based on the LUT
-            int dist_true = 0;
+            // compute dist the scan should have returned based on the LUT
+            int dist_true_u8 = 0;
+            int dist_true_u16 = 0;
+            int dist_true_u16_safe = 0;
             for (int m = 0; m < M; m++) {
                 uint8_t byte = codes(i, m);
                 uint8_t low_bits = byte & 0x0F;
                 uint8_t high_bits = (byte >> 4) & 0x0F;
                 
-                dist_true += luts(low_bits, 2 * m);
-                dist_true += luts(high_bits, 2 * m + 1);
+                auto d0 = luts(low_bits, 2 * m);
+                auto d1 = luts(high_bits, 2 * m + 1);
+                
+                // uint8 distances
+                dist_true_u8 += d0 + d1;
+                
+                // uint16 distances
+                auto pair_dist = d0 + d1;
+                dist_true_u16 += pair_dist > 255 ? 255 : pair_dist;
+                
+                // uint16 safe distance
+                dist_true_u16_safe += d0 + d1;
             }
-            dist_true = dist_true > 255 ? 255 : dist_true;
+            dist_true_u8 = dist_true_u8 > 255 ? 255 : dist_true_u8;
             CAPTURE(b);
             CAPTURE(i);
-            REQUIRE(dist_true == dist);
+            REQUIRE(dist_true_u8 == dist_u8);
+            REQUIRE(dist_true_u16 == dist_u16);
+            REQUIRE(dist_true_u16_safe == dist_u16_safe);
         }
     }
-    
-    aligned_free(dists_out);
+//    printf("\n");
 }

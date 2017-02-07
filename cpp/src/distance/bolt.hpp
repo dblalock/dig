@@ -375,6 +375,103 @@ inline void bolt_scan(const uint8_t* codes,
     }
 }
 
+// overload of above with uint16_t dists_out
+template<int NBytes, bool NoOverflow=false>
+inline void bolt_scan(const uint8_t* codes,
+    const uint8_t* luts, uint16_t* dists_out, int64_t nblocks)
+{
+    static_assert(NBytes > 0, "Code length <= 0 is not valid");
+    static const __m256i low_4bits_mask = _mm256_set1_epi8(0x0F);
+    static const __m256i low_8bits_mask = _mm256_set1_epi16(0x00FF);
+
+    // unpack 16B luts into 32B registers; faster than just storing them
+    // unpacked for some reason
+    __m256i luts_ar[NBytes * 2];
+    auto lut_ptr = luts;
+    for (uint8_t j = 0; j < NBytes; j++) {
+        auto both_luts = load_si256i(lut_ptr);
+        lut_ptr += 32;
+        auto lut0 = _mm256_permute2x128_si256(both_luts, both_luts, 0 + (0 << 4));
+        auto lut1 = _mm256_permute2x128_si256(both_luts, both_luts, 1 + (1 << 4));
+        luts_ar[2 * j] = lut0;
+        luts_ar[2 * j + 1] = lut1;
+    }
+
+    for (int64_t i = 0; i < nblocks; i++) {
+        // auto totals = _mm256_setzero_si256();
+        auto totals_evens = _mm256_setzero_si256();
+        auto totals_odds = _mm256_setzero_si256();
+        for (uint8_t j = 0; j < NBytes; j++) {
+            auto x_col = stream_load_si256i(codes);
+            codes += 32;
+
+            auto lut_low = luts_ar[2 * j];
+            auto lut_high = luts_ar[2 * j + 1];
+
+            // compute distances via lookups; we have one table for the upper
+            // 4 bits of each byte in x, and one for the lower 4 bits; the
+            // shuffle instruction always looks at the lower 4 bits, so we
+            // have to shift x to look at its upper 4 bits; also note that
+            // we have to mask out the upper bit because the shuffle
+            // instruction will zero the corresponding byte if this bit is set
+            auto x_low = _mm256_and_si256(x_col, low_4bits_mask);
+            auto x_shft = _mm256_srli_epi16(x_col, 4);
+            auto x_high = _mm256_and_si256(x_shft, low_4bits_mask);
+
+            auto dists_low = _mm256_shuffle_epi8(lut_low, x_low);
+            auto dists_high = _mm256_shuffle_epi8(lut_high, x_high);
+
+            // convert dists to epi16 by masking or shifting; we convert
+            // 32 uint8s to a pair of uint16s by masking the low 8 bits to
+            // get the even-numbered uint8s as the first vector of uint16s,
+            // and shifting down by 8 bits to get the odd-numbered ones as
+            // the second vector or uint16s
+            if (NoOverflow) { // convert to epu16s before doing any adds
+                auto dists16_low_evens = _mm256_and_si256(dists_low, low_8bits_mask);
+                auto dists16_low_odds = _mm256_srli_epi16(dists_low, 8);
+                auto dists16_high_evens = _mm256_and_si256(dists_high, low_8bits_mask);
+                auto dists16_high_odds = _mm256_srli_epi16(dists_high, 8);
+
+                totals_evens = _mm256_adds_epu16(totals_evens, dists16_low_evens);
+                totals_evens = _mm256_adds_epu16(totals_evens, dists16_high_evens);
+                totals_odds = _mm256_adds_epu16(totals_odds, dists16_low_odds);
+                totals_odds = _mm256_adds_epu16(totals_odds, dists16_high_odds);
+
+            } else { // add pairs as epu8s, then use pair sums as epu16s
+                auto dists = _mm256_adds_epu8(dists_low, dists_high);
+                auto dists16_evens = _mm256_and_si256(dists, low_8bits_mask);
+                auto dists16_odds = _mm256_srli_epi16(dists, 8);
+
+                totals_evens = _mm256_adds_epu16(totals_evens, dists16_evens);
+                totals_odds = _mm256_adds_epu16(totals_odds, dists16_odds);
+            }
+        }
+
+        // // TODO rm after debug
+        // static const __m256i debug_dists = _mm256_set_epi16(
+        //     15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+        // totals_evens = debug_dists;
+        // totals_odds = _mm256_adds_epu16(debug_dists, low_8bits_mask);
+        // // _mm256_stream_si256((__m256i*)dists_out, totals_evens);
+        // // dists_out += 16;
+        // // _mm256_stream_si256((__m256i*)dists_out, totals_odds);
+        // // dists_out += 16;
+
+        // unmix the interleaved 16bit dists and store them
+        // alright, this looks right when using the debug dists above
+        auto tmp_low = _mm256_permute4x64_epi64(
+                totals_evens, _MM_SHUFFLE(3,1,2,0));
+        auto tmp_high = _mm256_permute4x64_epi64(
+                totals_odds, _MM_SHUFFLE(3,1,2,0));
+        auto dists_out_0 = _mm256_unpacklo_epi16(tmp_low, tmp_high);
+        auto dists_out_1 = _mm256_unpackhi_epi16(tmp_low, tmp_high);
+        _mm256_stream_si256((__m256i*)dists_out, dists_out_0);
+        dists_out += 16;
+        _mm256_stream_si256((__m256i*)dists_out, dists_out_1);
+        dists_out += 16;
+    }
+}
+
 } // anon namespace
 
 // namespace dist {
