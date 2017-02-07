@@ -12,6 +12,7 @@
 		72247DAB1C600AA300B74A64 /* test_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAA1C600AA300B74A64 /* test_tree.cpp */; };
 		72247DAE1C71087F00B74A64 /* test_intmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72247DAD1C71087F00B74A64 /* test_intmap.cpp */; };
 		725A5E5C1E47BD2A0026E20D /* test_bolt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725A5E5B1E47BD2A0026E20D /* test_bolt.cpp */; };
+		725A5E5F1E495C790026E20D /* profile_bolt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725A5E5E1E495C790026E20D /* profile_bolt.cpp */; };
 		725C74DF1E36D6F700037244 /* profile_multicodebook.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */; };
 		727207DD1DBFEF520014F72B /* profile_neighbors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727207DC1DBFEF520014F72B /* profile_neighbors.cpp */; };
 		728E9D951E35966300BDAB82 /* test_multicodebook.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 728E9D941E35966300BDAB82 /* test_multicodebook.cpp */; };
@@ -71,6 +72,8 @@
 		724AD3261C4F3C170063719C /* Dig */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Dig; sourceTree = BUILT_PRODUCTS_DIR; };
 		725A5E5B1E47BD2A0026E20D /* test_bolt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_bolt.cpp; sourceTree = "<group>"; };
 		725A5E5D1E47BD350026E20D /* bolt.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = bolt.hpp; sourceTree = "<group>"; };
+		725A5E5E1E495C790026E20D /* profile_bolt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_bolt.cpp; sourceTree = "<group>"; };
+		725A5E601E4995490026E20D /* test_bolt.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = test_bolt.hpp; sourceTree = "<group>"; };
 		725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_multicodebook.cpp; sourceTree = "<group>"; };
 		727207DC1DBFEF520014F72B /* profile_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_neighbors.cpp; sourceTree = "<group>"; };
 		727A342F1CB35D0B009A54CE /* circular.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = circular.hpp; sourceTree = "<group>"; };
@@ -1277,6 +1280,8 @@
 		72C4194D1C5337AD004689A2 /* distance */ = {
 			isa = PBXGroup;
 			children = (
+				725A5E5E1E495C790026E20D /* profile_bolt.cpp */,
+				725A5E601E4995490026E20D /* test_bolt.hpp */,
 				725A5E5B1E47BD2A0026E20D /* test_bolt.cpp */,
 				728E9D941E35966300BDAB82 /* test_multicodebook.cpp */,
 				725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */,
@@ -1416,6 +1421,7 @@
 				72C419661C5337AD004689A2 /* test_dtw.cpp in Sources */,
 				72E7147B1DB04BE000CE06EC /* test_euclidean.cpp in Sources */,
 				728F85E01C55B565004E4AA0 /* tree.cpp in Sources */,
+				725A5E5F1E495C790026E20D /* profile_bolt.cpp in Sources */,
 				72C419691C5337AD004689A2 /* testing_utils.cpp in Sources */,
 				721FC9CE1DAC00AE00EF824F /* neighbors.cpp in Sources */,
 				72C81BEB1C90DC0100639302 /* shape_features.cpp in Sources */,

@@ -145,7 +145,7 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
                 auto val = argmin_storage[i];
                 // printf("(%d, %.0f)", i, val);
                 // min_val = min_val < val ? val : min_val;
-                // indicators |= static_cast<uint64_t>(val < min_val) << i;
+                // indicators = indicators | (static_cast<uint32_t>(val < min_val) << i);
                 if (val < min_val) {
                     min_val = val;
                     min_idx = i;

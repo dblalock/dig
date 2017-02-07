@@ -2,69 +2,69 @@
 #include "catch.hpp"
 #include "multi_codebook.hpp"
 
-#include <random>
-
 #include "timing_utils.hpp"
 #include "bit_ops.hpp"
 #include "memory.hpp"
 
-template<class DistT>
-void prevent_optimizing_away_dists(DistT* dists, int64_t N) {
-//    std::cout << "I am not an ******* compiler and am actually running this function\n";
-    // volatile bool foo = true;
-    int64_t count = 0;
-//    for (int64_t n = N - 1; n >= 0; n--) { count += (((int)dists[n]) % 2); }
-//    for (int64_t n = 0; n < N; n++) { count += (((int)dists[n]) % 2); }
-    for (int64_t n = 0; n < N; n++) { count += dists[n] > 42; }
-    std::cout << "(" << count << "/" << N << ")\t";
-//    if (count % 2) { std::cout << " <><><><><> odd number"; }
-}
+#include "testing_utils.hpp"
 
-// TODO reconcile this func with previous rand_int funcs
-template <class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline void randint_inplace(data_t* data, len_t len,
-                                   data_t min=std::numeric_limits<data_t>::min(),
-                                   data_t max=std::numeric_limits<data_t>::max())
-{
-    assert(len > 0);
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> d(min, max);
+// template<class DistT>
+// void prevent_optimizing_away_dists(DistT* dists, int64_t N) {
+// //    std::cout << "I am not an ******* compiler and am actually running this function\n";
+//     // volatile bool foo = true;
+//     int64_t count = 0;
+// //    for (int64_t n = N - 1; n >= 0; n--) { count += (((int)dists[n]) % 2); }
+// //    for (int64_t n = 0; n < N; n++) { count += (((int)dists[n]) % 2); }
+//     for (int64_t n = 0; n < N; n++) { count += dists[n] > 42; }
+//     std::cout << "(" << count << "/" << N << ")\t";
+// //    if (count % 2) { std::cout << " <><><><><> odd number"; }
+// }
 
-    for (len_t i = 0; i < len; i++) {
-        data[i] = static_cast<data_t>(d(gen));
-    }
-}
-template <class data_t, class len_t, REQUIRE_INT(len_t)>
-static inline void rand_inplace(data_t* data, len_t len,
-                                data_t min=0, data_t max=1)
-{
-    assert(len > 0);
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> d(min, max);
+// // TODO reconcile this func with previous rand_int funcs
+// template <class data_t, class len_t, REQUIRE_INT(len_t)>
+// static inline void randint_inplace(data_t* data, len_t len,
+//                                    data_t min=std::numeric_limits<data_t>::min(),
+//                                    data_t max=std::numeric_limits<data_t>::max())
+// {
+//     assert(len > 0);
+//     std::random_device rd;
+//     std::mt19937 gen(rd());
+//     std::uniform_int_distribution<> d(min, max);
 
-    for (len_t i = 0; i < len; i++) {
-        data[i] = static_cast<data_t>(d(gen));
-    }
-}
+//     for (len_t i = 0; i < len; i++) {
+//         data[i] = static_cast<data_t>(d(gen));
+//     }
+// }
+// template <class data_t, class len_t, REQUIRE_INT(len_t)>
+// static inline void rand_inplace(data_t* data, len_t len,
+//                                 data_t min=0, data_t max=1)
+// {
+//     assert(len > 0);
+//     std::random_device rd;
+//     std::mt19937 gen(rd());
+//     std::uniform_real_distribution<> d(min, max);
 
-template<class data_t>
-static inline data_t* aligned_random_ints(int64_t len) {
-    data_t* ptr = aligned_alloc<data_t>(len);
-    randint_inplace(ptr, len);
-    return ptr;
-}
+//     for (len_t i = 0; i < len; i++) {
+//         data[i] = static_cast<data_t>(d(gen));
+//     }
+// }
 
-template<class data_t>
-static inline data_t* aligned_random(int64_t len) {
-    data_t* ptr = aligned_alloc<data_t>(len);
-    rand_inplace(ptr, len);
-    return ptr;
-}
+// template<class data_t>
+// static inline data_t* aligned_random_ints(int64_t len) {
+//     data_t* ptr = aligned_alloc<data_t>(len);
+//     randint_inplace(ptr, len);
+//     return ptr;
+// }
+
+// template<class data_t>
+// static inline data_t* aligned_random(int64_t len) {
+//     data_t* ptr = aligned_alloc<data_t>(len);
+//     rand_inplace(ptr, len);
+//     return ptr;
+// }
 
 // TODO split this into smaller functions and also call from other test file
-TEST_CASE("popcnt_timing", "[mcq][profile]") {
+TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //    int nblocks = 5 * 1000 * 1000;
     // static constexpr int nblocks = 1000 * 1000;
     static constexpr int nblocks = 100 * 1000;
@@ -290,14 +290,14 @@ TEST_CASE("popcnt_timing", "[mcq][profile]") {
     printf("t 8b, float dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
     #pragma mark 8bit vertical
-    
+
     { // 8bit lookups
         EasyTimer _(t);
         dist::lut_dists_8b_vertical<32, M>(block_codes, popcount_luts256b, dists_8b_b, N);
     }
     prevent_optimizing_away_dists(dists_8b_b, N);
     printf("t 32 8b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
-    
+
     // ------------------------------------------------ <NOTE>
     // below this point, no effort made at achieving correctness;
     // scans are operating on unitialized memory
@@ -338,30 +338,30 @@ TEST_CASE("popcnt_timing", "[mcq][profile]") {
     prevent_optimizing_away_dists(dists_12b_b, N);
     printf("t 12b, 32b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
-    
+
     #pragma mark 12bit vertical
-    
+
     { // 12bit lookups, 8bit distances
         EasyTimer _(t);
         dist::lut_dists_12b_vertical<16, M>(block_codes, popcount_luts12b_b, dists_12b_b, N);
     }
     prevent_optimizing_away_dists(dists_12b_b, N);
     printf("t 16, 12b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
-    
+
     { // 12bit lookups, 8bit distances
         EasyTimer _(t);
         dist::lut_dists_12b_vertical<64, M>(block_codes, popcount_luts12b_b, dists_12b_b, N);
     }
     prevent_optimizing_away_dists(dists_12b_b, N);
     printf("t 64, 12b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
-    
+
     { // 12bit lookups, 8bit distances
         EasyTimer _(t);
         dist::lut_dists_12b_vertical<256, M>(block_codes, popcount_luts12b_b, dists_12b_b, N);
     }
     prevent_optimizing_away_dists(dists_12b_b, N);
     printf("t 256, 12b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
-    
+
     // ------------------------------------------------ 16bit codes
     # pragma mark 16bit codes
     std::cout << "-------- dists with 16bit codes\n";
@@ -399,9 +399,9 @@ TEST_CASE("popcnt_timing", "[mcq][profile]") {
     prevent_optimizing_away_dists(dists_16b_i, N);
     printf("t 16b, 32b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
-    
+
     #pragma mark 16bit vertical
-    
+
     { // 16bit lookups, 8bit distances
         EasyTimer _(t);
         dist::lut_dists_16b_vertical<32, M>(block_codes16, popcount_luts16b_b, dists_16b_b, N);
@@ -423,7 +423,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile]") {
     prevent_optimizing_away_dists(dists_16b_b, N);
     printf("t 1024 16b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
-    
+
     // ------------------------------------------------ floats
     # pragma mark floats
 
@@ -592,12 +592,12 @@ TEST_CASE("popcnt_timing", "[mcq][profile]") {
         same1 &= dists_scalar[n] == dists_vector[n];
         same2 &= dists_vector[n] == dists_unpack[n];
         same3 &= dists_unpack[n] == dists_vertical32[n];
-        
+
         same_8b_b &= dists_popcnt[n] == dists_8b_b[n];
         same_8b_s &= dists_8b_b[n] == dists_8b_s[n];
         same_8b_i &= dists_8b_s[n] == dists_8b_i[n];
         same_8b_f &= dists_8b_i[n] == dists_8b_f[n];
-        
+
 //        if (n < 50 && !same0) {
 //            printf("popcnt dist, scalar dist = %d, %d\n", dists_popcnt[n], dists_scalar[n]);
 //        }

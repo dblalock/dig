@@ -12,7 +12,7 @@
 #include "memory.hpp"
 
 
-TEST_CASE("popcnt", "[mcq]") {
+TEST_CASE("popcnt", "[mcq][popcount]") {
     static constexpr int nblocks = 3;
     static constexpr int N = 32 * nblocks;
     static constexpr int M = 8;  // must be 8 for tests that cast to uint64_t
