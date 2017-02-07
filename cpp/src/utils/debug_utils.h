@@ -20,11 +20,20 @@
 	#include <string>
 	#include <cstdint>
 
-	#define PRINT(STR) \
+	#define PRINT_DEBUG(STR) \
 		std::cout << __func__ << "(): " STR << "\n";
 
-	#define PRINT_VAR(VAR) \
+	#define PRINT_VAR_DEBUG(VAR) \
 		std::cout << __func__ << "(): " #VAR << ": " << VAR << "\n";
+
+	#define PRINT(STR) \
+		std::cout << STR << "\n";
+
+	#define PRINT_VAR(VAR) \
+		std::cout << #VAR ": " << VAR << "\n";
+
+	#define PRINTLN_VAR(VAR) \
+		std::cout << #VAR ":\n" << VAR << "\n";
 
 	template<int MAX_LEN=512>
 	static inline std::string string_with_format(const char* fmt, ...) {
