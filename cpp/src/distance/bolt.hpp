@@ -27,7 +27,11 @@ static_assert(__AVX2__, "AVX 2 is required! Try --march=native or -mavx2");
 
 namespace {
 
-// // see Eigen/src/Core/arch/AVX/PacketMath.h
+// ================================================================ Utils
+
+// ------------------------------------------------ avx utils adapted from eigen
+// see Eigen/src/Core/arch/AVX/PacketMath.h
+
 // float predux_max(const __m256& a)
 // {
 //     // 3 + 3 cycles
@@ -38,17 +42,39 @@ namespace {
 //     return pfirst(_mm256_max_ps(tmp, _mm256_shuffle_ps(tmp,tmp,1)));
 // }
 
-// // see Eigen/src/Core/arch/AVX/PacketMath.h
 // float pfirst(const __m256& a) {
 //   return _mm_cvtss_f32(_mm256_castps256_ps128(a));
 // }
 
-// returns a * b + c, elementwise; see eigen/src/Core/arch/AVX/PacketMath.h
+// int32_t pfirst(__m256i a) {
+//     return _mm_cvtsi128_si32(_mm256_castsi256_si128(a));
+// }
+
+// int32_t predux_min(const __m256i a) {
+//     auto tmp = _mm256_min_epi32(a, _mm256_permute2x128_si256(a,a,1));
+//     auto tmp2 = _mm256_min_epi32(tmp, _mm256_shuffle_epi32(tmp,tmp,_MM_SHUFFLE(1,0,3,2)));
+//     return pfirst(_mm256_min_epi32(tmp2, _mm256_shuffle_epi32(tmp2,tmp2,1)));
+//     // return _mm256_extract_epi32(tmp2)
+// }
+
+__m256i broadcast_min(const __m256i a) {
+    // swap upper and lower 128b halves, then min with original
+    auto tmp = _mm256_min_epi32(a, _mm256_permute2x128_si256(a,a,1));
+    // swap upper and lower halves within each 128b half, then min
+    auto tmp2 = _mm256_min_epi32(tmp, _mm256_shuffle_epi32(tmp, _MM_SHUFFLE(1,0,3,2)));
+    // alternative elements have min of evens and min of odds, respectively;
+    // so swap adjacent pairs of elements within each 128b half
+    return _mm256_min_epi32(tmp2, _mm256_shuffle_epi32(tmp2, _MM_SHUFFLE(2,3,0,1)));
+}
+
+// returns a * b + c, elementwise
 inline __m256 fma(__m256 a, __m256 b, __m256 c) {
     __m256 res = c;
     __asm__("vfmadd231ps %[a], %[b], %[c]" : [c] "+x" (res) : [a] "x" (a), [b] "x" (b));
     return res;
 }
+
+// ------------------------------------------------ other utils
 
 template<class T>
 static int8_t msb_idx_u32(T x) {
@@ -69,6 +95,8 @@ inline __m256i stream_load_si256i(T* ptr) {
 //inline __m256i load_256f(float* ptr) {
 //    return _mm256_load_ps((__m256 *)ptr);
 //}
+
+// ================================================================ Bolt
 
 
 /**
@@ -125,45 +153,67 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
                 }
                 x_ptr++;
             }
-            // centroids += lut_sz;
 
-            // compute argmax; we just write out the array and iterate thru
-            // it because max reduction, then broadcast, then movemask, then
-            // clz, is like 25 cycles and uses the ymm registers
-            //
-            // TODO see if SIMD version is faster
-            //
-            // TODO try hybrid; reduce to 8f, then shuffle / check within
-            // 128bit lanes, then check get max directly from the 2 possible
-            // vals in low floats of each 128bit lane
-            //
-            // TODO try storing val < min_val in a bit, with
-            // minval = min(minval, val) to get min, then find last 1
-            auto min_val = argmin_storage[0];
-            // uint8_t min_idx = 0;
-            uint32_t indicators = 1;
-            // printf("(0: %.0f)", min_val);
-            for (int i = 1; i < lut_sz; i++) {
-                auto val = argmin_storage[i];
-                // printf("(%d: %.0f)", i, val);
-                bool less = val < min_val;
-                min_val = less ? val : min_val;
-                indicators = indicators | (static_cast<uint32_t>(less) << i);
-                // if (val < min_val) {
-                //     min_val = val;
-                //     min_idx = i;
-                // }
-            }
-            uint8_t min_idx = msb_idx_u32(indicators);
-            // printf("\nindicator bits: ");
-            // dumpEndianBits(indicators);
-            // printf("\nmin idx, min val = %d, %.0f\n", min_idx, min_val);
+            // convert the floats to ints
+            // XXX distances *must* be >> 0 for this to preserve correctness
+            auto dists_int32_low = _mm256_cvtps_epi32(accumulators[0]);
+            auto dists_int32_high = _mm256_cvtps_epi32(accumulators[1]);
+
+            // find the minimum value
+            auto dists = _mm256_min_epi32(dists_int32_low, dists_int32_high);
+            auto min_broadcast = broadcast_min(dists);
+            // int32_t min_val = predux_min(dists);
+
+            // mask where the minimum happens
+            auto mask_low = _mm256_cmpeq_epi32(dists_int32_low, min_broadcast);
+            auto mask_high = _mm256_cmpeq_epi32(dists_int32_high, min_broadcast);
+
+            // find first int where mask is set
+            uint32_t mask0 = _mm256_movemask_epi8(mask_low); // extracts MSBs
+            uint32_t mask1 = _mm256_movemask_epi8(mask_high);
+            uint64_t mask = mask0 + (static_cast<uint64_t>(mask1) << 32);
+            uint8_t min_idx = __tzcnt_u64(mask) >> 2; // div by 4 since 4B objs
+
+            // TODO rm after debug
+//            min_idx++;
+            
+            // find where the minimum value happens
+            // auto min_broadcast = _mm256_set1_epi32(min_val);
+
+            // // compute argmin; we just write out the array and iterate thru
+            // // it because max reduction, then broadcast, then movemask, then
+            // // clz, is like 25 cycles and uses the ymm registers
+            // //
+            // // TODO see if SIMD version is faster
+            // //
+            // // TODO try hybrid; reduce to 8f, then shuffle / check within
+            // // 128bit lanes, then check get max directly from the 2 possible
+            // // vals in low floats of each 128bit lane
+            // //
+            // // TODO try storing val < min_val in a bit, with
+            // // minval = min(minval, val) to get min, then find last 1
+            // auto min_val = argmin_storage[0];
+            // uint32_t indicators = 1;
+            // // printf("(0: %.0f)", min_val);
+            // for (int i = 1; i < lut_sz; i++) {
+            //     auto val = argmin_storage[i];
+            //     // printf("(%d: %.0f)", i, val);
+            //     bool less = val < min_val;
+            //     min_val = less ? val : min_val;
+            //     indicators = indicators | (static_cast<uint32_t>(less) << i);
+            // }
+            // uint8_t min_idx = msb_idx_u32(indicators);
+            // // printf("\nindicator bits: ");
+            // // dumpEndianBits(indicators);
+            // // printf("\nmin idx, min val = %d, %.0f\n", min_idx, min_val);
 
             if (m % 2) {
-                out[m / 2] |= min_idx << 4; // odds -> store in upper 4 bits
+                // odds -> store in upper 4 bits
+                out[m / 2] |= min_idx << 4;
             } else {
-                // TODO pretty sure we don't actually need to mask
-                out[m / 2] = min_idx & 0x0F; // evens -> store in lower 4 bits
+                // evens -> store in lower 4 bits; we don't actually need to
+                // mask because odd iter will clobber upper 4 bits anyway
+                out[m / 2] = min_idx;
             }
             // printf("out[m/2] = %d\n", out[m / 2]);
         }
