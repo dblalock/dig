@@ -6,9 +6,9 @@
 
 namespace {
 
-static constexpr int M = 2;
+static constexpr int _M = 2;
 static constexpr int subvect_len = 3;
-static constexpr int ncodebooks = 2 * M;
+static constexpr int ncodebooks = 2 * _M;
 static constexpr int total_len = ncodebooks * subvect_len;
 static constexpr int total_sz = 16 * total_len;
 static constexpr int ncentroids = 16; // always 16 for 4 bits
@@ -36,7 +36,7 @@ static inline ColMatrix<float> create_bolt_centroids(float centroid_step=1,
     auto centroids_rowmajor = create_rowmajor_centroids<float>(
         centroid_step, codebook_step);
     ColMatrix<float> centroids(ncentroids, total_len);
-    bolt_encode_centroids<M>(centroids_rowmajor.data(), total_len, centroids.data());
+    bolt_encode_centroids<_M>(centroids_rowmajor.data(), total_len, centroids.data());
     return centroids;
 }
 
@@ -73,8 +73,8 @@ static inline RowMatrix<uint8_t> create_bolt_codes(int64_t nrows,
                                                    ColMatrix<float> centroids)
 {
     auto X = create_X_matrix(nrows);
-    RowMatrix<uint8_t> X_enc(nrows, M);
-    bolt_encode<M>(X.data(), nrows, total_len, centroids.data(), X_enc.data());
+    RowMatrix<uint8_t> X_enc(nrows, _M);
+    bolt_encode<_M>(X.data(), nrows, total_len, centroids.data(), X_enc.data());
     return X_enc;
 }
 

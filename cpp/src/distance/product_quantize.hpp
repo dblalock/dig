@@ -120,25 +120,25 @@ void pq_encode_8b(const float* X, int64_t nrows, int ncols,
 
 // enum class Reductions { DistL2, DotProd };
 
-template<int Reduction=Reductions::DistL2, class dist_t>  // TODO try with {float, uint16, uint8} dists
+template<int NBytes, int Reduction=Reductions::DistL2, class dist_t>  // TODO try with {float, uint16, uint8} dists
 void pq_lut_8b(const float* q, int len, const float* centroids, dist_t* out)
 {
-    static_assert(
-        std::is_same<dist_t, float>::value ||
-        std::is_same<dist_t, uint16_t>::value ||
-        std::is_same<dist_t, uint8_t>::value,
+    static constexpr int lut_sz = 256;
+    static constexpr int packet_width = 8; // objs per simd register
+    static constexpr int nstripes = lut_sz / packet_width;
+    static constexpr int ncodebooks = NBytes;
+    static constexpr bool u8_dists = std::is_same<dist_t, uint8_t>::value;
+    static constexpr bool u16_dists = std::is_same<dist_t, uint16_t>::value;
+    static constexpr bool float_dists = std::is_same<dist_t, float>::value;
+    static_assert(NBytes > 0, "Code length <= 0 is not valid");
+    static_assert(u8_dists || u16_dists || float_dists,
         "Distance type must be one of {float, uint16_t, uint8_t}.");
     static_assert(
         Reduction == Reductions::DistL2 ||
         Reduction == Reductions::DotProd,
         "Only reductions {DistL2, DotProd} are supported.");
-    static constexpr int lut_sz = 256;
-    static constexpr int packet_width = 8; // objs per simd register
-    static constexpr int nstripes = lut_sz / packet_width;
-    static constexpr int ncodebooks = NBytes;
-    static_assert(NBytes > 0, "Code length <= 0 is not valid");
-    const int subvect_len = ncols / ncodebooks;
-    const int trailing_subvect_len = ncols % ncodebooks;
+    const int subvect_len = len / ncodebooks;
+    const int trailing_subvect_len = len % ncodebooks;
     assert(trailing_subvect_len == 0); // TODO remove this constraint
 
     __m256 accumulators[nstripes];
@@ -162,12 +162,12 @@ void pq_lut_8b(const float* q, int len, const float* centroids, dist_t* out)
             }
         }
         // write out dists in this col of the lut
-        if (std::is_same<dist_t, float>::value) {           // float distances
+        if (float_dists) {
             for (uint8_t i = 0; i < nstripes; i++) {
-                _mm256_store_ps(out, accumulators[i]);
+                _mm256_store_ps((float*)out, accumulators[i]);
                 out += packet_width;
             }
-        } else if (std::is_same<dist_t, uint16_t>::value) { // uint16 distances
+        } else if (u16_dists) {
             for (int s = 0; s < nstripes; s += 2) {
                 auto d_i32_0 = _mm256_cvtps_epi32(accumulators[s]);
                 auto d_i32_1 = _mm256_cvtps_epi32(accumulators[s+1]);
@@ -177,7 +177,7 @@ void pq_lut_8b(const float* q, int len, const float* centroids, dist_t* out)
                 _mm256_store_si256((__m256i*)out, dists);
                 out += 16;
             }
-        } else if (std::is_same<dist_t, uint8_t>::value) {  // uint8 distances
+        } else if (u8_dists) {
             for (int s = 0; s < nstripes; s += 4) {
                 auto d_i32_0 = _mm256_cvtps_epi32(accumulators[s]);
                 auto d_i32_1 = _mm256_cvtps_epi32(accumulators[s+1]);
@@ -227,7 +227,7 @@ inline void pq_scan_8b(const uint8_t* codes, const dist_t* luts,
     dist_t* dists_out, int64_t N)
 {
     static_assert(NBytes > 0, "Code length <= 0 is not valid");
-    static constexpr ncentroids = 256;
+    static constexpr int ncentroids = 256;
     for (int64_t i = 0; i < N; i++) {
         dists_out[i] = 0;
         for (int j = 0; j < NBytes; j++) {

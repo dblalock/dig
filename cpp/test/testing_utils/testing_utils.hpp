@@ -22,7 +22,9 @@ short int approxEq(double a, double b);
 double rnd(double a);
 
 template<class DistT>
-double prevent_optimizing_away_dists(DistT* dists, int64_t N) {
+double prevent_optimizing_away_dists(DistT* dists, int64_t N,
+    bool verbose=false)
+{
     // count how many dists are above a random threshold; let's see you
     // optimize this away, compiler
     std::random_device rd;
@@ -33,14 +35,21 @@ double prevent_optimizing_away_dists(DistT* dists, int64_t N) {
     volatile int64_t count = 0;
     for (int64_t n = 0; n < N; n++) { count += dists[n] > thresh; }
     volatile double frac = static_cast<double>(count) / N;
-    // printf("(%d%%) ", static_cast<int>(frac * 100));
+    if (verbose) {
+        printf("(%d%%) ", static_cast<int>(frac * 100));
+    }
     return frac;
 }
 
 static inline void print_dist_stats(const std::string& name, int64_t N,
     double t_ms)
 {
-    printf("%s: %.2f (%.1fM/s)\n", name.c_str(), t_ms, N / (1e3 * t_ms));
+    double throughput_millions = N / (1e3 * t_ms);
+    if (throughput_millions > 1) {
+        printf("%s: %.2f (%.2fM/s)\n", name.c_str(), t_ms, throughput_millions);
+    } else {
+        printf("%s: %.2f (%.3fM/s)\n", name.c_str(), t_ms, throughput_millions);
+    }
 }
 
 template<class dist_t>
@@ -57,22 +66,47 @@ static inline void print_dist_stats(const std::string& name,
     print_dist_stats(name, N, t_ms);
 }
 
-#define PROFILE_DIST_COMPUTATION(NAME, NITERS, DISTS_PTR, NUM_DISTS, EXPR)  \
+#define PROFILE_DIST_COMPUTATION(NAME, NTRIALS, DISTS_PTR, NUM_DISTS, EXPR)  \
     do {                                                                \
         double __t_min = std::numeric_limits<double>::max();            \
-        for (int __i = 0; __i < NITERS; __i++) {                        \
+        for (int __i = 0; __i < NTRIALS; __i++) {                        \
             double __t = 0;                                             \
             {                                                           \
                 EasyTimer _(__t);                                       \
-                EXPR;                                                   \
+                (EXPR);                                                 \
             }                                                           \
-            __t_min = __t < __t_min ? __t : __t_min;                    \
             prevent_optimizing_away_dists(DISTS_PTR, NUM_DISTS);        \
+            __t_min = __t < __t_min ? __t : __t_min;                    \
         }                                                               \
         print_dist_stats(                                               \
-            NAME " (best of " #NITERS ")",                              \
+            NAME " (best of " #NTRIALS ")",                             \
             NUM_DISTS, __t_min);                                        \
     } while (0);
+
+
+#define PROFILE_DIST_COMPUTATION_LOOP(                                  \
+    NAME, NTRIALS, DISTS_PTR, NUM_DISTS, NUM_LOOP_ITERS, EXPR)          \
+    do {                                                                \
+        double __t_min = std::numeric_limits<double>::max();            \
+        for (int __i = 0; __i < NTRIALS; __i++) {                       \
+            double __t = 0;                                             \
+            auto t0 = timeNow();                                        \
+            for (int i = 0; i < NUM_LOOP_ITERS; i++) {                  \
+                (EXPR);                                                 \
+            }                                                           \
+            __t = durationUs(t0, timeNow());                            \
+            prevent_optimizing_away_dists(DISTS_PTR, NUM_DISTS);        \
+            __t_min = __t < __t_min ? __t : __t_min;                    \
+        }                                                               \
+        print_dist_stats(                                               \
+            NAME " (best of " #NTRIALS ")",                             \
+            NUM_LOOP_ITERS, __t_min / 1000.0);                          \
+    } while (0);
+
+                // {                                                       \
+                //     EasyTimer _(__t, true);                             \
+                //     (EXPR);                                             \
+                // }
 
 
 // TODO put this func in array_utils

@@ -8,6 +8,7 @@
 #include "debug_utils.hpp"
 #include "memory.hpp"
 
+static constexpr int M = _M; // M value from header // TODO this is a hack
 
 TEST_CASE("bolt_smoketest", "[mcq][bolt]") {
     // TODO instantiate bolt encoder object here
