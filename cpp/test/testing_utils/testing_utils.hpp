@@ -81,6 +81,7 @@ static inline void randint_inplace(data_t* data, len_t len,
                                    data_t min=std::numeric_limits<data_t>::min(),
                                    data_t max=std::numeric_limits<data_t>::max())
 {
+    assert(data != nullptr);
     assert(len > 0);
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -94,6 +95,7 @@ template <class data_t, class len_t>
 static inline void rand_inplace(data_t* data, len_t len,
                                 data_t min=0, data_t max=1)
 {
+    assert(data != nullptr);
     assert(len > 0);
     std::random_device rd;
     std::mt19937 gen(rd());

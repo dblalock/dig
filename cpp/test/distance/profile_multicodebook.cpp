@@ -81,6 +81,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //    codes_rowmajor_.setRandom();
 //    uint8_t* codes = codes_rowmajor_.data();
     uint8_t* codes = aligned_random_ints<uint8_t>(N * M);
+    REQUIRE(codes != nullptr); // not enough memory
 //    randint_inplace(codes, N * M);
 
     // random query
@@ -88,6 +89,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //    q_.setRandom();
 //    uint8_t* q = q_.data();
     uint8_t* q = aligned_random_ints<uint8_t>(M);
+    REQUIRE(codes != nullptr); // not enough memory
 //    randint_inplace(q, M);
 
     // create 32B LUTs (two copies, pre-unpacked) and 16B LUTs; we also create
@@ -146,6 +148,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 
     // create block vertical layout version of codes
     uint8_t* block_codes = aligned_alloc<uint8_t>(N * M);
+    REQUIRE(block_codes != nullptr); // not enough memory
     for (int nn = 0; nn < nblocks; nn++) { // for each block
         auto block_start_idx = nn * block_sz_rows * M;
         auto in_block_ptr = codes + block_start_idx;
@@ -228,13 +231,6 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     #pragma mark four_bit vertical
     // note that we aren't passing in correct codes to these, except the first
 
-
-    // PROFILE_DIST_COMPUTATION("vect unpack 4b lut", 5, dists_unpack, N,
-        // dist::lut_dists_block32_4b_unpack<M>(block_codes, popcount_luts16, dists_unpack, nblocks));
-
-    // PROFILE_DIST_COMPUTATION("32 vertical", 5, dists_vertical32, N,
-        // (dist::lut_dists_block32_4b_vertical<32, M>(block_codes, popcount_luts16, dists_vertical32, N)) );
-        // dist::lut_dists_block32_4b_unpack<M>(block_codes, popcount_luts16, dists_unpack, nblocks));
 
     PROFILE_DIST_COMPUTATION("32 vertical", 5, dists_vertical32, N,
         (dist::lut_dists_block32_4b_vertical<32, M>(block_codes, popcount_luts16, dists_vertical32, N)));
@@ -355,12 +351,12 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 
     PROFILE_DIST_COMPUTATION("t 12b, 8b dist", 5, dists_12b_b, N,
         dist::lut_dists_12b<M>(codes, popcount_luts12b_b, dists_12b_b, N));
-    // { // 12bit lookups, 8bit distances
-    //     EasyTimer _(t);
-    //     dist::lut_dists_12b<M>(codes, popcount_luts12b_b, dists_12b_b, N);
-    // }
-    // prevent_optimizing_away_dists(dists_12b_b, N);
-    // printf("t 12b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
+//     // { // 12bit lookups, 8bit distances
+//     //     EasyTimer _(t);
+//     //     dist::lut_dists_12b<M>(codes, popcount_luts12b_b, dists_12b_b, N);
+//     // }
+//     // prevent_optimizing_away_dists(dists_12b_b, N);
+//     // printf("t 12b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
     PROFILE_DIST_COMPUTATION("t 12b, 16b dist", 5, dists_12b_s, N,
         dist::lut_dists_12b<M>(codes, popcount_luts12b_s, dists_12b_s, N));
@@ -663,6 +659,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //     }
 //     prevent_optimizing_away_dists(distsb, Nb);
 //     printf("t 512 int8s full dist: %.2fms (%.1f M/s)\n", t, Nb_millions / (t/1e3));
+
 
     aligned_free(Xb);
     aligned_free(qb);
