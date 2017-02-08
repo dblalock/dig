@@ -11,20 +11,45 @@
 #include "debug_utils.hpp"
 
 static constexpr int M = 16; // number of bytes per compressed vect
+static constexpr int64_t nrows_enc = 10*1000; // number of rows to encode
+static constexpr int64_t nrows_lut = 10*1000; // number of luts to create
+static constexpr int64_t nrows_scan = 1000*1000;
+static constexpr int64_t nrows_query = 1000*1000;
+static constexpr int subvect_len = 4; // M * subvect_len = number of features
+static constexpr int nqueries = 100;
+
+static constexpr int bits_per_codebook = 8;
+
+static constexpr int ncodebooks = M * (8 / bits_per_codebook);
+static constexpr int ncentroids = (1 << bits_per_codebook);
+static constexpr int ncentroids_total = ncentroids * ncodebooks;
+static constexpr int ncols = ncodebooks * subvect_len;
+static constexpr int lut_data_sz = ncentroids * ncodebooks;
+
 
 TEST_CASE("print pq params", "[pq][mcq][profile]") {
-    printf("------------------------ pq: using M = %d\n", M);
+    // printf("------------------------ pq: using M = %d\n", M);
+    printf("------------------------ pq\n");
+    printf("---- pq profiling parameters\n");
+    printf("M: %d\n", M);
+    printf("nrows_enc: %g\n", (double)nrows_enc);
+    printf("nrows_lut: %g\n", (double)nrows_lut);
+    printf("nrows_scan: %g\n", (double)nrows_scan);
+    printf("nrows_query: %g\n", (double)nrows_query);
+    printf("subvect_len: %d\n", subvect_len);
+    printf("nqueries: %d\n", nqueries);
+    printf("---- pq timings\n");
 }
 
 TEST_CASE("pq encoding speed", "[pq][mcq][profile]") {
-    static constexpr int nrows = 10000;
-    // static constexpr int M = 32;
-    static constexpr int subvect_len = 4;
-    static constexpr int ncodebooks = M;
-    static constexpr int ncentroids = 256;
-    static constexpr int ncentroids_total = ncentroids * ncodebooks;
-    static constexpr int ncols = ncodebooks * subvect_len;
-    static constexpr int lut_data_sz = ncentroids * ncodebooks;
+    static constexpr int nrows = nrows_enc;
+    // // static constexpr int M = 32;
+    // static constexpr int subvect_len = 4;
+    // static constexpr int ncodebooks = M;
+    // static constexpr int ncentroids = 256;
+    // static constexpr int ncentroids_total = ncentroids * ncodebooks;
+    // static constexpr int ncols = ncodebooks * subvect_len;
+    // static constexpr int lut_data_sz = ncentroids * ncodebooks;
 
     ColMatrix<float> centroids(ncentroids, ncols);
     centroids.setRandom();
@@ -38,15 +63,15 @@ TEST_CASE("pq encoding speed", "[pq][mcq][profile]") {
 
 
 TEST_CASE("pq lut encoding speed", "[pq][mcq][profile]") {
-     static constexpr int nrows = 10000;
-//   static constexpr int nrows = 200;
-    // static constexpr int M = 32;
-    static constexpr int ncodebooks = M;
-    static constexpr int ncentroids = 256;
-    static constexpr int ncentroids_total = ncentroids * ncodebooks;
-    static constexpr int subvect_len = 4;
-    static constexpr int ncols = ncodebooks * subvect_len;
-    static constexpr int lut_data_sz = ncentroids * ncodebooks;
+     static constexpr int nrows = nrows_lut;
+// //   static constexpr int nrows = 200;
+//     // static constexpr int M = 32;
+//     static constexpr int ncodebooks = M;
+//     static constexpr int ncentroids = 256;
+//     static constexpr int ncentroids_total = ncentroids * ncodebooks;
+//     static constexpr int subvect_len = 4;
+//     static constexpr int ncols = ncodebooks * subvect_len;
+//     static constexpr int lut_data_sz = ncentroids * ncodebooks;
 
     ColMatrix<float> centroids(ncentroids, ncols);
     centroids.setRandom();
@@ -72,15 +97,15 @@ TEST_CASE("pq lut encoding speed", "[pq][mcq][profile]") {
 
 TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
     // static constexpr int nblocks = 500 * 1000;
-     static constexpr int nblocks = 100 * 1000;
+    static constexpr int nrows = nrows_scan;
+     // static constexpr int nblocks = 100 * 1000;
 //     static constexpr int nblocks = 10 * 1000;
     // static constexpr int nblocks = 1 * 1000;
 //    static constexpr int nblocks = 37;
-    static constexpr int nrows = 32 * nblocks;
     // static constexpr int M = 8; // number of bytes per compressed vect
     // static constexpr int M = 32; // number of bytes per compressed vect
-    static constexpr int ncodebooks = M;
-    static constexpr int ncentroids = 16;
+//    static constexpr int ncodebooks = M;
+//    static constexpr int ncentroids = 16;
 
     // create random codes from in [0, 256]
     ColMatrix<uint8_t> codes(nrows, ncodebooks);
@@ -98,7 +123,7 @@ TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
     ColMatrix<float> luts_f(ncentroids, ncodebooks);
     luts_f.setRandom();
     luts_f = luts_f.array() / (2 * M); // make max lut value small
-    
+
     // create arrays in which to store the distances
     RowVector<uint8_t> dists_u8(nrows);
     RowVector<uint16_t> dists_u16(nrows);
@@ -111,7 +136,7 @@ TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
 //    }
 //    prevent_optimizing_away_dists(dists_u8.data(), nrows);
 //    print_dist_stats("pq scan 8b dists", nrows, t);
-    
+
     // do the scans to compute the distances
     PROFILE_DIST_COMPUTATION("pq scan uint8", 5, dists_u8.data(), nrows,
         pq_scan_8b<M>(codes.data(), luts_u8.data(), dists_u8.data(), nrows));
@@ -120,4 +145,56 @@ TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
     PROFILE_DIST_COMPUTATION("pq scan float", 5, dists_f.data(), nrows,
         pq_scan_8b<M>(codes.data(), luts_f.data(), dists_f.data(), nrows));
 }
+
+template<int M, class dist_t>
+void _run_query(const uint8_t* codes, int nrows,
+    const float* q, int ncols,
+    const float* centroids,
+    dist_t* lut_out, dist_t* dists_out)
+{
+    pq_lut_8b<M>(q, ncols, centroids, lut_out);
+    pq_scan_8b<M>(codes, lut_out, dists_out, nrows);
+}
+
+TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
+    static constexpr int nrows = nrows_query;
+
+    // create random codes from in [0, 256]
+    ColMatrix<uint8_t> codes(nrows, ncodebooks);
+    codes.setRandom();
+
+    // create random queries
+    RowMatrix<float> Q(nqueries, ncols);
+    Q.setRandom();
+
+    // create random centroids
+    ColMatrix<float> centroids(ncentroids, ncols);
+    centroids.setRandom();
+
+    SECTION("uint8_t") {
+        ColMatrix<uint8_t> luts(ncentroids, ncodebooks);
+        RowVector<uint8_t> dists(nrows);
+        PROFILE_DIST_COMPUTATION_LOOP("pq query u8", 5, dists.data(),
+            nrows, nqueries,
+            _run_query<M>(codes.data(), nrows, Q.row(i).data(), ncols,
+                centroids.data(), luts.data(), dists.data()) );
+    }
+    SECTION("uint16_t") {
+        ColMatrix<uint16_t> luts(ncentroids, ncodebooks);
+        RowVector<uint16_t> dists(nrows);
+        PROFILE_DIST_COMPUTATION_LOOP("pq query u16", 5, dists.data(),
+            nrows, nqueries,
+            _run_query<M>(codes.data(), nrows, Q.row(i).data(), ncols,
+                centroids.data(), luts.data(), dists.data()) );
+    }
+    SECTION("float") {
+        ColMatrix<float> luts(ncentroids, ncodebooks);
+        RowVector<float> dists(nrows);
+        PROFILE_DIST_COMPUTATION_LOOP("pq query float", 5, dists.data(),
+            nrows, nqueries,
+            (_run_query<M>(codes.data(), nrows, Q.row(i).data(), ncols,
+                centroids.data(), luts.data(), dists.data()) ));
+    }
+}
+
 

@@ -44,11 +44,15 @@ double prevent_optimizing_away_dists(DistT* dists, int64_t N,
 static inline void print_dist_stats(const std::string& name, int64_t N,
     double t_ms)
 {
-    double throughput_millions = N / (1e3 * t_ms);
-    if (throughput_millions > 1) {
-        printf("%s: %.2f (%.2fM/s)\n", name.c_str(), t_ms, throughput_millions);
+    double thruput_mil = N / (1e3 * t_ms); // millions
+    if (thruput_mil  < .001) {
+        printf("%s: %.2f (%.1f/s)\n", name.c_str(), t_ms, thruput_mil * 1e6);
+    }else if (thruput_mil < .01) {
+        printf("%s: %.2f (%.2fK/s)\n", name.c_str(), t_ms, thruput_mil * 1e3);
+    } else if (thruput_mil < 1) {
+        printf("%s: %.2f (%.3fM/s)\n", name.c_str(), t_ms, thruput_mil);
     } else {
-        printf("%s: %.2f (%.3fM/s)\n", name.c_str(), t_ms, throughput_millions);
+        printf("%s: %.2f (%.2fM/s)\n", name.c_str(), t_ms, thruput_mil);
     }
 }
 

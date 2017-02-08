@@ -1,5 +1,5 @@
 
-#include "test_bolt.hpp"
+// #include "test_bolt.hpp"
 
 #include "catch.hpp"
 #include "bolt.hpp"
@@ -11,19 +11,41 @@
 
 #include "debug_utils.hpp"
 
-static constexpr int M = 32; // number of bytes per compressed vect
+static constexpr int M = 16; // number of bytes per compressed vect
+static constexpr int64_t nrows_enc = 10*1000; // number of rows to encode
+static constexpr int64_t nrows_lut = 10*1000; // number of luts to create
+static constexpr int64_t nblocks_scan = 1000*1000 / 32;
+static constexpr int64_t nblocks_query = 1000*1000 / 32;
+static constexpr int subvect_len = 4; // M * subvect_len = number of features
+static constexpr int nqueries = 100;
+
+static constexpr int bits_per_codebook = 4;
+
+static constexpr int ncodebooks = M * (8 / bits_per_codebook);
+static constexpr int ncentroids = (1 << bits_per_codebook);
+static constexpr int ncentroids_total = ncentroids * ncodebooks;
+static constexpr int ncols = ncodebooks * subvect_len;
+static constexpr int lut_data_sz = ncentroids * ncodebooks;
+
 
 TEST_CASE("print bolt params", "[bolt][mcq][profile]") {
-    printf("------------------------ bolt: using M = %d\n", M);
+    printf("------------------------ bolt\n");
+    printf("---- bolt profiling parameters\n");
+    printf("M: %d\n", M);
+    printf("nrows_enc: %g\n", (double)nrows_enc);
+    printf("nrows_lut: %g\n", (double)nrows_lut);
+    // printf("nblocks_scan: %g\n", (double)nblocks_scan);
+    printf("nrows_scan: %g\n", (double)nblocks_scan * 32);
+    // printf("nblocks_query: %g\n", (double)nblocks_query);
+    printf("nrows_query: %g\n", (double)nblocks_query * 32);
+    printf("subvect_len: %d\n", subvect_len);
+    printf("nqueries: %d\n", nqueries);
+    printf("---- bolt timings\n");
 }
 
 TEST_CASE("bolt encoding speed", "[bolt][mcq][profile]") {
-    static constexpr int nrows = 10 * 1000;
-    static constexpr int ncodebooks = 2 * M;
-    static constexpr int ncentroids = 16;
-    static constexpr int ncentroids_total = ncentroids * ncodebooks;
-    static constexpr int subvect_len = 4;
-    static constexpr int ncols = ncodebooks * subvect_len;
+    static constexpr int nrows = nrows_enc;
+
 
     ColMatrix<float> centroids(ncentroids, ncols);
     centroids.setRandom();
@@ -45,18 +67,19 @@ TEST_CASE("bolt encoding speed", "[bolt][mcq][profile]") {
 
 
 TEST_CASE("bolt lut encoding speed", "[bolt][mcq][profile]") {
-     static constexpr int nrows = 10 * 1000;
+     static constexpr int nrows = nrows_lut;
 //   static constexpr int nrows = 200;
-    static constexpr int ncodebooks = 2 * M;
-    static constexpr int ncentroids = 16;
-    static constexpr int ncentroids_total = ncentroids * ncodebooks;
-    static constexpr int subvect_len = 4;
-    static constexpr int ncols = ncodebooks * subvect_len;
-    static constexpr int lut_data_sz = ncentroids * ncodebooks;
+    // static constexpr int subvect_len = 4;
+    // static constexpr int ncodebooks = 2 * M;
+    // static constexpr int ncentroids = 16;
+    // static constexpr int ncentroids_total = ncentroids * ncodebooks;
+    // static constexpr int ncols = ncodebooks * subvect_len;
+
 
     ColMatrix<float> centroids(ncentroids, ncols);
     centroids.setRandom();
     RowMatrix<float> Q(nrows, ncols);
+    Q.setRandom();
     ColMatrix<uint8_t> lut_out(ncentroids, ncodebooks);
     // PROFILE_DIST_COMPUTATION("bolt encode lut", 5, lut_out.data(), nrows,
     //     bolt_lut<M>(Q.row(i).data(), ncols, centroids.data(), lut_out.data()));
@@ -81,16 +104,18 @@ TEST_CASE("bolt lut encoding speed", "[bolt][mcq][profile]") {
 
 //static constexpr uint8_t kNumProfileIters = 5;
 
-
 TEST_CASE("bolt scan speed", "[bolt][mcq][profile]") {
+    static constexpr int nblocks = nblocks_scan;
+    static constexpr int nrows = nblocks_scan * 32;
     // static constexpr int nblocks = 37;
     // static constexpr int nblocks = 500 * 1000;
 //    static constexpr int nblocks = 100 * 1000;
-     static constexpr int nblocks = 10 * 1000;
-    // static constexpr int nblocks = 1 * 1000;
-    static constexpr int nrows = 32 * nblocks;
-    static constexpr int ncodebooks = 2 * M;
-    static constexpr int ncentroids = 16;
+    // static constexpr int nblocks = 1000 * 1000 / 32; // set nrows = 1M
+    //  // static constexpr int nblocks = 10 * 1000;
+    // // static constexpr int nblocks = 1 * 1000;
+    // static constexpr int nrows = 32 * nblocks;
+    // static constexpr int ncodebooks = 2 * M;
+    // static constexpr int ncentroids = 16;
 
     // create random codes from in [0, 15]
     ColMatrix<uint8_t> codes(nrows, ncodebooks);
@@ -188,4 +213,67 @@ TEST_CASE("bolt scan speed", "[bolt][mcq][profile]") {
     // aligned_free(dists_u8);
     // aligned_free(dists_u16);
     // aligned_free(dists_u16_safe);
+}
+
+
+
+template<int M, bool Safe=false, class dist_t=void>
+void _run_query(const uint8_t* codes, int nblocks,
+    const float* q, int ncols,
+    const float* centroids,
+    uint8_t* lut_out, dist_t* dists_out)
+{
+    bolt_lut<M>(q, ncols, centroids, lut_out);
+    bolt_scan<M, Safe>(codes, lut_out, dists_out, nblocks);
+}
+
+TEST_CASE("bolt query (lut + scan) speed", "[bolt][mcq][profile]") {
+    static constexpr int nblocks = nblocks_query;
+    static constexpr int nrows = nblocks * 32;
+    // static constexpr int nblocks = 1 * 1000;
+
+//     static constexpr int subvect_len = 4;
+//    static constexpr int nrows = 32 * nblocks;
+//    static constexpr int ncodebooks = 2 * M;
+//    static constexpr int ncentroids = 16;
+//    static constexpr int lut_data_sz = ncentroids * ncodebooks;
+//    static constexpr int ncols = ncodebooks * subvect_len;
+
+    // create random codes from in [0, 15]
+    ColMatrix<uint8_t> codes(nrows, ncodebooks);
+    codes.setRandom();
+    codes = codes.array() / 16;
+
+    // create random queries
+    RowMatrix<float> Q(nqueries, ncols);
+    Q.setRandom();
+
+    // create random centroids
+    ColMatrix<float> centroids(ncentroids, ncols);
+    centroids.setRandom();
+
+    // storage for luts
+    ColMatrix<uint8_t> luts(ncentroids, ncodebooks);
+
+    SECTION("uint8_t") {
+        RowVector<uint8_t> dists(nrows);
+        PROFILE_DIST_COMPUTATION_LOOP("bolt query u8", 5, dists.data(),
+            nrows, nqueries,
+            _run_query<M>(codes.data(), nblocks, Q.row(i).data(), ncols,
+                centroids.data(), luts.data(), dists.data()) );
+    }
+    SECTION("uint16_t") {
+        RowVector<uint16_t> dists(nrows);
+        PROFILE_DIST_COMPUTATION_LOOP("bolt query u16", 5, dists.data(),
+            nrows, nqueries,
+            _run_query<M>(codes.data(), nblocks, Q.row(i).data(), ncols,
+                centroids.data(), luts.data(), dists.data()) );
+    }
+    SECTION("uint16_t safe") {
+        RowVector<uint16_t> dists(nrows);
+        PROFILE_DIST_COMPUTATION_LOOP("bolt query u16 safe", 5, dists.data(),
+            nrows, nqueries,
+            (_run_query<M, true>(codes.data(), nblocks, Q.row(i).data(), ncols,
+                centroids.data(), luts.data(), dists.data()) ));
+    }
 }

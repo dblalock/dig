@@ -318,7 +318,7 @@ void bolt_encode_centroids(const data_t* centroids, int ncols, data_t* out) {
     }
 }
 
-template<int NBytes>
+template<int NBytes, bool _=false> // 2nd arg is so bolt<M, false> always works
 inline void bolt_scan(const uint8_t* codes,
     const uint8_t* luts, uint8_t* dists_out, int64_t nblocks)
 {
