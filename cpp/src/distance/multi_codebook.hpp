@@ -10,30 +10,14 @@
 #ifndef __MULTI_CODEBOOK_HPP
 #define __MULTI_CODEBOOK_HPP
 
-#include <iostream> // TODO rm
-
 #include <assert.h>
 #include <sys/types.h>
-#include "immintrin.h"
 
-#include "macros.hpp"
+#include "avx_utils.hpp"
 
 namespace dist {
 
-static_assert(__AVX2__, "AVX 2 is required!");
-
 static const uint8_t mask_low4b = 0x0F;
-
-template<class T>
-inline __m256i load_si256i(T* ptr) {
-    return _mm256_load_si256((__m256i *)ptr);
-}
-
-template<class T>
-inline __m256i stream_load_si256i(T* ptr) {
-    return _mm256_stream_load_si256((__m256i *)ptr);
-}
-
 
 // experimental version to see what bottlenecks are; this one assumes 4b codes
 // are already unpacked (so no need to shift or mask); NOTE: this impl requires

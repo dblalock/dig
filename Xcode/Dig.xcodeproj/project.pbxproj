@@ -74,6 +74,8 @@
 		725A5E5D1E47BD350026E20D /* bolt.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = bolt.hpp; sourceTree = "<group>"; };
 		725A5E5E1E495C790026E20D /* profile_bolt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_bolt.cpp; sourceTree = "<group>"; };
 		725A5E601E4995490026E20D /* test_bolt.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = test_bolt.hpp; sourceTree = "<group>"; };
+		725A5E611E4A58760026E20D /* avx_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = avx_utils.hpp; sourceTree = "<group>"; };
+		725A5E621E4A5E5D0026E20D /* product_quantize.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = product_quantize.hpp; sourceTree = "<group>"; };
 		725C74DE1E36D6F700037244 /* profile_multicodebook.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_multicodebook.cpp; sourceTree = "<group>"; };
 		727207DC1DBFEF520014F72B /* profile_neighbors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = profile_neighbors.cpp; sourceTree = "<group>"; };
 		727A342F1CB35D0B009A54CE /* circular.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = circular.hpp; sourceTree = "<group>"; };
@@ -1187,6 +1189,7 @@
 			isa = PBXGroup;
 			children = (
 				725A5E5D1E47BD350026E20D /* bolt.hpp */,
+				725A5E621E4A5E5D0026E20D /* product_quantize.hpp */,
 				728E9D931E35964E00BDAB82 /* multi_codebook.hpp */,
 				72A789D51DA1F383004F2D18 /* cluster.hpp */,
 				721403B71D8B5A4E00F8658F /* euclidean.hpp */,
@@ -1244,6 +1247,7 @@
 		72C419441C5337AD004689A2 /* utils */ = {
 			isa = PBXGroup;
 			children = (
+				725A5E611E4A58760026E20D /* avx_utils.hpp */,
 				729A0CE71D8609FA00E2E294 /* macros.hpp */,
 				72C81BEC1C93621300639302 /* subseq.hpp */,
 				72C81BED1C93621300639302 /* array_utils_eigen.hpp */,

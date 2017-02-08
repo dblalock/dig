@@ -52,7 +52,7 @@ TEST_CASE("bolt_lut_l2", "[mcq][bolt]") {
     //    ColMatrix<int32_t> lut_out(ncentroids, ncodebooks);
     //    ColMatrix<uint16_t> lut_out(ncentroids, ncodebooks);
     //    lut_out.fill(42); // there should be none of these when we print it
-    bolt_lut_l2<M>(q.data(), total_len, centroids.data(), lut_out.data());
+    bolt_lut<M>(q.data(), total_len, centroids.data(), lut_out.data());
 
 //    std::cout << centroids_rowmajor << "\n\n";
 //    std::cout << centroids << "\n\n";
@@ -139,7 +139,7 @@ TEST_CASE("bolt_scan", "[mcq][bolt]") {
     // create query and look-up tables
     RowVector<float> q = create_bolt_query();
     ColMatrix<uint8_t> luts(ncentroids, ncodebooks);
-    bolt_lut_l2<M>(q.data(), total_len, centroids.data(), luts.data());
+    bolt_lut<M>(q.data(), total_len, centroids.data(), luts.data());
 
 //    PRINTLN_VAR(codes.cast<int>());
 //    PRINTLN_VAR(codes.topRows(2).cast<int>());

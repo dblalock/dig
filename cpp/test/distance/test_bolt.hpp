@@ -123,25 +123,25 @@ static inline void check_bolt_scan(const uint8_t* dists_u8, const uint16_t* dist
         }
     }
 }
-
-static inline void print_dist_stats(const std::string& name, int64_t N,
-    double t_ms)
-{
-    printf("%s: %.2f (%.1fM/s)\n", name.c_str(), t_ms, N / (1e3 * t_ms));
-}
-
-template<class dist_t>
-static inline void print_dist_stats(const std::string& name,
-    const dist_t* dists, int64_t N, double t_ms)
-{
-    if (dists != nullptr) {
-        // prevent_optimizing_away_dists(dists, N);
-        // if (N < 100) {
-        //     auto printable_ar = ar::add(dists, N, 0);
-        //     ar::print(printable_ar.get(), N);
-        // }
-    }
-    print_dist_stats(name, N, t_ms);
-}
+//
+//static inline void print_dist_stats(const std::string& name, int64_t N,
+//    double t_ms)
+//{
+//    printf("%s: %.2f (%.1fM/s)\n", name.c_str(), t_ms, N / (1e3 * t_ms));
+//}
+//
+//template<class dist_t>
+//static inline void print_dist_stats(const std::string& name,
+//    const dist_t* dists, int64_t N, double t_ms)
+//{
+//    if (dists != nullptr) {
+//        // prevent_optimizing_away_dists(dists, N);
+//        // if (N < 100) {
+//        //     auto printable_ar = ar::add(dists, N, 0);
+//        //     ar::print(printable_ar.get(), N);
+//        // }
+//    }
+//    print_dist_stats(name, N, t_ms);
+//}
 
 } // anonymous namespace

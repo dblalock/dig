@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "memory.hpp"
+#include "timing_utils.hpp" // for profiling
 
 // TODO rm these functions
 ///used for comparisons ignoring slight floating point errors
@@ -21,11 +22,58 @@ short int approxEq(double a, double b);
 double rnd(double a);
 
 template<class DistT>
-void prevent_optimizing_away_dists(DistT* dists, int64_t N) {
+double prevent_optimizing_away_dists(DistT* dists, int64_t N) {
+    // count how many dists are above a random threshold; let's see you
+    // optimize this away, compiler
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> d(0, 255);
+    uint8_t thresh = static_cast<uint8_t>(d(gen));
+
     volatile int64_t count = 0;
-    for (int64_t n = 0; n < N; n++) { count += dists[n] > 3 * 42; }
-    std::cout << "(" << count << "/" << N << ")\t";
+    for (int64_t n = 0; n < N; n++) { count += dists[n] > thresh; }
+    volatile double frac = static_cast<double>(count) / N;
+    // printf("(%d%%) ", static_cast<int>(frac * 100));
+    return frac;
 }
+
+static inline void print_dist_stats(const std::string& name, int64_t N,
+    double t_ms)
+{
+    printf("%s: %.2f (%.1fM/s)\n", name.c_str(), t_ms, N / (1e3 * t_ms));
+}
+
+template<class dist_t>
+static inline void print_dist_stats(const std::string& name,
+    const dist_t* dists, int64_t N, double t_ms)
+{
+    if (dists != nullptr) {
+        // prevent_optimizing_away_dists(dists, N);
+        // if (N < 100) {
+        //     auto printable_ar = ar::add(dists, N, 0);
+        //     ar::print(printable_ar.get(), N);
+        // }
+    }
+    print_dist_stats(name, N, t_ms);
+}
+
+#define PROFILE_DIST_COMPUTATION(NAME, NITERS, DISTS_PTR, NUM_DISTS, EXPR)  \
+    do {                                                                \
+        double __t_min = std::numeric_limits<double>::max();            \
+        for (int __i = 0; __i < NITERS; __i++) {                        \
+            double __t = 0;                                             \
+            {                                                           \
+                EasyTimer _(__t);                                       \
+                EXPR;                                                   \
+            }                                                           \
+            __t_min = __t < __t_min ? __t : __t_min;                    \
+            prevent_optimizing_away_dists(DISTS_PTR, NUM_DISTS);        \
+        }                                                               \
+        print_dist_stats(                                               \
+            NAME " (best of " #NITERS ")",                              \
+            NUM_DISTS, __t_min);                                        \
+    } while (0);
+
 
 // TODO put this func in array_utils
 template <class data_t, class len_t>

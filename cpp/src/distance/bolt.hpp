@@ -10,94 +10,29 @@
 #ifndef __BOLT_HPP
 #define __BOLT_HPP
 
-#include <iostream> // TODO rm
+// #include <iostream> // TODO rm
 
 #include <assert.h>
 #include <sys/types.h>
 #include "immintrin.h"
 
-#include "bit_ops.hpp" // TODO rm
+#include "avx_utils.hpp"
+
+// #include "bit_ops.hpp" // TODO rm
 
 //#include "macros.hpp"
 // #include "multi_codebook.hpp"
 
-
-
-static_assert(__AVX2__, "AVX 2 is required! Try --march=native or -mavx2");
-
 namespace {
 
 // ================================================================ Utils
-
-// ------------------------------------------------ avx utils adapted from eigen
-// see Eigen/src/Core/arch/AVX/PacketMath.h
-
-// float predux_max(const __m256& a)
-// {
-//     // 3 + 3 cycles
-//     auto tmp = _mm256_max_ps(a, _mm256_permute2f128_ps(a,a,1));
-//     // 3 + 3 cycles (_MM_SHUFFLE is a built-in macro that generates constants)
-//     tmp = _mm256_max_ps(tmp, _mm256_shuffle_ps(tmp,tmp,_MM_SHUFFLE(1,0,3,2)));
-//     // 1 cycle + 3 cycles + 1 cycle
-//     return pfirst(_mm256_max_ps(tmp, _mm256_shuffle_ps(tmp,tmp,1)));
-// }
-
-// float pfirst(const __m256& a) {
-//   return _mm_cvtss_f32(_mm256_castps256_ps128(a));
-// }
-
-// int32_t pfirst(__m256i a) {
-//     return _mm_cvtsi128_si32(_mm256_castsi256_si128(a));
-// }
-
-// int32_t predux_min(const __m256i a) {
-//     auto tmp = _mm256_min_epi32(a, _mm256_permute2x128_si256(a,a,1));
-//     auto tmp2 = _mm256_min_epi32(tmp, _mm256_shuffle_epi32(tmp,tmp,_MM_SHUFFLE(1,0,3,2)));
-//     return pfirst(_mm256_min_epi32(tmp2, _mm256_shuffle_epi32(tmp2,tmp2,1)));
-//     // return _mm256_extract_epi32(tmp2)
-// }
-
-__m256i broadcast_min(const __m256i a) {
-    // swap upper and lower 128b halves, then min with original
-    auto tmp = _mm256_min_epi32(a, _mm256_permute2x128_si256(a,a,1));
-    // swap upper and lower halves within each 128b half, then min
-    auto tmp2 = _mm256_min_epi32(tmp, _mm256_shuffle_epi32(tmp, _MM_SHUFFLE(1,0,3,2)));
-    // alternative elements have min of evens and min of odds, respectively;
-    // so swap adjacent pairs of elements within each 128b half
-    return _mm256_min_epi32(tmp2, _mm256_shuffle_epi32(tmp2, _MM_SHUFFLE(2,3,0,1)));
-}
-
-// returns a * b + c, elementwise
-inline __m256 fma(__m256 a, __m256 b, __m256 c) {
-    __m256 res = c;
-    __asm__("vfmadd231ps %[a], %[b], %[c]" : [c] "+x" (res) : [a] "x" (a), [b] "x" (b));
-    return res;
-}
-
-// ------------------------------------------------ other utils
 
 template<class T>
 static int8_t msb_idx_u32(T x) {
     return 8*sizeof(uint32_t) - 1 - __builtin_clzl((uint32_t)x);
 }
 
-template<class T>
-inline __m256i load_si256i(T* ptr) {
-    return _mm256_load_si256((__m256i *)ptr);
-}
-
-template<class T>
-inline __m256i stream_load_si256i(T* ptr) {
-    return _mm256_stream_load_si256((__m256i *)ptr);
-}
-
-//
-//inline __m256i load_256f(float* ptr) {
-//    return _mm256_load_ps((__m256 *)ptr);
-//}
-
 // ================================================================ Bolt
-
 
 /**
  * @brief Encode a matrix of floats using Bolt.
@@ -126,13 +61,13 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
     assert(trailing_subvect_len == 0); // TODO remove this constraint
 
     __m256 accumulators[lut_sz / packet_width];
-    alignas(32) float argmin_storage[16];
+    // alignas(32) float argmin_storage[lut_sz];
 
     for (int64_t n = 0; n < nrows; n++) { // for each row of X
         auto x_ptr = X + n * ncols;
 
         auto centroids_ptr = centroids;
-        for (int m = 0; m < 2 * NBytes; m++) { // for each codebook
+        for (int m = 0; m < ncodebooks; m++) { // for each codebook
             for (int i = 0; i < nstripes; i++) {
                 accumulators[i] = _mm256_setzero_ps();
             }
@@ -148,8 +83,8 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
                     auto diff = _mm256_sub_ps(x_j_broadcast, centroids_half_col);
                     accumulators[i] = fma(diff, diff, accumulators[i]);
 
-                    _mm256_store_ps(
-                        argmin_storage + packet_width * i, accumulators[i]);
+                    // _mm256_store_ps(
+                    //     argmin_storage + packet_width * i, accumulators[i]);
                 }
                 x_ptr++;
             }
@@ -176,7 +111,7 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
 
             // TODO rm after debug
 //            min_idx++;
-            
+
             // find where the minimum value happens
             // auto min_broadcast = _mm256_set1_epi32(min_val);
 
@@ -248,11 +183,15 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
  *  be of length at least 16 * 2 * NBytes
  * @tparam NBytes Byte length of Bolt encoding
  */
-template<int NBytes>
+template<int NBytes, int Reduction=Reductions::DistL2>
 // void bolt_lut_l2(const float* q, int len, const float* centroids, float* out) {
-void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) {
+void bolt_lut(const float* q, int len, const float* centroids, uint8_t* out) {
 // void bolt_lut_l2(const float* q, int len, const float* centroids, uint16_t* out) {
 // void bolt_lut_l2(const float* q, int len, const float* centroids, int32_t* out) {
+    static_assert(
+        Reduction == Reductions::DistL2 ||
+        Reduction == Reductions::DotProd,
+        "Only reductions {DistL2, DotProd} supported");
     static constexpr int lut_sz = 16;
     static constexpr int packet_width = 8; // objs per simd register
     static constexpr int nstripes = lut_sz / packet_width;
@@ -265,7 +204,7 @@ void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) 
     __m256 accumulators[nstripes];
     __m256i dists_uint16_0 = _mm256_undefined_si256();
 
-    for (int m = 0; m < 2 * NBytes; m++) { // for each codebook
+    for (int m = 0; m < ncodebooks; m++) { // for each codebook
         for (int i = 0; i < nstripes; i++) {
             accumulators[i] = _mm256_setzero_ps();
         }
@@ -275,10 +214,12 @@ void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) 
                 auto centroids_col = _mm256_load_ps(centroids);
                 centroids += packet_width;
 
-                auto diff = _mm256_sub_ps(q_broadcast, centroids_col);
-                accumulators[i] = fma(diff, diff, accumulators[i]);
-                // auto prods = fma(diff, diff, accumulators[i]);
-                // accumulators[i] = _mm256_add_ps(accumulators[i], prods);
+                if (Reduction == Reductions::DotProd) {
+                    accumulators[i] = fma(q_broadcast, centroids_col, accumulators[i]);
+                } else if (Reduction == Reductions::DistL2) {
+                    auto diff = _mm256_sub_ps(q_broadcast, centroids_col);
+                    accumulators[i] = fma(diff, diff, accumulators[i]);
+                }
             }
         }
 
@@ -322,13 +263,13 @@ void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) 
         auto dists_int32_low = _mm256_cvtps_epi32(accumulators[0]);
         auto dists_int32_high = _mm256_cvtps_epi32(accumulators[1]);
 
-        // indices to undo packus_epi32 followed by packus_epi16, once we've
-        // swapped 64-bit blocks 1 and 2
-        static const __m256i shuffle_idxs = _mm256_set_epi8(
-            31-16, 30-16, 29-16, 28-16, 23-16, 22-16, 21-16, 20-16,
-            27-16, 26-16, 25-16, 24-16, 19-16, 18-16, 17-16, 16-16,
-            15- 0, 14- 0, 13- 0, 12- 0, 7 - 0, 6 - 0, 5 - 0, 4 - 0,
-            11- 0, 10- 0, 9 - 0, 8 - 0, 3 - 0, 2 - 0, 1 - 0, 0 - 0);
+        // // indices to undo packus_epi32 followed by packus_epi16, once we've
+        // // swapped 64-bit blocks 1 and 2
+        // static const __m256i shuffle_idxs = _mm256_set_epi8(
+        //     31-16, 30-16, 29-16, 28-16, 23-16, 22-16, 21-16, 20-16,
+        //     27-16, 26-16, 25-16, 24-16, 19-16, 18-16, 17-16, 16-16,
+        //     15- 0, 14- 0, 13- 0, 12- 0, 7 - 0, 6 - 0, 5 - 0, 4 - 0,
+        //     11- 0, 10- 0, 9 - 0, 8 - 0, 3 - 0, 2 - 0, 1 - 0, 0 - 0);
 
         // because we saturate to uint8s, we only get 32 objs to write after
         // two 16-element codebooks
@@ -336,12 +277,14 @@ void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) 
         if (m % 2) {
             // if odd-numbered codebook, combine dists from previous codebook
             // with these dists
-            auto dists_uint8 = _mm256_packus_epi16(dists_uint16_0, dists_uint16);
+            // auto dists_uint8 = _mm256_packus_epi16(dists_uint16_0, dists_uint16);
 
-            // undo the weird shuffling caused by the pack operations
-            auto dists_perm = _mm256_permute4x64_epi64(
-                dists_uint8, _MM_SHUFFLE(3,1,2,0));
-            auto dists = _mm256_shuffle_epi8(dists_perm, shuffle_idxs);
+            // // undo the weird shuffling caused by the pack operations
+            // auto dists_perm = _mm256_permute4x64_epi64(
+            //     dists_uint8, _MM_SHUFFLE(3,1,2,0));
+            // auto dists = _mm256_shuffle_epi8(dists_perm, shuffle_idxs);
+            auto dists = packed_epu16_to_unpacked_epu8(
+                dists_uint16_0, dists_uint16);
 
             _mm256_store_si256((__m256i*)out, dists);
             out += 32;
@@ -355,6 +298,10 @@ void bolt_lut_l2(const float* q, int len, const float* centroids, uint8_t* out) 
 
 // basically just a transpose with known centroid sizes
 // note that this doesn't have to be fast because we do it once after training
+//
+// XXX: confusingly, ncols refers to ncols in the original data, not
+// in the row-major centroids mat; latter needs to have subvect_len cols
+// and ncodebooks * lut_sz rows
 template<int NBytes, class data_t>
 void bolt_encode_centroids(const data_t* centroids, int ncols, data_t* out) {
     static constexpr int lut_sz = 16;
@@ -364,19 +311,19 @@ void bolt_encode_centroids(const data_t* centroids, int ncols, data_t* out) {
     const int trailing_subvect_len = ncols % ncodebooks;
     assert(trailing_subvect_len == 0); // TODO remove this constraint
 
-    for (int m = 0; m < 2 * NBytes; m++) {
+    for (int m = 0; m < ncodebooks; m++) {
         // for each codebook, just copy rowmajor to colmajor, then offset
         // the starts of the centroids and out array
         for (int i = 0; i < lut_sz; i++) { // for each centroid
             auto in_row_ptr = centroids + subvect_len * i;
             for (int j = 0; j < subvect_len; j++) { // for each dim
                 auto in_ptr = in_row_ptr + j;
-                auto out_ptr = out + (16 * j) + i;
+                auto out_ptr = out + (lut_sz * j) + i;
                 *out_ptr = *in_ptr;
             }
         }
-        centroids += 16 * subvect_len;
-        out += 16 * subvect_len;
+        centroids += lut_sz * subvect_len;
+        out += lut_sz * subvect_len;
     }
 }
 

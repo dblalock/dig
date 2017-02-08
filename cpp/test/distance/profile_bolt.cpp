@@ -56,11 +56,13 @@ TEST_CASE("bolt lut encoding speed", "[bolt][mcq][profile]") {
     {
         EasyTimer _(t);
         for (int i = 0; i < nrows; i++) {
-            bolt_lut_l2<M>(Q.row(i).data(), ncols, centroids.data(), lut_out.data());
+            bolt_lut<M>(Q.row(i).data(), ncols, centroids.data(), lut_out.data());
         }
     }
     print_dist_stats("bolt encode lut", nrows, t);
 }
+
+//static constexpr uint8_t kNumProfileIters = 5;
 
 
 TEST_CASE("bolt scan speed", "[bolt][mcq][profile]") {
@@ -93,26 +95,34 @@ TEST_CASE("bolt scan speed", "[bolt][mcq][profile]") {
     RowVector<uint16_t> dists_u16(nrows);
     RowVector<uint16_t> dists_u16_safe(nrows);
 
-    {
-        EasyTimer _(t);
-        bolt_scan<M>(codes.data(), luts.data(), dists_u8.data(), nblocks);
-    }
-    print_dist_stats("bolt scan uint8", dists_u8.data(), nrows, t);
-    {
-        EasyTimer _(t);
-        bolt_scan<M>(codes.data(), luts.data(), dists_u16.data(), nblocks);
-    }
-    print_dist_stats("bolt scan uint16", dists_u16.data(), nrows, t);
-    {
-        EasyTimer _(t);
-        bolt_scan<M, true>(codes.data(), luts.data(), dists_u16_safe.data(), nblocks);
-    }
-    print_dist_stats("bolt scan uint16_safe", dists_u16_safe.data(), nrows, t);
-
-    if (nrows < 100 * 1000) {
-        check_bolt_scan(dists_u8.data(), dists_u16.data(), dists_u16_safe.data(),
-            luts, codes, M, nblocks);
-    }
+    PROFILE_DIST_COMPUTATION("bolt scan uint8", 5, dists_u8.data(), nrows,
+        bolt_scan<M>(codes.data(), luts.data(), dists_u8.data(), nblocks));
+    PROFILE_DIST_COMPUTATION("bolt scan uint16", 5, dists_u16.data(), nrows,
+        bolt_scan<M>(codes.data(), luts.data(), dists_u16.data(), nblocks));
+    PROFILE_DIST_COMPUTATION("bolt scan uint16 safe", 5, dists_u16_safe.data(), nrows,
+        bolt_scan<M>(codes.data(), luts.data(), dists_u16_safe.data(), nblocks));
+    
+    // {
+    //     EasyTimer _(t);
+    //     bolt_scan<M>(codes.data(), luts.data(), dists_u8.data(), nblocks);
+    // }
+    // // print_dist_stats("bolt scan uint8", dists_u8.data(), nrows, t);
+    // print_dist_stats("bolt scan uint8", nrows, t);
+//    {
+//        EasyTimer _(t);
+//        bolt_scan<M>(codes.data(), luts.data(), dists_u16.data(), nblocks);
+//    }
+//    print_dist_stats("bolt scan uint16", nrows, t);
+//    {
+//        EasyTimer _(t);
+//        bolt_scan<M, true>(codes.data(), luts.data(), dists_u16_safe.data(), nblocks);
+//    }
+//    print_dist_stats("bolt scan uint16_safe", nrows, t);
+//
+//    if (nrows < 100 * 1000) {
+//        check_bolt_scan(dists_u8.data(), dists_u16.data(), dists_u16_safe.data(),
+//            luts, codes, M, nblocks);
+//    }
 
     // auto dists_u8 = aligned_random_ints<uint8_t>(nrows);
     // RowVector<uint8_t> _dists_u8(nrows);
