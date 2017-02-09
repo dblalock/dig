@@ -51,6 +51,9 @@ typedef struct Neighbor {
 	Neighbor() = default;
 	Neighbor(const Neighbor& rhs) = default;
 	// Neighbor(float d, idx_t i):  idx(i), dist(static_cast<dist_t>(d)) {}
+	Neighbor(idx_t i, int d):  idx(i), dist(static_cast<dist_t>(d)) {
+		if (dist <= 0) { dist = nn::kMaxDist; }
+	}
 	Neighbor(idx_t i, float d):  idx(i), dist(static_cast<dist_t>(d)) {
 		if (dist <= 0) { dist = nn::kMaxDist; }
 	}
@@ -64,6 +67,42 @@ typedef struct Neighbor {
 // ================================================================
 // Classes
 // ================================================================
+
+// ------------------------------------------------ Bolt
+
+// BoltEncoder is the the class that maintains state and wraps the
+// core Bolt logic
+class BoltEncoder {
+public:
+    BoltEncoder(int nbytes);
+    ~BoltEncoder() = default;
+
+    // bool set_nbytes(int nbytes);
+    bool set_centroids(float* X, int m, int n);
+    bool set_centroids(float* X, long m, long n);
+    bool set_data(float* X, int m, int n);
+    bool set_data(float* X, long m, long n);
+
+    vector<uint16_t> dists_l2(float* q, int len);
+    vector<uint16_t> dot_prods(float* q, int len);
+
+    vector<int64_t> knn_l2(float* q, int len, int k);
+    vector<int64_t> knn_mips(float* q, int len, int k);
+
+    bool set_codes(const RowMatrix<uint8_t>& codes);
+    bool set_codes(const uint8_t* codes, int m, int n);
+
+    // for testing
+    ColMatrix<float> centroids() { return _centroids; }
+    RowMatrix<uint8_t> codes() { return _codes; } // might have end padding
+    ColMatrix<uint8_t> lut(RowVector<float> q);
+
+private:
+	ColMatrix<float> _centroids;
+	RowMatrix<uint8_t> _codes;
+	int64_t _ncodes;
+	int _nbytes;
+};
 
 // ------------------------------------------------ Normal Indexes
 

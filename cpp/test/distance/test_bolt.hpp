@@ -80,7 +80,7 @@ static inline RowMatrix<uint8_t> create_bolt_codes(int64_t nrows,
 
 static inline void check_bolt_scan(const uint8_t* dists_u8, const uint16_t* dists_u16,
     const uint16_t* dists_u16_safe, const ColMatrix<uint8_t>& luts,
-    const ColMatrix<uint8_t>& codes, int M, int64_t nblocks)
+    const RowMatrix<uint8_t>& codes, int M, int64_t nblocks)
 {
     for (int b = 0; b < nblocks; b++) {
         auto dist_ptr_u8 = dists_u8 + b * 32;
@@ -98,6 +98,7 @@ static inline void check_bolt_scan(const uint8_t* dists_u8, const uint16_t* dist
             int dist_true_u16_safe = 0;
             for (int m = 0; m < M; m++) {
                 uint8_t code = codes_ptr[i + 32 * m];
+                // uint8_t code = codes_ptr[i * m + 32];
                 uint8_t low_bits = code & 0x0F;
                 uint8_t high_bits = (code >> 4) & 0x0F;
 

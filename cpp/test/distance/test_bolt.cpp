@@ -1,7 +1,7 @@
 
 
 #include "test_bolt.hpp"
-//#include "catch.hpp"
+#include "neighbors.hpp" // for Bolt wrapper class
 
 #include "array_utils.hpp"
 #include "testing_utils.hpp"
@@ -11,18 +11,15 @@
 static constexpr int M = _M; // M value from header // TODO this is a hack
 
 TEST_CASE("bolt_smoketest", "[mcq][bolt]") {
+    BoltEncoder enc(M);
     // TODO instantiate bolt encoder object here
     // printf("done");
 }
 
-TEST_CASE("bolt_encode_centroids", "[mcq][bolt]") {
-    auto C = create_rowmajor_centroids<int>();
-    ColMatrix<int> C_out(ncentroids, total_len);
-    bolt_encode_centroids<M>(C.data(), total_len, C_out.data());
-//    std::cout << C_out << "\n"; // yes, looks exactly right
-
+template<class data_t>
+void check_centroids(RowMatrix<data_t> C_in, ColMatrix<data_t> C_out) {
     for (int m = 0; m < ncodebooks; m++) {
-        auto cin_start_ptr = C.data() + m * codebook_sz;
+        auto cin_start_ptr = C_in.data() + m * codebook_sz;
         auto cout_start_ptr = C_out.data() + m * codebook_sz;
         for (int i = 0; i < ncentroids; i++) { // for each centroid
             for (int j = 0; j < subvect_len; j++) { // for each dim
@@ -33,6 +30,40 @@ TEST_CASE("bolt_encode_centroids", "[mcq][bolt]") {
                 auto cout_ptr = cout_start_ptr + (ncentroids * j) + i;
                 REQUIRE(*cin_ptr == *cout_ptr);
             }
+        }
+    }
+}
+
+TEST_CASE("bolt_encode_centroids", "[mcq][bolt]") {
+    auto C = create_rowmajor_centroids<int>();
+    ColMatrix<int> C_out(ncentroids, total_len);
+    bolt_encode_centroids<M>(C.data(), total_len, C_out.data());
+
+    check_centroids(C, C_out);
+
+    SECTION("wrapper") {
+        BoltEncoder enc(M);
+        RowMatrix<float> centroids_float = C.cast<float>();
+        enc.set_centroids(centroids_float.data(), C.rows(), C.cols());
+
+        check_centroids(centroids_float, enc.centroids());
+    }
+}
+
+void check_lut(const RowMatrix<float>& centroids_rowmajor,
+    const RowVector<float>& q, const ColMatrix<uint8_t>& lut_out)
+{
+    for (int m = 0; m < ncodebooks; m++) {
+        for (int i = 0; i < ncentroids; i++) {
+            float dist_sq = 0;
+            for (int j = 0; j < subvect_len; j++) {
+                auto col = m * subvect_len + j;
+                auto diff = centroids_rowmajor(i + m * ncentroids, j) - q(m * subvect_len + j);
+                dist_sq += diff * diff;
+            }
+            CAPTURE(m);
+            CAPTURE(i);
+            REQUIRE(dist_sq == lut_out(i, m));
         }
     }
 }
@@ -60,17 +91,38 @@ TEST_CASE("bolt_lut_l2", "[mcq][bolt]") {
 //    std::cout << q << "\n";
 //    std::cout << lut_out.cast<int>() << "\n";
 
-    for (int m = 0; m < ncodebooks; m++) {
-        for (int i = 0; i < ncentroids; i++) {
-            float dist_sq = 0;
-            for (int j = 0; j < subvect_len; j++) {
-                auto col = m * subvect_len + j;
-                auto diff = centroids_rowmajor(i + m * ncentroids, j) - q(m * subvect_len + j);
-                dist_sq += diff * diff;
-            }
-            CAPTURE(m);
-            CAPTURE(i);
-            REQUIRE(dist_sq == lut_out(i, m));
+    check_lut(centroids_rowmajor, q, lut_out);
+
+    // for (int m = 0; m < ncodebooks; m++) {
+    //     for (int i = 0; i < ncentroids; i++) {
+    //         float dist_sq = 0;
+    //         for (int j = 0; j < subvect_len; j++) {
+    //             auto col = m * subvect_len + j;
+    //             auto diff = centroids_rowmajor(i + m * ncentroids, j) - q(m * subvect_len + j);
+    //             dist_sq += diff * diff;
+    //         }
+    //         CAPTURE(m);
+    //         CAPTURE(i);
+    //         REQUIRE(dist_sq == lut_out(i, m));
+    //     }
+    // }
+
+    SECTION("wrapper") {
+        BoltEncoder enc(M);
+        enc.set_centroids(centroids_rowmajor.data(), centroids_rowmajor.rows(),
+                          centroids_rowmajor.cols());
+        auto lut = enc.lut(q);
+        check_lut(centroids_rowmajor, q, lut);
+    }
+}
+
+void check_encoding(int nrows, const RowMatrix<uint8_t>& encoding_out) {
+    for (int i = 0; i < nrows; i++) {
+        for(int m = 0; m < 2 * M; m++) {
+            // indices are packed into upper and lower 4 bits
+            int byte = encoding_out(i, m / 2);
+            int idx = m % 2 ? byte >> 4 : byte & 0x0F;
+            REQUIRE(idx == m + (i % 5)); // i % 5 from how we designed mat
         }
     }
 }
@@ -114,23 +166,39 @@ TEST_CASE("bolt_encode", "[mcq][bolt]") {
         bolt_encode<M>(X.data(), nrows, total_len, centroids.data(),
                        encoding_out.data());
 
-        for (int i = 0; i < nrows; i++) {
-            for(int m = 0; m < 2 * M; m++) {
-                // indices are packed into upper and lower 4 bits
-                int byte = encoding_out(i, m / 2);
-                int idx = m % 2 ? byte >> 4 : byte & 0x0F;
-                REQUIRE(idx == m + (i % 5)); // i % 5 from how we designed mat
-            }
+        check_encoding(nrows, encoding_out);
+        // for (int i = 0; i < nrows; i++) {
+        //     for(int m = 0; m < 2 * M; m++) {
+        //         // indices are packed into upper and lower 4 bits
+        //         int byte = encoding_out(i, m / 2);
+        //         int idx = m % 2 ? byte >> 4 : byte & 0x0F;
+        //         REQUIRE(idx == m + (i % 5)); // i % 5 from how we designed mat
+        //     }
+        // }
+
+        SECTION("wrapper") {
+            BoltEncoder enc(M);
+            RowMatrix<float> centroids_rowmajor = create_rowmajor_centroids(1).cast<float>();
+            enc.set_centroids(centroids_rowmajor.data(),
+                centroids_rowmajor.rows(), centroids_rowmajor.cols());
+//            enc.set_data(X.data(), (int)X.rows(), (int)X.cols());
+            enc.set_data(X.data(), nrows, total_len);
+
+            // PRINTLN_VAR(encoding_out.cast<int>());
+            // PRINTLN_VAR(enc.codes().cast<int>());
+
+            check_encoding(nrows, enc.codes());
         }
     }
+
 }
 
 TEST_CASE("bolt_scan", "[mcq][bolt]") {
-    static constexpr int nblocks = 937; // arbitrary weird number
+    static constexpr int nblocks = 1; // arbitrary weird number
     static constexpr int nrows = 32 * nblocks;
 
     // create random codes from [0, 15]
-    ColMatrix<uint8_t> codes(nrows, ncodebooks);
+    RowMatrix<uint8_t> codes(nrows, ncodebooks);
     codes.setRandom();
     codes = codes.array() / 16;
 
@@ -142,10 +210,10 @@ TEST_CASE("bolt_scan", "[mcq][bolt]") {
     ColMatrix<uint8_t> luts(ncentroids, ncodebooks);
     bolt_lut<M>(q.data(), total_len, centroids.data(), luts.data());
 
-//    PRINTLN_VAR(codes.cast<int>());
+   // PRINTLN_VAR(codes.cast<int>());
 //    PRINTLN_VAR(codes.topRows(2).cast<int>());
 //    PRINTLN_VAR(centroids);
-//    PRINTLN_VAR(luts.cast<int>());
+   // PRINTLN_VAR(luts.cast<int>());
 //    PRINTLN_VAR(q);
 
     // do the scan to compute the distances
@@ -156,54 +224,30 @@ TEST_CASE("bolt_scan", "[mcq][bolt]") {
     bolt_scan<M>(codes.data(), luts.data(), dists_u16.data(), nblocks);
     bolt_scan<M, true>(codes.data(), luts.data(), dists_u16_safe.data(), nblocks);
 
-//    PRINTLN_VAR(dists_u8.cast<int>());
-//    PRINTLN_VAR(dists_u16.cast<int>());
-//    PRINTLN_VAR(dists_u16_safe.cast<int>());
+   // PRINTLN_VAR(dists_u8.cast<int>());
+   // PRINTLN_VAR(dists_u16.cast<int>());
+   // PRINTLN_VAR(dists_u16_safe.cast<int>());
 
-//    printf("dists true:\n");
     check_bolt_scan(dists_u8.data(), dists_u16.data(), dists_u16_safe.data(),
                     luts, codes, M, nblocks);
 
-//    for (int b = 0; b < nblocks; b++) {
-//        auto dist_ptr_u8 = dists_u8.data() + b * 32;
-//        auto dist_ptr_u16 = dists_u16.data() + b * 32;
-//        auto dist_ptr_u16_safe = dists_u16_safe.data() + b * 32;
-//        auto codes_ptr = codes.data() + b * M * 32;
-//        for (int i = 0; i < 32; i++) {
-//            int dist_u8 = dist_ptr_u8[i];
-//            int dist_u16 = dist_ptr_u16[i];
-//            int dist_u16_safe = dist_ptr_u16_safe[i];
-//
-//            // compute dist the scan should have returned based on the LUT
-//            int dist_true_u8 = 0;
-//            int dist_true_u16 = 0;
-//            int dist_true_u16_safe = 0;
-//            for (int m = 0; m < M; m++) {
-////                uint8_t byte = codes(i, m);
-//                uint8_t code = codes_ptr[i + 32 * m];
-//                uint8_t low_bits = code & 0x0F;
-//                uint8_t high_bits = (code >> 4) & 0x0F;
-//
-//                auto d0 = luts(low_bits, 2 * m);
-//                auto d1 = luts(high_bits, 2 * m + 1);
-//
-//                // uint8 distances
-//                dist_true_u8 += d0 + d1;
-//
-//                // uint16 distances
-//                auto pair_dist = d0 + d1;
-//                dist_true_u16 += pair_dist > 255 ? 255 : pair_dist;
-//
-//                // uint16 safe distance
-//                dist_true_u16_safe += d0 + d1;
-//            }
-//            dist_true_u8 = dist_true_u8 > 255 ? 255 : dist_true_u8;
-//            CAPTURE(b);
-//            CAPTURE(i);
-//            REQUIRE(dist_true_u8 == dist_u8);
-//            REQUIRE(dist_true_u16 == dist_u16);
-//            REQUIRE(dist_true_u16_safe == dist_u16_safe);
-//        }
-//    }
-//    printf("\n");
+    SECTION("wrapper") {
+        BoltEncoder enc(M);
+        RowMatrix<float> centroids = create_rowmajor_centroids(1).cast<float>();
+        enc.set_centroids(centroids.data(), centroids.rows(), centroids.cols());
+//        enc._codes = codes;
+        enc.set_codes(codes); // subtlety: codes needs to be a RowMatrix
+
+        // printf("orig u16 dists:\n");
+        // PRINTLN_VAR(dists_u16.cast<int>());
+
+        auto dists = enc.dists_l2(q.data(), (int)q.size());
+
+        // printf("wrapper dists:\n");
+        // ar::print(dists);
+        // printf("wrapper dists size: %ld\n", dists.size());
+
+        check_bolt_scan(dists_u8.data(), dists.data(), dists_u16_safe.data(),
+                    luts, codes, M, nblocks);
+    }
 }
