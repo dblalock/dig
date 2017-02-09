@@ -1,5 +1,4 @@
 
-
 #include "catch.hpp"
 #include "product_quantize.hpp"
 
@@ -11,10 +10,10 @@
 #include "debug_utils.hpp"
 
 static constexpr int M = 16; // number of bytes per compressed vect
-static constexpr int64_t nrows_enc = 10*1000; // number of rows to encode
+static constexpr int64_t nrows_enc = 1*1000; // number of rows to encode
 static constexpr int64_t nrows_lut = 10*1000; // number of luts to create
 static constexpr int64_t nrows_scan = 1000*1000;
-static constexpr int64_t nrows_query = 1000*1000;
+static constexpr int64_t nrows_query = 100*1000;
 static constexpr int subvect_len = 4; // M * subvect_len = number of features
 static constexpr int nqueries = 100;
 
@@ -28,7 +27,6 @@ static constexpr int lut_data_sz = ncentroids * ncodebooks;
 
 
 TEST_CASE("print pq params", "[pq][mcq][profile]") {
-    // printf("------------------------ pq: using M = %d\n", M);
     printf("------------------------ pq\n");
     printf("---- pq profiling parameters\n");
     printf("M: %d\n", M);
@@ -43,6 +41,7 @@ TEST_CASE("print pq params", "[pq][mcq][profile]") {
 
 TEST_CASE("pq encoding speed", "[pq][mcq][profile]") {
     static constexpr int nrows = nrows_enc;
+    // static constexpr int codes_sz = nrows * M;
     // // static constexpr int M = 32;
     // static constexpr int subvect_len = 4;
     // static constexpr int ncodebooks = M;
@@ -53,12 +52,30 @@ TEST_CASE("pq encoding speed", "[pq][mcq][profile]") {
 
     ColMatrix<float> centroids(ncentroids, ncols);
     centroids.setRandom();
-    RowMatrix<float> Q(nrows, ncols);
-    ColMatrix<uint8_t> lut_out(ncentroids, ncodebooks);
+    RowMatrix<float> X(nrows, ncols);
+    X.setRandom();
+    ColMatrix<uint8_t> codes_out(nrows, M);
 
-    PROFILE_DIST_COMPUTATION_LOOP("pq encode", 5, lut_out.data(),
-        lut_data_sz, nrows,
-        pq_lut_8b<M>(Q.row(i).data(), ncols, centroids.data(), lut_out.data()));
+    REQUIRE(X.data() != nullptr);
+    REQUIRE(X.row(nrows-1).data() != nullptr);
+
+//
+//    for (int i = 0; i < nrows; i++) {
+//        pq_encode_8b<M>(X.row(i).data(), nrows, ncols, centroids.data(),
+//                        codes_out.data());
+//
+//    }
+
+    PROFILE_DIST_COMPUTATION("pq encode", 5, codes_out.data(), nrows,
+        pq_encode_8b<M>(X.data(), nrows, ncols, centroids.data(),
+            codes_out.data()) );
+
+    // optimized product quantization (OPQ)
+    ColMatrix<float> R(ncols, ncols);
+    R.setRandom();
+    RowMatrix<float> X_tmp(nrows, ncols);
+    PROFILE_DIST_COMPUTATION("opq encode", 5, codes_out.data(), nrows,
+        opq_encode_8b<M>(X, centroids.data(), R, X_tmp, codes_out.data()) );
 }
 
 
@@ -92,20 +109,30 @@ TEST_CASE("pq lut encoding speed", "[pq][mcq][profile]") {
     PROFILE_DIST_COMPUTATION_LOOP("pq encode lut float dist", 5, lut_out_f.data(),
         lut_data_sz, nrows,
         pq_lut_8b<M>(Q.row(i).data(), ncols, centroids.data(), lut_out_f.data()));
+
+
+    // optimized product quantization (OPQ)
+    ColMatrix<float> R(ncols, ncols);
+    R.setRandom();
+    RowVector<float> q_tmp(ncols);
+
+    PROFILE_DIST_COMPUTATION_LOOP("opq encode lut 8b dist", 5, lut_out_u8.data(),
+        lut_data_sz, nrows,
+        opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_u8.data()));
+    PROFILE_DIST_COMPUTATION_LOOP("opq encode lut 16b dist", 5, lut_out_u16.data(),
+        lut_data_sz, nrows,
+        opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_u16.data()));
+    PROFILE_DIST_COMPUTATION_LOOP("opq encode lut float dist", 5, lut_out_f.data(),
+        lut_data_sz, nrows,
+        opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_f.data()));
+
+//    PROFILE_DIST_COMPUTATION("opq encode", 5, codes_out.data(), nrows,
+//                             opq_encode_8b<M>(X, centroids.data(), R, X_tmp, codes_out.data()) );
 }
 
 
 TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
-    // static constexpr int nblocks = 500 * 1000;
     static constexpr int nrows = nrows_scan;
-     // static constexpr int nblocks = 100 * 1000;
-//     static constexpr int nblocks = 10 * 1000;
-    // static constexpr int nblocks = 1 * 1000;
-//    static constexpr int nblocks = 37;
-    // static constexpr int M = 8; // number of bytes per compressed vect
-    // static constexpr int M = 32; // number of bytes per compressed vect
-//    static constexpr int ncodebooks = M;
-//    static constexpr int ncentroids = 16;
 
     // create random codes from in [0, 256]
     ColMatrix<uint8_t> codes(nrows, ncodebooks);
@@ -156,6 +183,18 @@ void _run_query(const uint8_t* codes, int nrows,
     pq_scan_8b<M>(codes, lut_out, dists_out, nrows);
 }
 
+template<int M, class MatrixT, class dist_t>
+void _run_query_opq(const uint8_t* codes, int nrows,
+                RowVector<float> q,
+                const float* centroids,
+                const MatrixT& R,
+                RowVector<float> q_out,
+                dist_t* lut_out, dist_t* dists_out)
+{
+    opq_lut_8b<M>(q, centroids, R, q_out, lut_out);
+    pq_scan_8b<M>(codes, lut_out, dists_out, nrows);
+}
+
 TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
     static constexpr int nrows = nrows_query;
 
@@ -171,6 +210,11 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
     ColMatrix<float> centroids(ncentroids, ncols);
     centroids.setRandom();
 
+    // create random opq rotation
+    ColMatrix<float> R(ncols, ncols);
+    R.setRandom();
+    RowVector<float> q_tmp(ncols);
+
     SECTION("uint8_t") {
         ColMatrix<uint8_t> luts(ncentroids, ncodebooks);
         RowVector<uint8_t> dists(nrows);
@@ -178,6 +222,11 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
             nrows, nqueries,
             _run_query<M>(codes.data(), nrows, Q.row(i).data(), ncols,
                 centroids.data(), luts.data(), dists.data()) );
+
+        PROFILE_DIST_COMPUTATION_LOOP("opq query u8", 5, dists.data(),
+            nrows, nqueries,
+            _run_query_opq<M>(codes.data(), nrows, Q.row(i),
+                centroids.data(), R, q_tmp, luts.data(), dists.data()) );
     }
     SECTION("uint16_t") {
         ColMatrix<uint16_t> luts(ncentroids, ncodebooks);
@@ -186,6 +235,11 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
             nrows, nqueries,
             _run_query<M>(codes.data(), nrows, Q.row(i).data(), ncols,
                 centroids.data(), luts.data(), dists.data()) );
+
+        PROFILE_DIST_COMPUTATION_LOOP("opq query u16", 5, dists.data(),
+            nrows, nqueries,
+            _run_query_opq<M>(codes.data(), nrows, Q.row(i),
+                centroids.data(), R, q_tmp, luts.data(), dists.data()) );
     }
     SECTION("float") {
         ColMatrix<float> luts(ncentroids, ncodebooks);
@@ -194,6 +248,11 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
             nrows, nqueries,
             (_run_query<M>(codes.data(), nrows, Q.row(i).data(), ncols,
                 centroids.data(), luts.data(), dists.data()) ));
+
+        PROFILE_DIST_COMPUTATION_LOOP("opq query float", 5, dists.data(),
+            nrows, nqueries,
+            _run_query_opq<M>(codes.data(), nrows, Q.row(i),
+                centroids.data(), R, q_tmp, luts.data(), dists.data()) );
     }
 }
 

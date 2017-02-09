@@ -15,7 +15,7 @@ static constexpr int M = 16; // number of bytes per compressed vect
 static constexpr int64_t nrows_enc = 10*1000; // number of rows to encode
 static constexpr int64_t nrows_lut = 10*1000; // number of luts to create
 static constexpr int64_t nblocks_scan = 1000*1000 / 32;
-static constexpr int64_t nblocks_query = 1000*1000 / 32;
+static constexpr int64_t nblocks_query = 100*1000 / 32;
 static constexpr int subvect_len = 4; // M * subvect_len = number of features
 static constexpr int nqueries = 100;
 

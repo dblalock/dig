@@ -15,10 +15,11 @@
 #include <type_traits>
 
 #include "avx_utils.hpp"
+#include "eigen_utils.hpp" // for opq rotations
 
 
 template<int NBytes>
-void pq_encode_8b(const float* X, int64_t nrows, int ncols,
+void pq_encode_8b(const float* X, int64_t nrows, int64_t ncols,
                   const float* centroids, uint8_t* out)
 {
     static constexpr int lut_sz = 256;
@@ -26,7 +27,7 @@ void pq_encode_8b(const float* X, int64_t nrows, int ncols,
     static constexpr int nstripes = lut_sz / packet_width;
     static constexpr int ncodebooks = NBytes;
     static_assert(NBytes > 0, "Code length <= 0 is not valid");
-    const int subvect_len = ncols / ncodebooks;
+    const int subvect_len = static_cast<int>(ncols / ncodebooks);
     const int trailing_subvect_len = ncols % ncodebooks;
     assert(trailing_subvect_len == 0); // TODO remove this constraint
 
@@ -120,8 +121,8 @@ void pq_encode_8b(const float* X, int64_t nrows, int ncols,
 
 // enum class Reductions { DistL2, DotProd };
 
-template<int NBytes, int Reduction=Reductions::DistL2, class dist_t>  // TODO try with {float, uint16, uint8} dists
-void pq_lut_8b(const float* q, int len, const float* centroids, dist_t* out)
+template<int NBytes, int Reduction=Reductions::DistL2, class dist_t>
+void pq_lut_8b(const float* q, int64_t len, const float* centroids, dist_t* out)
 {
     static constexpr int lut_sz = 256;
     static constexpr int packet_width = 8; // objs per simd register
@@ -137,7 +138,7 @@ void pq_lut_8b(const float* q, int len, const float* centroids, dist_t* out)
         Reduction == Reductions::DistL2 ||
         Reduction == Reductions::DotProd,
         "Only reductions {DistL2, DotProd} are supported.");
-    const int subvect_len = len / ncodebooks;
+    const int subvect_len = static_cast<int>(len / ncodebooks);
     const int trailing_subvect_len = len % ncodebooks;
     assert(trailing_subvect_len == 0); // TODO remove this constraint
 
@@ -236,6 +237,33 @@ inline void pq_scan_8b(const uint8_t* codes, const dist_t* luts,
         }
         codes += NBytes;
     }
+}
+
+// ================================================================ OPQ
+
+template<int NBytes, class MatrixT1, class MatrixT2> // R is a rotation mat
+void opq_encode_8b(const MatrixT1& X, const float* centroids, const MatrixT2& R,
+    RowMatrix<float>& X_out, uint8_t* out)
+{
+    // apply rotation and forward to pq func
+    assert(X.rows() == X_out.rows());
+    assert(X.cols() == X_out.cols());
+    assert(X.cols() == R.rows());
+    X_out = X * R;
+    return pq_encode_8b<NBytes>(X_out.data(), X_out.rows(), X_out.cols(),
+                                centroids, out);
+}
+
+template<int NBytes, int Reduction=Reductions::DistL2,
+    class MatrixT, class dist_t>
+void opq_lut_8b(const RowVector<float>& q, const float* centroids,
+    const MatrixT& R, RowVector<float>& q_out, dist_t* out)
+{
+    // apply rotation and forward to pq func
+    assert(q.cols() == q_out.cols());
+    assert(q.cols() == R.rows());
+    q_out = q * R;
+    return pq_lut_8b<NBytes, Reduction>(q_out.data(), q_out.cols(), centroids, out);
 }
 
 #endif // include guard
