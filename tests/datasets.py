@@ -55,6 +55,7 @@ class Deep1M:
     DIR         = join(DATA_DIR, 'deep1m')              # noqa
     TRAIN       = join(DIR, 'deep1M_learn.npy')         # noqa
     TEST        = join(DIR, 'deep1M_base.npy')          # noqa
+    TEST_100    = join(DIR, 'deep1M_test_100k.npy')     # noqa
     QUERIES     = join(DIR, 'deep1M_queries.npy')       # noqa
     TRUTH_TRAIN = join(DIR, 'deep1M_truth_train.npy')   # noqa
     TRUTH   = join(DIR, 'deep1M_groundtruth.npy')       # noqa
@@ -149,7 +150,7 @@ def _ground_truth_for_dataset(which_dataset):
     return None  # TODO
 
 
-# @_memory.cache
+@_memory.cache
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
                  num_queries=10, Ntrain=-1):
     true_nn = None

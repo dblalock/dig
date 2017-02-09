@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
+import functools
 import numpy as np
 import time
 
+import datasets
 import dig
-from datasets import load_dataset, Datasets
 
 from joblib import Memory
 _memory = Memory('.', verbose=1)
@@ -207,6 +208,7 @@ def debug():
 if __name__ == '__main__':
     # debug()
 
+    num_queries = 4
     # N = 1000
     # N = 10 * 1000
     N = 100 * 1000
@@ -214,17 +216,26 @@ if __name__ == '__main__':
     # N = 1000 * 1000
     D = 128
     # D = 200
+    norm_mean = True
+    norm_len = False
 
-    # X = load_dataset(Datasets.RAND_WALK, N, D, norm_len=True)  # 1.002
-    # X = load_dataset(Datasets.RAND_UNIF, N, D, norm_len=True)  # 1.002
-    # X = load_dataset(Datasets.RAND_GAUSS, N, D, norm_len=True)  # 1.03
-    # X = load_dataset(Datasets.RAND_GAUSS, N, D, norm_mean=True)  # 1.03
-    # X, q = load_dataset(Datasets.GLOVE_100, norm_mean=True)  # 2.5ish?
-    X, q = load_dataset(Datasets.SIFT_100, norm_mean=True)  # 5ish?
-    # X, q = load_dataset(Datasets.GLOVE_200, norm_mean=True)  #
-    # X, q = load_dataset(Datasets.SIFT_200, norm_mean=True)  #
-    # X, q = load_dataset(Datasets.GLOVE, norm_mean=True)  #
-    # X, q = load_dataset(Datasets.SIFT, norm_mean=True)  #
+    dataset_func = functools.partial(datasets.load_dataset,
+                                     N=N, D=D,
+                                     num_queries=num_queries,
+                                     norm_len=norm_len, norm_mean=norm_mean)
+
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.LabelMe)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.Mnist) // segfaults?
+    X_train, Q, X_test, true_nn = dataset_func(datasets.Convnet1M)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.Glove.TEST_100)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.Sift1M.TEST_100)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.Glove.TEST_200)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.Sift1M.TEST_200)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.GLOVE)
+    # X_train, Q, X_test, true_nn = dataset_func(datasets.Sift1M)
+
+    X = X_train
+    q = Q[0, :]
 
     # so 5% seems to get it 80-100% of the top 10nn right basically all of
     # the time in about .5-.6ms using 200k pts. Below that acc becomes really
@@ -255,6 +266,7 @@ if __name__ == '__main__':
     # t_python = (time.clock() - t0) * 1000
     # print "-> python full dists time double\t= {}".format(t_python)
 
+    # TODO use precomputed ground truth from dataset
     t0 = time.clock()
     diffs = Xfloat - qfloat
     trueDistsF = np.sum(diffs * diffs, axis=1)
