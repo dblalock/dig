@@ -28,7 +28,7 @@ BoltEncoder::BoltEncoder(int nbytes): _nbytes(nbytes) {
     }
 }
 
-bool BoltEncoder::set_centroids(float* X, int m, int n) {
+bool BoltEncoder::set_centroids(const float* X, int m, int n) {
     _centroids.resize(m, n);
     auto implied_nbytes = m / (2 * 16);
     assert(_nbytes > 0);
@@ -60,11 +60,11 @@ bool BoltEncoder::set_centroids(float* X, int m, int n) {
     }
     return false;
 }
-bool BoltEncoder::set_centroids(float* X, long m, long n) {
+bool BoltEncoder::set_centroids(const float* X, long m, long n) {
     return BoltEncoder::set_centroids(X, (int)m, (int)n);
 }
 
-bool BoltEncoder::set_data(float* X, int m, int n) {
+bool BoltEncoder::set_data(const float* X, int m, int n) {
     assert(_nbytes > 0);
     assert(m > 0);
     assert(n > 2 * _nbytes); // equal would probably also work, but play safe
@@ -94,7 +94,7 @@ bool BoltEncoder::set_data(float* X, int m, int n) {
     }
     return false;
 }
-bool BoltEncoder::set_data(float* X, long m, long n) {
+bool BoltEncoder::set_data(const float* X, long m, long n) {
     return BoltEncoder::set_data(X, (int)m, (int)n);
 }
 
@@ -149,7 +149,7 @@ ColMatrix<uint8_t> BoltEncoder::lut(RowVector<float> q) {
 }
 
 template<int Reduction=Reductions::DistL2, class dist_t>
-void query(float* q, int len, int nbytes,
+void query(const float* q, int len, int nbytes,
     ColMatrix<float> _centroids, RowMatrix<uint8_t> _codes,
     int64_t _ncodes, dist_t* dists)
 {
@@ -200,7 +200,7 @@ void query(float* q, int len, int nbytes,
 // TODO version that writes to argout array to avoid unnecessary copy
 // TODO allow specifying safe (no overflow) scan
 template<int Reduction=Reductions::DistL2>
-vector<uint16_t> query_all(float* q, int len, int nbytes,
+vector<uint16_t> query_all(const float* q, int len, int nbytes,
     ColMatrix<float> _centroids, RowMatrix<uint8_t> _codes, int64_t _ncodes)
 {
     RowVector<uint16_t> dists(_codes.rows()); // need 32B alignment, so can't use stl vector
@@ -217,7 +217,7 @@ vector<uint16_t> query_all(float* q, int len, int nbytes,
 }
 
 template<int Reduction=Reductions::DistL2>
-vector<int64_t> query_knn(float* q, int len, int nbytes,
+vector<int64_t> query_knn(const float* q, int len, int nbytes,
     ColMatrix<float> _centroids, RowMatrix<uint8_t> _codes,
     int64_t _ncodes, int k)
 {
@@ -234,20 +234,20 @@ vector<int64_t> query_knn(float* q, int len, int nbytes,
 }
 
 
-vector<uint16_t> BoltEncoder::dists_l2(float* q, int len) {
+vector<uint16_t> BoltEncoder::dists_l2(const float* q, int len) {
     return query_all<Reductions::DistL2>(
         q, len, _nbytes, _centroids, _codes, _ncodes);
 }
-vector<uint16_t> BoltEncoder::dot_prods(float* q, int len) {
+vector<uint16_t> BoltEncoder::dot_prods(const float* q, int len) {
     return query_all<Reductions::DotProd>(
         q, len, _nbytes, _centroids, _codes, _ncodes);
 }
 
-vector<int64_t> BoltEncoder::knn_l2(float* q, int len, int k) {
+vector<int64_t> BoltEncoder::knn_l2(const float* q, int len, int k) {
     return query_knn<Reductions::DistL2>(
         q, len, _nbytes, _centroids, _codes, _ncodes, k);
 }
-vector<int64_t> BoltEncoder::knn_mips(float* q, int len, int k) {
+vector<int64_t> BoltEncoder::knn_mips(const float* q, int len, int k) {
     return query_knn<Reductions::DotProd>(
         q, len, _nbytes, _centroids, _codes, _ncodes, k);
 }

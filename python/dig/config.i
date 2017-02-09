@@ -27,10 +27,10 @@ import_array();
 %np_vector_typemaps(double            , NPY_DOUBLE   )
 
 // apparently these are also necessary...
-%np_vector_typemaps(int16_t, NPY_INT)
+%np_vector_typemaps(int16_t, NPY_SHORT)
 %np_vector_typemaps(int32_t, NPY_INT)
 %np_vector_typemaps(int64_t, NPY_LONGLONG)
-%np_vector_typemaps(uint16_t, NPY_UINT)
+%np_vector_typemaps(uint16_t, NPY_USHORT)
 %np_vector_typemaps(uint32_t, NPY_UINT)
 %np_vector_typemaps(uint64_t, NPY_ULONGLONG)
 // %np_vector_typemaps(int, NPY_INT)

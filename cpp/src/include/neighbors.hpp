@@ -78,16 +78,16 @@ public:
     ~BoltEncoder() = default;
 
     // bool set_nbytes(int nbytes);
-    bool set_centroids(float* X, int m, int n);
-    bool set_centroids(float* X, long m, long n);
-    bool set_data(float* X, int m, int n);
-    bool set_data(float* X, long m, long n);
+    bool set_centroids(const float* X, int m, int n);
+    bool set_centroids(const float* X, long m, long n);
+    bool set_data(const float* X, int m, int n);
+    bool set_data(const float* X, long m, long n);
 
-    vector<uint16_t> dists_l2(float* q, int len);
-    vector<uint16_t> dot_prods(float* q, int len);
+    vector<uint16_t> dists_l2(const float* q, int len);
+    vector<uint16_t> dot_prods(const float* q, int len);
 
-    vector<int64_t> knn_l2(float* q, int len, int k);
-    vector<int64_t> knn_mips(float* q, int len, int k);
+    vector<int64_t> knn_l2(const float* q, int len, int k);
+    vector<int64_t> knn_mips(const float* q, int len, int k);
 
     bool set_codes(const RowMatrix<uint8_t>& codes);
     bool set_codes(const uint8_t* codes, int m, int n);
