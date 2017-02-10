@@ -1,12 +1,43 @@
 #!/usr/bin/env python
 
+import itertools
 import numpy as np
 from sklearn import cluster
+import types
+
 import kmc2  # state-of-the-art kmeans initialization (as of NIPS 2016)
 
 from joblib import Memory
 _memory = Memory('.', verbose=0)
 
+
+# ================================================================ misc
+
+def is_dict(x):
+    return isinstance(x, dict)
+
+
+def is_list_or_tuple(x):
+    return isinstance(x, (list, tuple))
+
+
+def as_list_or_tuple(x):
+    return x if is_list_or_tuple(x) else [x]
+
+
+def is_string(x):
+    return isinstance(x, types.StringTypes)
+
+
+def flatten_list_of_lists(l):
+    return list(itertools.chain.from_iterable(l))
+
+
+def element_size_bytes(x):
+    return np.dtype(x.dtype).itemsize
+
+
+# ================================================================ distance
 
 def dists_sq(X, q):
     diffs = X - q
@@ -16,10 +47,6 @@ def dists_sq(X, q):
 def dists_l1(X, q):
     diffs = np.abs(X - q)
     return np.sum(diffs, axis=-1)
-
-
-def element_size_bytes(x):
-    return np.dtype(x.dtype).itemsize
 
 
 def sq_dists_to_vectors(X, queries, rowNorms=None, queryNorms=None):
@@ -34,20 +61,11 @@ def sq_dists_to_vectors(X, queries, rowNorms=None, queryNorms=None):
     if rowNorms is None:
         rowNorms = np.sum(X * X, axis=1, keepdims=True)
 
-    # t0 = time.clock()
-
     if queryNorms is None:
         queryNorms = np.sum(queries * queries, axis=1)
 
     dotProds = np.dot(X, queries.T)
     return (-2 * dotProds) + rowNorms + queryNorms
-
-    # t_python = (time.clock() - t0) * 1000
-    # print "-> python batch{} knn time\t= {:03} ({:.3}/query)".format(
-    #     Q, t_python, t_python / Q)
-
-    # idxs_sorted = np.argsort(dists, axis=0)
-    # return dists, idxs_sorted, t_python
 
 
 def all_eq(x, y):

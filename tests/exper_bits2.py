@@ -11,7 +11,9 @@ from scipy import stats
 from sklearn.decomposition import TruncatedSVD
 
 import datasets
+import files
 import product_quantize as pq
+import pyience as pyn
 
 from utils import dists_sq, kmeans, orthonormalize_rows, top_k_idxs
 
@@ -19,6 +21,8 @@ from joblib import Memory
 _memory = Memory('.', verbose=0)
 
 np.set_printoptions(precision=3)
+
+SAVE_DIR = '../results'
 
 # ================================================================ Distances
 
@@ -194,6 +198,11 @@ def load_dataset_and_groups(which_dataset, num_centroids=256,
     centroids = None
     groups = None
     name = str(which_dataset)
+    try:
+        name = files.basename(name, noext=True)
+    except:
+        pass
+
     return Dataset(X, q, X, X_test, true_nn, centroids, groups, name)
 
 
@@ -683,6 +692,7 @@ class PQEncoder(object):
                                      bits_per_subvect=bits_per_subvect,
                                      nsubvects=nsubvects)
         self.nsubvects, self.ncentroids, self.subvect_len = tmp
+        self.code_bits = int(np.log2(self.ncentroids))
 
         # for fast lookups via indexing into flattened array
         self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
@@ -692,6 +702,13 @@ class PQEncoder(object):
 
         self.centroids = _learn_centroids(X, self.ncentroids, self.nsubvects,
                                           self.subvect_len)
+
+    def name(self):
+        return "PQ_{}x{}b".format(self.nsubvects, self.code_bits)
+
+    def params(self):
+        return {'_algo': 'PQ', '_ncodebooks': self.nsubvects,
+                '_code_bits': self.code_bits}
 
     def encode_X(self, X, **sink):
         idxs = pq._encode_X_pq(X, codebooks=self.centroids,
@@ -732,11 +749,13 @@ class OPQEncoder(PQEncoder):
         X = dataset.X
         self.elemwise_dist_func = elemwise_dist_func
         self.quantize_lut = quantize_lut
+        self.opq_iters = opq_iters
 
         tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
                                      bits_per_subvect=bits_per_subvect,
                                      nsubvects=nsubvects)
         self.nsubvects, self.ncentroids, self.subvect_len = tmp
+        self.code_bits = int(np.log2(self.ncentroids))
 
         # for fast lookups via indexing into flattened array
         self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
@@ -858,6 +877,16 @@ class OPQEncoder(PQEncoder):
 
             #     plt.show()
 
+    def name(self):
+        return "OPQ_{}x{}b_iters={}_quantize={}".format(
+            self.nsubvects, self.code_bits, self.opq_iters,
+            int(self.quantize_lut))
+
+    def params(self):
+        return {'_algo': 'OPQ', '_ncodebooks': self.nsubvects,
+                '_code_bits': self.code_bits, 'opq_iters': self.opq_iters,
+                '_quantize': self.quantize_lut}
+
     def _fit_query(self, q, quantize=False, subtract_mins=False):
         qR = pq.opq_rotate(q, self.R).ravel()
         lut = _fit_opq_lut(qR, centroids=self.centroids,
@@ -954,14 +983,19 @@ class OPQEncoder(PQEncoder):
 # ================================================================ Main
 
 def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
-                 verbosity=1, plot=False):
+                 # eval_dists=False, verbosity=1, plot=False):
+                 eval_dists=True, verbosity=1, plot=False):
     # X, queries, centroids, groups = dataset
-    X = dataset.X
+    X = dataset.X_test
     queries = dataset.q
-    centroids = dataset.centroids
-    groups = dataset.groups
+    true_nn = dataset.true_nn
 
-    X, q = datasets.extract_random_rows(X, how_many=100)
+    need_true_dists = eval_dists or plot or true_nn is None
+
+    # centroids = dataset.centroids
+    # groups = dataset.groups
+
+    # X, q = datasets.extract_random_rows(X, how_many=100)
 
     # for i, q in enumerate(queries[:1]):
     #     dists_true = encoder.dists_true(X[:100], q)
@@ -979,75 +1013,70 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
 
     t0 = time.time()
 
-    # precompute_encodings = len(queries) > 10
-    # if precompute_encodings:
-    #     encodings = {i: encoder.encode_X(group) for i, group in enumerate(groups)}
+    # performance metrics
+    count_in_top1 = 0.
+    count_in_top10 = 0.
+    count_in_top100 = 0.
+    count_in_top1000 = 0.
+    if eval_dists:
+        fracs_below_max = []
+        corrs = []
+        all_rel_errs = []
+        all_errs = []
+        total_dist = 0.
+        # mean_rel_errs = []
+        # mean_rel_errs_sq = []
 
-    # search_k = 20
-    # search_k = 100
-    # search_k = len(groups)  # search everything
-    fracs = []
-    # X_ = X[:10000]  # TODO rm
+    if need_true_dists:
+        X = X[:10000]  # limit to 10k points because otherwise it takes forever
 
-    # X = X[:10000]
-    X = X[:50000]
     X_enc = encoder.encode_X(X)
     for i, q in enumerate(queries):
 
-        # if i < 10:
-        #     dists_true = dists_sq(X_, X_[i])
-        #     # print "eval dists_true shape", dists_true.shape
-        #     # print "q shape", X[i].shape
-        #     knn_idxs = top_k_idxs(dists_true, 10, smaller_better=True)
-        #     print "true knn dists eval:", dists_true[knn_idxs]
-
         q_enc = encoder.encode_q(q)
         encoder.fit_query(q)
-        # all_true_dists = dist_func_true(X, q)
-        all_true_dists = dists_sq(X, q)
+        if need_true_dists:
+            all_true_dists = dists_sq(X, q)
         all_enc_dists = dist_func_enc(X_enc, q_enc)
-
-        # print "nn dist: ", np.min(all_true_dists)
-
-        # print "shapes of q, true dists, enc dists"
-        # print q.shape
-        # print all_true_dists.shape
-        # print all_enc_dists.shape
-
-        # all_true_dists = []
-        # all_enc_dists = []
-
-        # dists_to_centroids = dist_func_true(centroids, q)
-        # idxs = top_k_idxs(dists_to_centroids, search_k, smaller_better=True)
-        # for idx in idxs:
-        #     X = groups[idx]
-        #     if len(X) == 0:
-        #         print "Warning: group at idx {} had no elements!".format(idx)
-        #         continue
-
-        #     true_dists = dist_func_true(X, q)
-        #     all_true_dists.append(true_dists)
-
-        #     if precompute_encodings:
-        #         X_enc = encodings[idx]
-        #     else:
-        #         X_enc = encoder.encode_X(X, idx=idx)
-
-        #     enc_dists = dist_func_enc(X_enc, q_enc)
-        #     all_enc_dists.append(enc_dists)
-
-        # all_true_dists = np.hstack(all_true_dists)
-        # all_enc_dists = np.hstack(all_enc_dists)
 
         # ------------------------ begin analysis / reporting code
 
-        knn_idxs = top_k_idxs(all_true_dists, 10, smaller_better=True)
-        cutoff = all_true_dists[knn_idxs[-1]]
-        knn_bit_dists = all_enc_dists[knn_idxs]
-        max_bit_dist = np.max(knn_bit_dists)
-        num_below_max = np.sum(all_enc_dists <= max_bit_dist)
+        # find true knn
+        if need_true_dists:
+            knn_idxs = top_k_idxs(all_true_dists, 10, smaller_better=True)
+        else:
+            knn_idxs = true_nn[i, :10]
+
+        # compute fraction of points with enc dists as close as 10th nn
+        knn_enc_dists = all_enc_dists[knn_idxs]
+        max_enc_dist = np.max(knn_enc_dists)
+        num_below_max = np.sum(all_enc_dists <= max_enc_dist)
         frac_below_max = float(num_below_max) / len(all_enc_dists)
-        fracs.append(frac_below_max)
+        fracs_below_max.append(frac_below_max)
+
+        # compute recall@R stats
+        top_1000 = top_k_idxs(all_enc_dists, 1000, smaller_better=True)
+        nn_idx = knn_idxs[0]
+        count_in_top1 += nn_idx == top_1000[0]
+        count_in_top10 += nn_idx in top_1000[:10]
+        count_in_top100 += nn_idx in top_1000[:100]
+        count_in_top1000 += nn_idx in top_1000
+
+        # compute distortion in distances, quantified by corr and rel err
+        if eval_dists:
+            total_dist += np.sum(all_true_dists)
+            corrs.append(np.corrcoef(all_enc_dists, all_true_dists))
+            rel_errs = (all_enc_dists - all_true_dists) / all_true_dists
+            all_rel_errs.append(rel_errs)
+            all_errs.append(all_enc_dists - all_true_dists)
+            assert np.all(all_enc_dists >= 0)
+            assert np.all(all_true_dists >= 0)
+            assert not np.any(np.isinf(all_enc_dists))
+            assert not np.any(np.isnan(all_enc_dists))
+            assert not np.any(np.isinf(all_true_dists))
+            assert not np.any(np.isnan(all_true_dists))
+            # mean_rel_errs.append(np.mean(rel_errs))
+            # mean_rel_errs_sq.append(np.mean(rel_errs * rel_errs))
 
         if plot and i < 3:  # at most 3 plots
             num_nn = min(10000, len(all_true_dists) - 1)
@@ -1058,13 +1087,14 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
                                 xlim=xlim, ylim=ylim, joint_kws=dict(s=10))
 
             # hack to bully the sb JointGrid into plotting a vert line
+            cutoff = all_true_dists[knn_idxs[-1]]
             grid.x = [cutoff, cutoff]
             grid.y = ylim
             grid.plot_joint(plt.plot, color='r', linestyle='--')
 
             # also make it plot cutoff in terms of quantized dist
             grid.x = xlim
-            grid.y = [max_bit_dist, max_bit_dist]
+            grid.y = [max_enc_dist, max_enc_dist]
             grid.plot_joint(plt.plot, color='k', linestyle='--')
 
         # if i < 10:
@@ -1074,14 +1104,79 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     if plot:
         plt.show()
 
-    stats = np.array(fracs)
     t = time.time() - t0
-    if verbosity > 0:
-        print "mean, 90th pctile, std of fracs to search: " \
-            "{:.3f}, {:.3f}, {:.3f} ({:.3f}s)".format(
-                np.mean(stats), np.percentile(stats, q=90), np.std(stats), t)
 
-    return fracs
+    stats = {}
+    # stats['encoder'] = name_for_encoder(encoder)
+    stats['X_rows'] = X.shape[0]
+    stats['X_cols'] = X.shape[1]
+    stats['nqueries'] = len(queries)
+    stats['eval_duration_secs'] = t
+    stats['fracs_below_max_mean'] = np.mean(fracs_below_max)
+    stats['fracs_below_max_std'] = np.std(fracs_below_max)
+    stats['fracs_below_max_50th'] = np.median(fracs_below_max)
+    stats['fracs_below_max_90th'] = np.percentile(frac_below_max, q=90)
+    stats['recall@1'] = count_in_top1 / len(queries)
+    stats['recall@10'] = count_in_top10 / len(queries)
+    stats['recall@100'] = count_in_top100 / len(queries)
+    stats['recall@1000'] = count_in_top1000 / len(queries)
+    if eval_dists:
+        rel_errs = np.hstack(all_rel_errs)
+        assert np.all(rel_errs >= -1)
+        # print "rel_errs[:20]", rel_errs[:20]
+        # print "rel_errs inf idxs: ", np.where(np.isinf(rel_errs))[0]
+        # print "rel_errs nan idxs: ", np.where(np.isnan(rel_errs))[0]
+        rel_errs = rel_errs[~(np.isnan(rel_errs) + np.isinf(rel_errs))]
+        errs = np.hstack(all_errs)
+        # mean_dist = total_dist / (X.shape[1] * len(queries))
+        # errs = errs[~(np.isnan(errs) + np.isinf(rel_errs))]
+        # print "rel errs shape", rel_errs.shape
+        # print "np.where"
+
+        stats['corr_mean'] = np.mean(corrs)
+        stats['corr_std'] = np.std(corrs)
+        stats['mse_mean'] = np.mean(errs * errs)
+        stats['mse_std'] = np.std(errs * errs)
+        stats['rel_err_mean'] = np.mean(rel_errs)
+        stats['rel_err_std'] = np.std(rel_errs)
+        stats['rel_err_sq_mean'] = np.mean(rel_errs * rel_errs)
+        stats['rel_err_sq_std'] = np.std(rel_errs * rel_errs)
+
+    if verbosity > 0:
+        print "------------------------ {}".format(name_for_encoder(encoder))
+        keys = sorted(stats.keys())
+        lines = ["{}: {}".format(k, stats[k]) for k in keys if isinstance(stats[k], str)]
+        lines += ["{}: {:.4g}".format(k, stats[k]) for k in keys if not isinstance(stats[k], str)]
+        print "\n".join(lines)
+
+    stats.update(encoder_params(encoder))
+
+    # if verbosity > 0:
+    #     stats = np.array(fracs_below_max)
+    #     print "mean, 90th pctile, std of fracs to search: " \
+    #         "{:.3f}, {:.3f}, {:.3f} ({:.3f}s)".format(
+    #             np.mean(fracs), np.percentile(stats, q=90), np.std(stats), t)
+
+    # df = pd.DataFrame.from_records(stats)
+    # save_data_frame(df)
+    # pyn.save_dict_as_data_frame(stats, SAVE_DIR)
+
+    return stats
+
+
+def name_for_encoder(encoder):
+    # return encoder.name()
+    try:
+        return encoder.name()
+    except AttributeError:
+        return str(type(encoder))
+
+
+def encoder_params(encoder):
+    try:
+        return encoder.params()
+    except AttributeError:
+        return {'algo': name_for_encoder(encoder)}
 
 
 def main():
@@ -1128,10 +1223,12 @@ def main():
     # dataset = dataset_func(datasets.Sift1M.TEST_100)
     # dataset = dataset_func(datasets.Gist.TEST_100)
     # dataset = dataset_func(datasets.Mnist)
-    # dataset = dataset_func(datasets.Convnet1M.TEST_100)
-    dataset = dataset_func(datasets.Deep1M.TEST_100)
+    dataset = dataset_func(datasets.Convnet1M.TEST_100)
+    # dataset = dataset_func(datasets.Deep1M.TEST_100)
     # dataset = dataset_func(datasets.LabelMe)
     print "=== Using Dataset: {} ({}x{})".format(dataset.name, N, D)
+
+    dicts = []
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -1177,11 +1274,15 @@ def main():
 
     print "------------------------ pq l2, 16x4 bit centroid idxs"
     encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
-    eval_encoder(dataset, encoder)
+    dicts.append(eval_encoder(dataset, encoder))
+
+    print "------------------------ opq l2, 16x4 bit centroid idxs"
+    encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
+    dicts.append(eval_encoder(dataset, encoder))
 
     print "------------------------ pq l2, 32x4 bit centroid idxs"
     encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=4)
-    eval_encoder(dataset, encoder)
+    dicts.append(eval_encoder(dataset, encoder))
 
     # print "------------------------ opq l2, 24x4 bit centroid idxs"
     # encoder = OPQEncoder(dataset, nsubvects=24, bits_per_subvect=4, opq_iters=5)
@@ -1203,12 +1304,12 @@ def main():
 
     print "------------------------ pq l2, 8x8 bit centroids idxs"
     encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=8)
-    eval_encoder(dataset, encoder)
+    dicts.append(eval_encoder(dataset, encoder))
 
     print "------------------------ opq l2, 8x8 bit centroid idxs"
     encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5)
     # eval_encoder(dataset, encoder, plot=True)
-    eval_encoder(dataset, encoder)
+    dicts.append(eval_encoder(dataset, encoder))
 
     # print "------------------------ opq l2, 8x8 bit centroid idxs, nnz=32, gauss init"
     # encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5, max_nonzeros=32)
@@ -1344,6 +1445,12 @@ def main():
 
     # print "------------------------ quantile l2, learned dists"
     # eval_embedding(dataset, encoder.transform, dist_func=learned_sq)
+
+    for d in dicts:
+        d['dataset'] = dataset.name
+        d['norm_mean'] = norm_mean
+        # d['num_queries'] = num_queries  # nah...ignored for real datasets
+    pyn.save_dicts_as_data_frame(dicts, SAVE_DIR)
 
 
 if __name__ == '__main__':
