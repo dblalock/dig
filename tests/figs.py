@@ -184,52 +184,63 @@ def encoding_fig(data_enc=True, data=None):
     # plt.show()
 
 
-def query_speed_fig():
+def query_speed_fig(fake_data=False):
     # experiment params: fixed N = 100k, D = 256, Q = 1024;
     # layout: rows = 8B, 16B, 32B; bar graph in each row
     #   alternative: plot in each row vs batch size
     # algos: Bolt; PQ; OPQ; PairQ; Matmul, batch={1, 16, 64, 256}
 
     sb.set_context("talk", rc={"figure.figsize": (6, 8)})
-
+    # sb.set_palette("Set1", n_colors=len(ALGOS))
+    set_palette(ncolors=8)
     fig, axes = plt.subplots(3, 1)
 
-    ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ',
-             # 'Matmul Batch 1', 'Matmul Batch 16', 'Matmul Batch 64', 'Matmul Batch 256']
-             # 'Matmul Batch1', 'Matmul Batch16', 'Matmul Batch64', 'Matmul Batch256']
-             'Matmul 1', 'Matmul 16', 'Matmul 64', 'Matmul 256']
-    algo2offset = {'Bolt': 100, 'PQ': 50, 'OPQ': 30, 'PairQ': 25,
-                   # 'Matmul Batch 1': 1, 'Matmul Batch 16': 16,
-                   # 'Matmul Batch 64': 64, 'Matmul Batch 256': 256}
-                   # 'Matmul Batch1': 1, 'Matmul Batch16': 16,
-                   # 'Matmul Batch64': 64, 'Matmul Batch256': 256}
-                   'Matmul 1': 1, 'Matmul 16': 16, 'Matmul 64': 64,
-                   'Matmul 256': 256}
+    if fake_data:  # for debugging
+        ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ',
+                 # 'Matmul Batch 1', 'Matmul Batch 16', 'Matmul Batch 64', 'Matmul Batch 256']
+                 # 'Matmul Batch1', 'Matmul Batch16', 'Matmul Batch64', 'Matmul Batch256']
+                 'Matmul 1', 'Matmul 16', 'Matmul 64', 'Matmul 256']
+        algo2offset = {'Bolt': 100, 'PQ': 50, 'OPQ': 30, 'PairQ': 25,
+                       # 'Matmul Batch 1': 1, 'Matmul Batch 16': 16,
+                       # 'Matmul Batch 64': 64, 'Matmul Batch 256': 256}
+                       # 'Matmul Batch1': 1, 'Matmul Batch16': 16,
+                       # 'Matmul Batch64': 64, 'Matmul Batch256': 256}
+                       'Matmul 1': 1, 'Matmul 16': 16, 'Matmul 64': 64,
+                       'Matmul 256': 256}
 
-    # sb.set_palette("Set1", n_colors=len(ALGOS))
-    set_palette(ncolors=len(ALGOS))
+        for i, nbytes in enumerate([8, 16, 32]):
+            bytes_str = '{}B'.format(nbytes)
+            dicts = []
+            for algo in ALGOS:
+                dps = np.random.randn(10) + 256 / nbytes
+                dps += algo2offset[algo] / nbytes
+                dicts += [{'algo': algo, 'nbytes': bytes_str, 'y': y} for y in dps]
 
+            df = pd.DataFrame.from_records(dicts)
+    else:
+        ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ', 'Matmul 1', # 'Matmul 16',
+                 'Matmul 64', 'Matmul 256', 'Matmul 1024']
+        # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ',
+        #      # 'Matmul Batch 1', 'Matmul Batch 16', 'Matmul Batch 64', 'Matmul Batch 256']
+        #      # 'Matmul Batch1', 'Matmul Batch16', 'Matmul Batch64', 'Matmul Batch256']
+        #      'Matmul 1', 'Matmul 16', 'Matmul 64', 'Matmul 256']
+        df = results.query_speed_results()
+
+    print "df cols: ", df.columns
+    df.rename(columns={'algo': ' '}, inplace=True)  # hide from legend
+
+    # ax = sb.barplot(x='x', y='y', hue=' ', ci=95, data=df, ax=axes[i])
     for i, nbytes in enumerate([8, 16, 32]):
         bytes_str = '{}B'.format(nbytes)
-        dicts = []
-        for algo in ALGOS:
-            dps = np.random.randn(10) + 256 / nbytes
-            dps += algo2offset[algo] / nbytes
-            dicts += [{'algo': algo, 'x': bytes_str, 'y': y} for y in dps]
+        data = df[df['nbytes'] == nbytes]
+        ax = sb.barplot(x='nbytes', y='y', hue=' ', hue_order=ALGOS, ci=95, data=data, ax=axes[i])
 
-        df = pd.DataFrame.from_records(dicts)
-        print "df cols: ", df.columns
-        df.rename(columns={'algo': ' '}, inplace=True)  # hide from legend
-
-        # ax = sb.barplot(x='x', y='y', hue=' ', ci=95, data=df, ax=axes[i])
-        ax = sb.barplot(x='x', y='y', hue=' ', hue_order=ALGOS, ci=95, data=df, ax=axes[i])
+    # ------------------------ clean up / format axes
 
     for ax in axes[:-1]:
         # remove x labels except for bottom axis
         plt.setp(ax.get_xticklabels(), visible=False)
         ax.get_xaxis().set_visible(False)
-
-    # ------------------------ clean up / format axes
 
     # print axes[-1].get_xticks()
     # print axes[-1].get_xlim()
@@ -249,6 +260,9 @@ def query_speed_fig():
         ax.set_xlim([start - .02, end + .02])
         ax.set_ylabel('Millions of Distances/s')
         ax.legend_.remove()
+        if not fake_data:
+            ax.set_yscale("log")
+            ax.set_ylim(10, 3.0e3)
 
     # add byte counts on the right
     sb.set_style("white")  # adds border (spines) we have to remove
@@ -570,11 +584,11 @@ def main():
     # sb.palplot(pal)
     # plt.show()
 
-    popcount_fig()
+    # popcount_fig()
     # encoding_fig(data_enc=True)
     # encoding_fig(data_enc=False)
     # encoding_fig()
-    # query_speed_fig()
+    query_speed_fig()
     # recall_r_fig()
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Euclidean', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
