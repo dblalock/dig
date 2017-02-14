@@ -8,60 +8,22 @@
 
 #include "testing_utils.hpp"
 
-// template<class DistT>
-// void prevent_optimizing_away_dists(DistT* dists, int64_t N) {
-// //    std::cout << "I am not an ******* compiler and am actually running this function\n";
-//     // volatile bool foo = true;
-//     int64_t count = 0;
-// //    for (int64_t n = N - 1; n >= 0; n--) { count += (((int)dists[n]) % 2); }
-// //    for (int64_t n = 0; n < N; n++) { count += (((int)dists[n]) % 2); }
-//     for (int64_t n = 0; n < N; n++) { count += dists[n] > 42; }
-//     std::cout << "(" << count << "/" << N << ")\t";
-// //    if (count % 2) { std::cout << " <><><><><> odd number"; }
-// }
 
-// // TODO reconcile this func with previous rand_int funcs
-// template <class data_t, class len_t, REQUIRE_INT(len_t)>
-// static inline void randint_inplace(data_t* data, len_t len,
-//                                    data_t min=std::numeric_limits<data_t>::min(),
-//                                    data_t max=std::numeric_limits<data_t>::max())
-// {
-//     assert(len > 0);
-//     std::random_device rd;
-//     std::mt19937 gen(rd());
-//     std::uniform_int_distribution<> d(min, max);
+#define PROFILE_4bit
+// #define PROFILE_8bit
+// #define PROFILE_12bit
+// #define PROFILE_16bit
+#define PROFILE_8bit_sum_codes
+#define PROFILE_8bit_raw
+// #define PROFILE_float_raw
 
-//     for (len_t i = 0; i < len; i++) {
-//         data[i] = static_cast<data_t>(d(gen));
-//     }
-// }
-// template <class data_t, class len_t, REQUIRE_INT(len_t)>
-// static inline void rand_inplace(data_t* data, len_t len,
-//                                 data_t min=0, data_t max=1)
-// {
-//     assert(len > 0);
-//     std::random_device rd;
-//     std::mt19937 gen(rd());
-//     std::uniform_real_distribution<> d(min, max);
+static constexpr int kNreps = 10;
+// static constexpr int kNreps = 1;
+static constexpr int kNtrials = 5;
 
-//     for (len_t i = 0; i < len; i++) {
-//         data[i] = static_cast<data_t>(d(gen));
-//     }
-// }
-
-// template<class data_t>
-// static inline data_t* aligned_random_ints(int64_t len) {
-//     data_t* ptr = aligned_alloc<data_t>(len);
-//     randint_inplace(ptr, len);
-//     return ptr;
-// }
-
-// template<class data_t>
-// static inline data_t* aligned_random(int64_t len) {
-//     data_t* ptr = aligned_alloc<data_t>(len);
-//     rand_inplace(ptr, len);
-//     return ptr;
-// }
+static constexpr int M = 8;
+// static constexpr int M = 16;
+// static constexpr int M = 32;
 
 // TODO split this into smaller functions and also call from other test file
 TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
@@ -69,7 +31,6 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     // static constexpr int nblocks = 1000 * 1000;
     static constexpr int nblocks = 100 * 1000;
     int64_t N = 32 * nblocks;
-    static constexpr int M = 16;
     auto N_millions = static_cast<double>(N) / 1e6;
     printf("searching through %.1f million vecs (%.3fMB)...\n", N_millions, N_millions * M);
 
@@ -183,6 +144,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     std::cout << "starting searches...\n";
 
     // ------------------------------------------------ 4bit codes
+#ifdef PROFILE_4bit
     # pragma mark 4bit codes
 
     std::cout << "-------- dists with " << M << "B of 4bit codes\n";
@@ -190,6 +152,11 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 
     PROFILE_DIST_COMPUTATION("built-in popcnt", 5, dists_popcnt, N,
         dist::popcount_generic<M>(codes, q, dists_popcnt, N));
+    REPEATED_PROFILE_DIST_COMPUTATION(kNreps, "built-in popcnt", kNtrials,
+        dists_popcnt, N,
+        dist::popcount_generic<M>(codes, q, dists_popcnt, N));
+
+
 //     { // compute distances using popcnt instruction
 // //        uint64_t q_uint = *(uint64_t*)q;
 //         EasyTimer _(t);
@@ -268,6 +235,8 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     // // prevent_optimizing_away_dists(dists_vertical256, N);
     // // printf("t 256 vertical: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
+#endif // PROFILE_4bit
+
     aligned_free(dists_vertical64);
     aligned_free(dists_vertical128);
     aligned_free(dists_vertical256);
@@ -276,6 +245,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     // ------------------------------------------------ 8bit codes
     # pragma mark 8bit codes
 
+#ifdef PROFILE_8bit
     std::cout << "-------- dists with " << M << "B of 16bit codes\n";
 
     uint8_t*  dists_8b_b = aligned_alloc<uint8_t>(N);
@@ -330,6 +300,8 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     // prevent_optimizing_away_dists(dists_8b_b, N);
     // printf("t 32 8b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
+#endif // PROFILE_8bit
+
     // ------------------------------------------------ <NOTE>
     // below this point, no effort made at achieving correctness;
     // scans are operating on unitialized memory
@@ -338,6 +310,7 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     // ------------------------------------------------ 12bit codes
     # pragma mark 12bit codes
 
+#ifdef PROFILE_12bit
     std::cout << "-------- dists with " << M << "B of 12bit codes\n";
 
     uint8_t*  dists_12b_b = aligned_alloc<uint8_t>(N);
@@ -405,8 +378,12 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //     prevent_optimizing_away_dists(dists_12b_b, N);
 //     printf("t 256, 12b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
+#endif // PROFILE_12bit
+
     // ------------------------------------------------ 16bit codes
     # pragma mark 16bit codes
+
+#ifdef PROFILE_16bit
     std::cout << "-------- dists with " << M << "B of 16bit codes\n";
 
     uint8_t*  dists_16b_b = aligned_alloc<uint8_t>(N);
@@ -478,10 +455,12 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //     prevent_optimizing_away_dists(dists_16b_b, N);
 //     printf("t 1024 16b, 8b dist: %.2fms (%.1f M/s)\n", t, N_millions / (t/1e3));
 
+#endif // PROFILE_16bit
 
     // ------------------------------------------------ floats
     # pragma mark floats
 
+#ifdef PROFILE_float_raw
     static constexpr uint64_t nblocksf = 10000;
     static constexpr uint64_t Nf = 256 * nblocksf;
     static constexpr double Nf_millions = static_cast<double>(Nf) / 1e6;
@@ -560,9 +539,12 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     aligned_free(qf);
     aligned_free(distsf);
 
+#endif // PROFILE_float_raw
+
     // ------------------------------------------------ int8s
     # pragma mark int8s
 
+#ifdef PROFILE_8bit_sum_codes
     static constexpr uint64_t nblocksb = 10000;
     static constexpr uint64_t Nb = 256 * nblocksb;
     static constexpr double Nb_millions = static_cast<double>(Nb) / 1e6;
@@ -611,6 +593,8 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //     prevent_optimizing_away_dists(distsb8, Nb);
 //     printf("t 512 int8s just sums: %.2fms (%.1f M/s)\n", t, Nb_millions / (t/1e3));
 
+#endif // PROFILE_8bit_sum_codes
+#ifdef PROFILE_8bit_raw
     std::cout << "-------- int8 distances where D = " << Db << "\n";
 
     PROFILE_DIST_COMPUTATION("t 32 int8s full dist", 5, distsb8, Nb,
@@ -665,6 +649,8 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     aligned_free(qb);
     aligned_free(distsb);
 
+#endif // PROFILE_8bit_raw
+
     // ------------------------------------------------ correctness
 
     bool same0 = true;
@@ -673,15 +659,18 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
     bool same3 = true;
     bool same_8b_b = true, same_8b_s = true, same_8b_i = true, same_8b_f = true;
     for (int64_t n = 0; n < N; n++) {
+#ifdef PROFILE_4bit
         same0 &= dists_popcnt[n] == dists_scalar[n];
         same1 &= dists_scalar[n] == dists_vector[n];
         same2 &= dists_vector[n] == dists_unpack[n];
         same3 &= dists_unpack[n] == dists_vertical32[n];
-
+#endif
+#ifdef PROFILE_8bit
         same_8b_b &= dists_popcnt[n] == dists_8b_b[n];
         same_8b_s &= dists_8b_b[n] == dists_8b_s[n];
         same_8b_i &= dists_8b_s[n] == dists_8b_i[n];
         same_8b_f &= dists_8b_i[n] == dists_8b_f[n];
+#endif
 
 //        if (n < 50 && !same0) {
 //            printf("popcnt dist, scalar dist = %d, %d\n", dists_popcnt[n], dists_scalar[n]);
@@ -692,20 +681,23 @@ TEST_CASE("popcnt_timing", "[mcq][profile][popcount]") {
 //        REQUIRE(dists_popcnt[n] == dists_scalar[n]);
 //        REQUIRE(dists_popcnt[n] == dists_vector[n]);
     }
-    std::cout << "same0? " << same0 << "\n"; // 0, so popcnt prolly broken
-    std::cout << "same1? " << same1 << "\n";
-    std::cout << "same2? " << same2 << "\n";
-    std::cout << "same3? " << same3 << "\n";
-    std::cout << "same_8b_b? " << same_8b_b << "\n";
-    std::cout << "same_8b_s? " << same_8b_s << "\n";
-    std::cout << "same_8b_i? " << same_8b_i << "\n";
-    std::cout << "same_8b_f? " << same_8b_f << "\n";
+#ifdef PROFILE_4bit
     REQUIRE(same0);
     REQUIRE(same1);
     REQUIRE(same2);
     REQUIRE(same3);
+    std::cout << "same0? " << same0 << "\n"; // 0, so popcnt prolly broken
+    std::cout << "same1? " << same1 << "\n";
+    std::cout << "same2? " << same2 << "\n";
+    std::cout << "same3? " << same3 << "\n";
+#endif
+#ifdef PROFILE_8bit
+    std::cout << "same_8b_b? " << same_8b_b << "\n";
+    std::cout << "same_8b_s? " << same_8b_s << "\n";
+    std::cout << "same_8b_i? " << same_8b_i << "\n";
+    std::cout << "same_8b_f? " << same_8b_f << "\n";
+#endif
     std::cout << "done" << std::endl;
-
 
     aligned_free(q);
     aligned_free(codes);

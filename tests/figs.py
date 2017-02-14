@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sb
 
+import results
+
+
 SAVE_DIR = os.path.expanduser('~/Desktop/bolt/figs/')
 
 
@@ -29,44 +32,40 @@ def set_palette(ncolors=8):  # use this to change color palette in all plots
     return pal
 
 
-def popcount_fig():
-    bolt_128d_8b = np.random.randn(10) + 12
-    bolt_128d_16b = np.random.randn(10) + 6
-    bolt_128d_32b = np.random.randn(10) + 3
-    popcnt_128d_8b = np.random.randn(10) + 10
-    popcnt_128d_16b = np.random.randn(10) + 5
-    popcnt_128d_32b = np.random.randn(10) + 2
-
-    # bolt_512d_8b = np.random.randn(10) + 12 / 2
-    # bolt_512d_16b = np.random.randn(10) + 6 / 2
-    # bolt_512d_32b = np.random.randn(10) + 3 / 2
-    # popcnt_512d_8b = np.random.randn(10) + 10 / 2
-    # popcnt_512d_16b = np.random.randn(10) + 5 / 2
-    # popcnt_512d_32b = np.random.randn(10) + 2 / 2
+def popcount_fig(fake_data=False):
 
     # sb.set_context("poster", rc={"figure.figsize": (8, 4)})
     sb.set_context("talk")
     set_palette(ncolors=2)
     _, ax = plt.subplots(1, figsize=(6, 4))
 
-    # sb.set_palette("Set1", n_colors=2)
+    # fake_data = data is None
+    if fake_data:  # for prototyping / debugging this func
+        bolt_128d_8b = np.random.randn(10) + 12
+        bolt_128d_16b = np.random.randn(10) + 6
+        bolt_128d_32b = np.random.randn(10) + 3
+        popcnt_128d_8b = np.random.randn(10) + 10
+        popcnt_128d_16b = np.random.randn(10) + 5
+        popcnt_128d_32b = np.random.randn(10) + 2
 
-    # fig, axes = plt.subplots(1, 2)
+        dicts = []
+        dicts += [{'algo': 'Bolt', 'nbytes': '8B',  't': t} for t in bolt_128d_8b]
+        dicts += [{'algo': 'Bolt', 'nbytes': '16B',  't': t} for t in bolt_128d_16b]
+        dicts += [{'algo': 'Bolt', 'nbytes': '32B',  't': t} for t in bolt_128d_32b]
+        dicts += [{'algo': 'Binary Embedding', 'nbytes': '8B',  't': t} for t in popcnt_128d_8b]
+        dicts += [{'algo': 'Binary Embedding', 'nbytes': '16B',  't': t} for t in popcnt_128d_16b]
+        dicts += [{'algo': 'Binary Embedding', 'nbytes': '32B',  't': t} for t in popcnt_128d_32b]
 
-    dicts_128d = []
-    dicts_128d += [{'algo': 'Bolt', 'x': '8B',  't': t} for t in bolt_128d_8b]
-    dicts_128d += [{'algo': 'Bolt', 'x': '16B',  't': t} for t in bolt_128d_16b]
-    dicts_128d += [{'algo': 'Bolt', 'x': '32B',  't': t} for t in bolt_128d_32b]
-    dicts_128d += [{'algo': 'Binary Embedding', 'x': '8B',  't': t} for t in popcnt_128d_8b]
-    dicts_128d += [{'algo': 'Binary Embedding', 'x': '16B',  't': t} for t in popcnt_128d_16b]
-    dicts_128d += [{'algo': 'Binary Embedding', 'x': '32B',  't': t} for t in popcnt_128d_32b]
+        df = pd.DataFrame.from_records(dicts)
 
-    df = pd.DataFrame.from_records(dicts_128d)
+    else:
+        df = results.popcount_results()
+
     print "df cols: ", df.columns
     # df.rename(columns={'algo': 'Algorithm'}, inplace=True)
     df.rename(columns={'algo': ' '}, inplace=True)  # hide from legend
 
-    sb.barplot(x='x', y='t', hue=' ', ci=95, data=df, ax=ax)
+    sb.barplot(x='nbytes', y='t', hue=' ', ci=95, data=df, ax=ax)
     ax.set_title('Distance Computations Per Second')
     ax.set_xlabel('Encoding Length (Bytes)')
     ax.set_ylabel('Millions of distances / sec')
@@ -571,7 +570,7 @@ def main():
     # sb.palplot(pal)
     # plt.show()
 
-    # popcount_fig()
+    popcount_fig()
     # encoding_fig(data_enc=True)
     # encoding_fig(data_enc=False)
     # encoding_fig()
@@ -580,7 +579,7 @@ def main():
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Euclidean', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
     # distortion_fig(fname='l2_distortion')
-    kmeans_fig()
+    # kmeans_fig()
 
 
 if __name__ == '__main__':

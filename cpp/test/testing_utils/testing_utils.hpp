@@ -73,7 +73,7 @@ static inline void print_dist_stats(const std::string& name,
 #define PROFILE_DIST_COMPUTATION(NAME, NTRIALS, DISTS_PTR, NUM_DISTS, EXPR)  \
     do {                                                                \
         double __t_min = std::numeric_limits<double>::max();            \
-        for (int __i = 0; __i < NTRIALS; __i++) {                        \
+        for (int __i = 0; __i < NTRIALS; __i++) {                       \
             double __t = 0;                                             \
             {                                                           \
                 EasyTimer _(__t);                                       \
@@ -85,6 +85,28 @@ static inline void print_dist_stats(const std::string& name,
         print_dist_stats(                                               \
             NAME " (best of " #NTRIALS ")",                             \
             NUM_DISTS, __t_min);                                        \
+    } while (0);
+
+
+#define REPEATED_PROFILE_DIST_COMPUTATION(                              \
+    NREPS, NAME, NTRIALS, DISTS_PTR, NUM_DISTS, EXPR)                   \
+    do {                                                                \
+        std::cout << NAME << " (" << NREPS << "x" << NTRIALS << "): ";  \
+        for (int __rep = 0; __rep < NREPS; __rep++) {                   \
+            double __t_min = std::numeric_limits<double>::max();        \
+            for (int __i = 0; __i < NTRIALS; __i++) {                   \
+                double __t = 0;                                         \
+                {                                                       \
+                    EasyTimer _(__t);                                   \
+                    (EXPR);                                             \
+                }                                                       \
+                prevent_optimizing_away_dists(DISTS_PTR, NUM_DISTS);    \
+                __t_min = __t < __t_min ? __t : __t_min;                \
+            }                                                           \
+            printf("%.5g (%lld/s), ", __t_min,                          \
+                static_cast<int64_t>(NUM_DISTS * 1e3 / __t_min));       \
+        }                                                               \
+        printf("\n");                                                   \
     } while (0);
 
 
@@ -107,11 +129,27 @@ static inline void print_dist_stats(const std::string& name,
             NUM_LOOP_ITERS, __t_min / 1000.0);                          \
     } while (0);
 
-                // {                                                       \
-                //     EasyTimer _(__t, true);                             \
-                //     (EXPR);                                             \
-                // }
-
+#define REPEATED_PROFILE_DIST_COMPUTATION_LOOP(                         \
+    NREPS, NAME, NTRIALS, DISTS_PTR, NUM_DISTS, NUM_LOOP_ITERS, EXPR)   \
+    do {                                                                \
+        std::cout << NAME << " (" << NREPS << "x" << NTRIALS << "): ";  \
+        for (int __rep = 0; __rep < NREPS; __rep++) {                   \
+            double __t_min = std::numeric_limits<double>::max();        \
+            for (int __i = 0; __i < NTRIALS; __i++) {                   \
+                double __t = 0;                                         \
+                auto t0 = timeNow();                                    \
+                for (int i = 0; i < NUM_LOOP_ITERS; i++) {              \
+                    (EXPR);                                             \
+                }                                                       \
+                __t = durationUs(t0, timeNow());                        \
+                prevent_optimizing_away_dists(DISTS_PTR, NUM_DISTS);    \
+                __t_min = __t < __t_min ? __t : __t_min;                \
+            }                                                           \
+            printf("%.5g (%lld/s), ", __t_min / 1e3,                    \
+                static_cast<int64_t>(NUM_LOOP_ITERS * 1e6 / __t_min));  \
+        }                                                               \
+        printf("\n");                                                   \
+    } while (0);
 
 // TODO put this func in array_utils
 template <class data_t, class len_t>
