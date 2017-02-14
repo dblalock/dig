@@ -492,6 +492,80 @@ def distortion_fig(data=None, suptitle=None, fname='l2_distortion'):
     plt.show()
 
 
+def kmeans_fig(data=None, fname='kmeans'):
+    # bolt vs raw floats, k=16 on top and k=32 on the bottom
+
+    ALGOS = ['Bolt', 'Matmul']
+    Ks = [16, 64]
+
+    sb.set_context("talk")
+    set_palette()
+    figsize = (6, 6)
+    fig, axes = plt.subplots(2, 1, figsize=figsize)
+
+    fake_data = data is None
+    if fake_data:
+        dicts = []
+
+        bolt_times = np.linspace(0, 100, 21)
+        bolt_errs = np.max(Ks) * np.exp(-.1 * bolt_times)
+
+        matmul_times = np.linspace(0, 100, 11)
+        matmul_errs = np.max(Ks) * np.exp(-.05 * matmul_times)
+
+        for i in range(3):  # simulate multiple trials
+            # bolt_errs *= (1 + .2 * np.random.randn(*bolt_errs.shape))
+            # matmul_errs *= (1 + .2 * np.random.randn(*matmul_errs.shape))
+            bolt_errs += 5 * np.random.randn(*bolt_errs.shape)
+            matmul_errs += 5 * np.random.randn(*matmul_errs.shape)
+            bolt_errs = np.maximum(0, bolt_errs)
+            matmul_errs = np.maximum(0, matmul_errs)
+            bolt_errs = np.sort(bolt_errs)[::-1]
+            matmul_errs = np.sort(matmul_errs)[::-1]
+            for k in Ks:
+                for t, err in zip(bolt_times, bolt_errs):
+                    dicts.append({'trial': i, 'algo': 'Bolt', 'k': k, 't': t, 'err': err / k})
+                for t, err in zip(matmul_times, matmul_errs):
+                    dicts.append({'trial': i, 'algo': 'Matmul', 'k': k, 't': t, 'err': err / k})
+
+        # data = pd.DataFrame.from_records(dicts, index=[0])
+        data = pd.DataFrame.from_records(dicts)
+        # print data
+        # return
+
+    # ------------------------ plot curves
+
+    for i, k in enumerate(Ks):
+        ax = axes[i]
+        df = data.loc[data['k'] == k]
+        df.rename(columns={'algo': ' '}, inplace=True)  # hide from legend
+
+        # sb.tsplot(value='err', condition=' ', unit='k', time='t', data=df, ax=ax, n_boot=100)
+        sb.tsplot(value='err', condition=' ', unit='trial', time='t', data=df, ax=ax, ci=95, n_boot=500)
+
+    # ------------------------ configure axes
+
+    # configure all axes
+    for i, ax in enumerate(axes.ravel()):
+        title = "K-Means Convergence, K={}".format(Ks[i])
+        ax.set_title(title, y=1.01)
+        # ax.set_xlabel('', labelpad=-10)
+        ax.set_xlabel('Wall Time (s)')
+        # ax.set_ylabel('MSE')
+        ax.set_ylabel('Mean Squared Error')
+
+    axes[1].legend_.remove()
+
+    # ------------------------ show / save plot
+
+    plt.tight_layout()
+    # plt.tight_layout(h_pad=.8)
+    # plt.subplots_adjust(top=.92, bottom=.08)  # for fig size 6x9
+    # plt.subplots_adjust(top=.90, bottom=.08)
+    # save_fig(fname)
+    plt.show()
+
+
 def main():
     # pal = set_palette()
     # sb.palplot(pal)
@@ -500,12 +574,13 @@ def main():
     # popcount_fig()
     # encoding_fig(data_enc=True)
     # encoding_fig(data_enc=False)
-    encoding_fig()
+    # encoding_fig()
     # query_speed_fig()
     # recall_r_fig()
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Euclidean', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
     # distortion_fig(fname='l2_distortion')
+    kmeans_fig()
 
 
 if __name__ == '__main__':
