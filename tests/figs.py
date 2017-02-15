@@ -75,7 +75,7 @@ def popcount_fig(fake_data=False):
     # plt.show()
 
 
-def encoding_fig(data_enc=True, data=None):
+def encoding_fig(fake_data=False):
     # sb.set_context("talk", rc={"figure.figsize": (6, 6)})
     sb.set_context("talk", rc={"figure.figsize": (7, 7)})
     # sb.set_context("talk", rc={"figure.figsize": (8, 8)})
@@ -92,65 +92,78 @@ def encoding_fig(data_enc=True, data=None):
     # sb.set_palette("Set1", n_colors=len(ALGOS))
     set_palette(ncolors=len(ALGOS))
 
-    fake_data = data is None
     if fake_data:
         data = np.random.randn(1, len(lengths), len(algo2offset))
         for i, algo in enumerate(ALGOS):
             data[:, :, i] += algo2offset[algo]
         data /= np.arange(len(lengths)).reshape((1, -1, 1))
 
-    # condition = ALGOS
+        # ------------------------ data encoding
 
-    # ================================ data encoding
+        # 8B encodings
+        ax = axes[0, 0]
+        # sb.tsplot(data=data, condition=condition, time=lengths, ax=ax)
+        sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
+        # ax.set_title(prefix + ' Encoding Speed, 8B codes')
+        ax.set_title('Data Encoding Speed', y=1.02)
 
-    # ------------------------ 8B encodings
+        # 16B encodings
+        data /= 2
+        ax = axes[1, 0]
+        sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
 
-    ax = axes[0, 0]
-    # sb.tsplot(data=data, condition=condition, time=lengths, ax=ax)
-    sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
-    # ax.set_title(prefix + ' Encoding Speed, 8B codes')
-    ax.set_title('Data Encoding Speed', y=1.02)
+        # 32B encodings
+        data /= 2
+        ax = axes[2, 0]
+        sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
 
-    # ------------------------ 16B encodings
-    data /= 2
-    ax = axes[1, 0]
-    sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
+        # ------------------------ query encoding
+        data *= 8
+        data += np.random.randn(*data.shape) * 5
 
-    # ------------------------ 32B encodings
-    data /= 2
-    ax = axes[2, 0]
-    sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
+        # 8B encodings
+        ax = axes[0, 1]
+        sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
+        # ax.set_title(prefix + ' Encoding Speed')
+        ax.set_title('Query Encoding Speed', y=1.03, fontsize=16)
 
-    # ================================ query encoding
+        # 16B encodings
+        data /= 2
+        ax = axes[1, 1]
+        sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
 
-    # fake data
-    data *= 8
-    data += np.random.randn(*data.shape) * 5
+        # 32B encodings
+        data /= 2
+        ax = axes[2, 1]
+        sb.tsplot(data=data, condition=ALGOS, time=lengths, ax=ax)
 
-    # ------------------------ 8B encodings
+    else:  # real data
+        NBYTES_LIST = [8, 16, 32]
 
-    ax = axes[0, 1]
-    sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
-    # ax.set_title(prefix + ' Encoding Speed')
-    ax.set_title('Query Encoding Speed', y=1.03, fontsize=16)
+        df = results.encode_results()
+        df_x = df[df['task'] == 'encode_x']
+        df_q = df[df['task'] == 'encode_q']
+        dfs = [df_x, df_q]
 
-    # ------------------------ 16B encodings
+        # print df_x
+        # return
 
-    data /= 2
-    ax = axes[1, 1]
-    sb.tsplot(data=data, condition=None, time=lengths, ax=ax)
+        # dfs = [results.encode_data_results(), results.encode_lut_results()]
+        ax_cols = [axes[:, 0], axes[:, 1]]
 
-    # ------------------------ 32B encodings
-
-    data /= 2
-    ax = axes[2, 1]
-    sb.tsplot(data=data, condition=ALGOS, time=lengths, ax=ax)
+        for df, ax_col in zip(dfs, ax_cols):  # for each col in subplots
+            for b, nbytes in enumerate(NBYTES_LIST):  # for each row in subplots
+                ax = ax_col[b]
+                plot_df = df.loc[df['nbytes'] == nbytes]
+                sb.tsplot(value='y', condition='algo', unit='trial', time='D',
+                    data=plot_df, ax=ax, ci=95, n_boot=500)
+                    # data=plot_df, ax=ax, legend=False, ci=95, n_boot=500)
 
     # ------------------------ legend
 
     ax = axes.ravel()[-1]
     leg_lines, leg_labels = ax.get_legend_handles_labels()
-    ax.legend_.remove()
+    # ax.legend_.remove()
     # leg_lines, leg_labels = leg_lines[:len(ALGOS)], leg_labels[:len(ALGOS)]
 
     plt.figlegend(leg_lines, leg_labels, loc='lower center',
@@ -158,14 +171,29 @@ def encoding_fig(data_enc=True, data=None):
 
     # ------------------------ postproc + save plot
 
+    for ax in axes.ravel():
+        ax.set_yscale("log")
+        ax.legend_.remove()
+        ax.set_ylim(5e3, 2e7)
+
+    axes[0, 0].set_title('Data Encoding Speed', y=1.03, fontsize=16)
+    axes[0, 1].set_title('Query Encoding Speed', y=1.03, fontsize=16)
+    # for ax in axes[0, :].ravel():
+        # ax.set_title('Vector Length')
+
+    for ax in axes[:-1, :].ravel():
+        # ax.xaxis.set_visible(False)
+        plt.setp(ax.get_xticklabels(), visible=False)
+        ax.set_xlabel('', labelpad=-10)
     for ax in axes[-1, :].ravel():
         ax.set_xlabel('Vector Length')
     for ax in axes[:, 0]:
-        ax.set_ylabel('Million Vectors / s')
+        ax.set_ylabel('Vectors Encoded / s')
 
     # only bottom row gets xlabels
-    for ax in axes[:2, :].ravel():
-        plt.setp(ax.get_xticklabels(), visible=False)
+    for ax in axes[:-1, :].ravel():
+        # plt.setp(ax.get_xticklabels(), visible=False)
+        ax.set_xlabel('', labelpad=-10)
 
     # show byte counts on the right
     fmt_str = "{}B Encodings"
@@ -587,8 +615,8 @@ def main():
     # popcount_fig()
     # encoding_fig(data_enc=True)
     # encoding_fig(data_enc=False)
-    # encoding_fig()
-    query_speed_fig()
+    encoding_fig()
+    # query_speed_fig()
     # recall_r_fig()
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Euclidean', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')

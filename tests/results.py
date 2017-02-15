@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import numpy as np
 import pandas as pd
 
@@ -12,15 +13,70 @@ import pandas as pd
 # immediately upcasts LUT entries to 16 bits
 
 
+MCQ_RESULTS_DIR = '../results/mcq/'
+
+
+def get_mcq_path(D, nbytes):
+    fname = 'mcq_D={}_M={}.txt'.format(D, nbytes)
+    return os.path.join(MCQ_RESULTS_DIR, fname)
+
+
+class McqResults(object):
+
+    def __init__(self, path=None, D=None, nbytes=None):
+
+        if path is None:
+            path = get_mcq_path(D=D, nbytes=nbytes)
+
+        self.path = path
+
+        with open(self.path, 'r') as f:
+            self.lines = f.readlines()
+
+        self.stats = {line.split(':')[0].strip(): line.split(':')[1].strip() for line in self.lines if ':' in line}
+        self.bolt_nbytes = int(self.stats['bolt M'])
+        self.pq_nbytes = int(self.stats['pq M'])
+        self.bolt_D = int(self.stats['bolt subvect_len']) * self.bolt_nbytes * 2
+        self.pq_D = int(self.stats['pq subvect_len']) * self.pq_nbytes
+
+        assert self.bolt_nbytes == self.pq_nbytes
+        assert self.bolt_D == self.pq_D
+
+        self.nbytes = self.bolt_nbytes
+        self.D = self.bolt_D
+
+        # check that file was names properly
+        # fname = 'mcq_D={}_M={}.txt'.format(self.D, self.nbytes)
+        # assert os.path.basename(path) == fname
+        expected_path = get_mcq_path(D=self.D, nbytes=self.nbytes)
+        if expected_path != path:
+            print "expected path, path = ", expected_path, path
+            assert expected_path == path
+
+
+    def __str__(self):  # for debugging
+        s = ""
+        sorted_keys = sorted(self.stats.keys())
+        for k in sorted_keys:
+            v = self.stats[k]
+            s += "'{}': '{}'\n".format(k, v)
+        return s
+
+
 def _extract_thruput(profile_str):
-    rep_strs = profile_str.strip(',').split(',')
-    # print rep_strs
+    result_strs = profile_str.split(':')[-1]
+    # print "\nresult_strs: ", result_strs
+    # print "\nresult_strs.strip(' ,'): ", result_strs.strip(' ,')
+    rep_strs = result_strs.strip(' ,').split(',')
+    # print "\nrep_strs: ", rep_strs
     thruput_parens = [s.strip(' ').split(' ')[1] for s in rep_strs]
     # print thruput_parens
     return np.array([int(s.strip('()s/')) for s in thruput_parens])
 
 
-def popcount_results():
+def popcount_results_256():
+    LENGTH = 256
+
     popcnt_times = {}
     popcnt_times[8] = '2.456 (1302931596/s), 2.344 (1365187713/s), 2.125 (1505882352/s), 2.829 (1131141746/s), 2.148 (1489757914/s), 2.167 (1476695892/s), 2.327 (1375161151/s), 2.145 (1491841491/s), 2.12 (1509433962/s), 2.112 (1515151515/s)'
     popcnt_times[16] = '4.368 (732600732/s), 4.121 (776510555/s), 3.926 (815078960/s), 4.105 (779537149/s), 4.176 (766283524/s), 4.119 (776887594/s), 4.464 (716845878/s), 4.153 (770527329/s), 4.364 (733272227/s), 4.198 (762267746/s)'
@@ -38,7 +94,118 @@ def popcount_results():
         for nbytes, s in d.items():
             bytes_str = "{}B".format(nbytes)
             thruputs = _extract_thruput(s)
-            out_dicts += [{'algo': algo, 'nbytes': bytes_str, 't': t} for t in thruputs]
+            out_dicts += [{'algo': algo, 'nbytes': nbytes, 'length': LENGTH,
+                          'trial': i, 'y': t} for i, t in enumerate(thruputs)]
+
+    return pd.DataFrame.from_records(out_dicts)
+
+
+
+def encode_results():
+    dicts = []
+    # for D in [64, 128, 256]:
+    for D in [64, 128, 256, 512, 1024]:
+        for nbytes in [8, 16, 32]:
+            res = McqResults(D=D, nbytes=nbytes)
+
+            # d = {'D': D, 'nbytes': nbytes}
+            abbrevs = ['bolt', 'pq', 'opq', 'pairq']
+            names = ['Bolt', 'PQ', 'OPQ', 'PairQ']
+            for abbrev, name in zip(abbrevs, names):
+                # results for encoding data
+                key = abbrev + ' encode (10x5)'
+                thruputs = _extract_thruput(res.stats[key])
+                dicts += [{'task': 'encode_x', 'D': D, 'nbytes': nbytes,
+                           'algo': name, 'trial': i, 'y': t} \
+                           for i, t in enumerate(thruputs)]
+
+                # results for encoding query
+                if abbrev == 'bolt':
+                    key = abbrev + ' encode (10x5)'
+                else:
+                    key = abbrev + ' encode lut float dist (10x5)'
+                thruputs = _extract_thruput(res.stats[key])
+                dicts += [{'task': 'encode_q', 'D': D, 'nbytes': nbytes,
+                           'algo': name, 'trial': i, 'y': t} \
+                           for i, t in enumerate(thruputs)]
+
+    return pd.DataFrame.from_records(dicts)
+
+            # bolt_vals = _extract_thruput(res['bolt encode (10x5)'])
+            # dicts += [{'D': D, 'nbytes': nbytes, 'algo': 'Bolt',
+            #            'trial': i, 'y': t} for i, t in enumerate(bolt_vals)]
+
+            # pq_vals = _extract_thruput(res['pq encode (10x5)'])
+            # dicts += [{'D': D, 'nbytes': nbytes, 'algo': 'PQ',
+            #            'trial': i, 'y': t} for i, t in enumerate(pq_vals)]
+
+
+
+def encode_data_results_256():
+    LENGTH = 256
+
+    pq_times = {}
+    pq_times[8] = 'pq encode (10x5): 6.696 (149342/s), 6.688 (149521/s), 6.639 (150625/s), 6.648 (150421/s), 6.711 (149009/s), 6.67 (149925/s), 6.634 (150738/s), 6.684 (149611/s), 6.663 (150082/s), 6.67 (149925/s),'
+    pq_times[16] = 'pq encode (10x5): 7.181 (139256/s), 7.194 (139004/s), 7.179 (139295/s), 7.146 (139938/s), 7.123 (140390/s), 7.123 (140390/s), 7.162 (139625/s), 7.148 (139899/s), 7.116 (140528/s), 7.193 (139024/s),'
+    pq_times[32] = 'pq encode (10x5): 8.089 (123624/s), 8.175 (122324/s), 8.117 (123198/s), 8.096 (123517/s), 8.48 (117924/s), 8.071 (123900/s), 8.126 (123061/s), 8.123 (123107/s), 8.069 (123931/s), 8.21 (121802/s),'
+
+    opq_times = {}
+    opq_times[8] = 'opq encode (10x5): 8.441 (118469/s), 8.385 (119260/s), 8.368 (119502/s), 8.39 (119189/s), 8.355 (119688/s), 8.388 (119217/s), 8.383 (119289/s), 8.412 (118877/s), 8.401 (119033/s), 8.391 (119175/s),'
+    opq_times[16] = 'opq encode (10x5): 8.88 (112612/s), 8.786 (113817/s), 8.874 (112688/s), 8.834 (113199/s), 8.874 (112688/s), 8.902 (112334/s), 8.899 (112372/s), 8.925 (112044/s), 8.867 (112777/s), 8.907 (112271/s),'
+    opq_times[32] = 'opq encode (10x5): 9.761 (102448/s), 9.718 (102901/s), 9.717 (102912/s), 9.726 (102817/s), 9.908 (100928/s), 9.796 (102082/s), 10.164 (98386/s), 9.792 (102124/s), 9.735 (102722/s), 9.729 (102785/s),'
+
+    bolt_times = {}
+    bolt_times[8] = 'bolt encode (10x5): 3.43 (2915451/s), 3.586 (2788622/s), 3.421 (2923121/s), 3.408 (2934272/s), 3.409 (2933411/s), 3.406 (2935995/s), 3.407 (2935133/s), 3.412 (2930832/s), 3.411 (2931691/s), 3.409 (2933411/s),'
+    bolt_times[16] = 'bolt encode (10x5): 3.93 (2544529/s), 3.687 (2712232/s), 3.826 (2613695/s), 4.007 (2495632/s), 3.705 (2699055/s), 3.976 (2515090/s), 3.709 (2696144/s), 3.681 (2716653/s), 3.693 (2707825/s), 3.802 (2630194/s),'
+    bolt_times[32] = 'bolt encode (10x5): 5.039 (1984520/s), 4.591 (2178174/s), 5.081 (1968116/s), 4.697 (2129018/s), 4.591 (2178174/s), 4.763 (2099517/s), 4.832 (2069536/s), 4.805 (2081165/s), 4.961 (2015722/s), 4.665 (2143622/s),'
+
+    # pairq times just call opq because query-time operations are identical
+    pairq_times = {}
+    pairq_times[8] = 'opq encode (10x5): 8.515 (117439/s), 8.546 (117013/s), 8.429 (118638/s), 8.513 (117467/s), 8.671 (115326/s), 8.366 (119531/s), 8.507 (117550/s), 8.41 (118906/s), 8.424 (118708/s), 8.481 (117910/s),'
+    pairq_times[16] = 'opq encode (10x5): 8.891 (112473/s), 9.011 (110975/s), 8.907 (112271/s), 8.86 (112866/s), 9.676 (103348/s), 9.129 (109541/s), 9.436 (105977/s), 9.268 (107898/s), 9.405 (106326/s), 9.296 (107573/s),'
+    pairq_times[32] = 'opq encode (10x5): 9.964 (100361/s), 9.932 (100684/s), 10.136 (98658/s), 10.007 (99930/s), 10.046 (99542/s), 10.031 (99690/s), 10.176 (98270/s), 9.964 (100361/s), 9.937 (100633/s), 10.23 (97751/s), '
+
+    out_dicts = []
+    algos = ['Bolt', 'PQ', 'OPQ', 'PairQ']
+    dicts = [bolt_times, pq_times, opq_times, pairq_times]
+    for algo, d in zip(algos, dicts):
+        for nbytes, s in d.items():
+            thruputs = _extract_thruput(s)
+            out_dicts += [{'algo': algo, 'nbytes': nbytes, 'length': LENGTH,
+                          'trial': i, 'y': t} for i, t in enumerate(thruputs)]
+
+    return pd.DataFrame.from_records(out_dicts)
+
+
+def encode_lut_results():
+    pq_times = {}
+    pq_times[8] = 'pq encode lut float dist (10x5): 64.986 (153879/s), 65.014 (153813/s), 65.155 (153480/s), 64.808 (154301/s), 66.593 (150165/s), 67.68 (147754/s), 69.399 (144094/s), 66.702 (149920/s), 66.234 (150979/s), 66.286 (150861/s),'
+    pq_times[16] = 'pq encode lut float dist (10x5): 67.893 (147290/s), 67.484 (148183/s), 69.608 (143661/s), 68.083 (146879/s), 70.958 (140928/s), 69.423 (144044/s), 72.129 (138640/s), 74.984 (133361/s), 70.837 (141169/s), 74.967 (133392/s),'
+    pq_times[32] = 'pq encode lut float dist (10x5): 78.809 (126889/s), 79.34 (126039/s), 78.565 (127283/s), 79.171 (126308/s), 78.372 (127596/s), 78.689 (127082/s), 78.094 (128050/s), 80.031 (124951/s), 93.367 (107104/s), 81.896 (122106/s),'
+
+    opq_times = {}
+    opq_times[8] = 'opq encode lut float dist (10x5): 155.68 (64234/s), 159.49 (62698/s), 160.64 (62249/s), 158.21 (63205/s), 159.37 (62747/s), 159.29 (62778/s), 160.81 (62186/s), 158.5 (63090/s), 155.22 (64423/s), 158.98 (62901/s),'
+    opq_times[16] = 'opq encode lut float dist (10x5): 170.42 (58677/s), 168.41 (59380/s), 169.12 (59129/s), 171.53 (58298/s), 167.32 (59766/s), 168.96 (59185/s), 170.43 (58676/s), 170.7 (58581/s), 169.86 (58870/s), 160.43 (62333/s),'
+    opq_times[32] = 'opq encode lut float dist (10x5): 170.86 (58527/s), 175.79 (56885/s), 169.86 (58870/s), 180.3 (55464/s), 172.46 (57983/s), 171.66 (58254/s), 167.23 (59799/s), 168.19 (59457/s), 164.47 (60801/s), 168.31 (59413/s),'
+
+    bolt_times = {}
+    bolt_times[8] = 'bolt encode lut (10x5): 2.907 (3439972/s), 2.911 (3435245/s), 2.902 (3445899/s), 2.899 (3449465/s), 2.907 (3439972/s), 2.908 (3438789/s), 2.908 (3438789/s), 2.906 (3441156/s), 2.906 (3441156/s), 2.908 (3438789/s),'
+    bolt_times[16] = 'bolt encode lut (10x5): 2.957 (3381805/s), 2.953 (3386386/s), 2.957 (3381805/s), 2.943 (3397893/s), 2.949 (3390979/s), 2.95 (3389830/s), 2.946 (3394433/s), 3.103 (3222687/s), 2.944 (3396739/s), 3.029 (3301419/s),'
+    bolt_times[32] = 'bolt encode lut (10x5): 2.511 (3982477/s), 2.51 (3984063/s), 2.587 (3865481/s), 2.508 (3987240/s), 2.847 (3512469/s), 2.508 (3987240/s), 2.508 (3987240/s), 2.769 (3611412/s), 2.729 (3664345/s), 2.556 (3912363/s),'
+
+    # pairq times just call opq because query-time operations are identical
+    pairq_times = {}
+    pairq_times[8] = 'opq encode lut float dist (10x5): 171.07 (58455/s), 164.47 (60800/s), 165.02 (60597/s), 163.01 (61346/s), 163.46 (61176/s), 171.6 (58273/s), 160.86 (62164/s), 164.48 (60799/s), 165.53 (60410/s), 165.36 (60474/s),'
+    pairq_times[16] = 'opq encode lut float dist (10x5): 168.73 (59265/s), 169.22 (59094/s), 162.89 (61390/s), 169.67 (58937/s), 169.69 (58932/s), 168.7 (59275/s), 166.33 (60120/s), 170.18 (58760/s), 163.51 (61159/s), 163.31 (61234/s), '
+    pairq_times[32] = 'opq encode lut float dist (10x5): 167.17 (59817/s), 172.61 (57932/s), 168.52 (59340/s), 169.75 (58911/s), 172.07 (58115/s), 174.37 (57349/s), 176.73 (56583/s), 169.96 (58838/s), 164.13 (60926/s), 171.38 (58349/s),'
+
+    out_dicts = []
+    algos = ['Bolt', 'PQ', 'OPQ', 'PairQ']
+    dicts = [bolt_times, pq_times, opq_times, pairq_times]
+    for algo, d in zip(algos, dicts):
+        for nbytes, s in d.items():
+            thruputs = _extract_thruput(s)
+            out_dicts += [{'algo': algo, 'nbytes': nbytes, 'y': t} for t in thruputs]
 
     return pd.DataFrame.from_records(out_dicts)
 
@@ -100,9 +267,10 @@ def query_speed_results():
 
 
 def main():
-    print _extract_thruput('2.456 (1302931596/s), 2.344 (1365187713/s), 2.125 (1505882352/s), 2.829 (1131141746/s), 2.148 (1489757914/s), 2.167 (1476695892/s), 2.327 (1375161151/s), 2.145 (1491841491/s), 2.12 (1509433962/s), 2.112 (1515151515/s)')
+    # print _extract_thruput('foo (10x5): 2.456 (1302931596/s), 2.344 (1365187713/s), 2.125 (1505882352/s), 2.829 (1131141746/s), 2.148 (1489757914/s), 2.167 (1476695892/s), 2.327 (1375161151/s), 2.145 (1491841491/s), 2.12 (1509433962/s), 2.112 (1515151515/s)')
 
-
+    # print McqResults('../results/tmp.txt')
+    print McqResults('../results/mcq/mcq_D=256_M=8.txt')
 
 if __name__ == '__main__':
     main()
