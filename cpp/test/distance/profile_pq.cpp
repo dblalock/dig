@@ -2,6 +2,8 @@
 #include "catch.hpp"
 #include "product_quantize.hpp"
 
+#include <string>
+
 #include "eigen_utils.hpp"
 #include "timing_utils.hpp"
 #include "testing_utils.hpp"
@@ -9,16 +11,20 @@
 
 #include "debug_utils.hpp"
 
+#define PROFILE_ENCODE
+//#define PROFILE_SCAN
+//#define PROFILE_QUERY
+//#define PROFILE_NONFLOATS
+
 static constexpr int kNreps = 10;
 // static constexpr int kNreps = 1;
 static constexpr int kNtrials = 5;
 
-static constexpr int M = 16; // number of bytes per compressed vect
-static constexpr int64_t nrows_enc = 1*1000; // number of rows to encode
+static constexpr int M = 32; // number of bytes per compressed vect
+static constexpr int64_t nrows_enc = 10*1000; // number of rows to encode
 static constexpr int64_t nrows_lut = 10*1000; // number of luts to create
 static constexpr int64_t nrows_scan = 1000*1000;
 static constexpr int64_t nrows_query = 100*1000;
-static constexpr int subvect_len = 4; // M * subvect_len = number of features
 static constexpr int nqueries = 100;
 
 static constexpr int bits_per_codebook = 8;
@@ -26,11 +32,18 @@ static constexpr int bits_per_codebook = 8;
 static constexpr int ncodebooks = M * (8 / bits_per_codebook);
 static constexpr int ncentroids = (1 << bits_per_codebook);
 static constexpr int ncentroids_total = ncentroids * ncodebooks;
-static constexpr int ncols = ncodebooks * subvect_len;
 static constexpr int lut_data_sz = ncentroids * ncodebooks;
+static constexpr int subvect_len = 1024 / ncodebooks; // ncols * subvect_len = number of features
+//static constexpr int subvect_len = 512 / ncodebooks; // ncols * subvect_len = number of features
+//static constexpr int subvect_len = 256 / ncodebooks; // ncols * subvect_len = number of features
+// static constexpr int subvect_len = 128 / ncodebooks; // ncols * subvect_len = number of features
+//static constexpr int subvect_len = 64 / ncodebooks; // ncols * subvect_len = number of features
+static constexpr int ncols = ncodebooks * subvect_len;
 
 
 TEST_CASE("print pq params", "[pq][mcq][profile]") {
+    printf("mcq_D=%d_M=%d\n", ncols, M);  // tmp hack so it suggests the right filename
+
     printf("------------------------ pq\n");
     printf("---- pq profiling parameters\n");
     printf("pq M: %d\n", M);
@@ -39,10 +52,12 @@ TEST_CASE("print pq params", "[pq][mcq][profile]") {
     printf("pq nrows_scan: %g\n", (double)nrows_scan);
     printf("pq nrows_query: %g\n", (double)nrows_query);
     printf("pq subvect_len: %d\n", subvect_len);
+    printf("pq ncols: %d\n", ncols);
     printf("pq nqueries: %d\n", nqueries);
     printf("---- pq timings\n");
 }
 
+#ifdef PROFILE_ENCODE
 TEST_CASE("pq encoding speed", "[pq][mcq][profile]") {
     static constexpr int nrows = nrows_enc;
     // static constexpr int codes_sz = nrows * M;
@@ -75,7 +90,14 @@ TEST_CASE("pq encoding speed", "[pq][mcq][profile]") {
     ColMatrix<float> R(ncols, ncols);
     R.setRandom();
     RowMatrix<float> X_tmp(nrows, ncols);
-    PROFILE_DIST_COMPUTATION("opq encode", 5, codes_out.data(), nrows,
+    // PROFILE_DIST_COMPUTATION("opq encode", 5, codes_out.data(), nrows,
+    //     opq_encode_8b<M>(X, centroids.data(), R, X_tmp, codes_out.data()) );
+    REPEATED_PROFILE_DIST_COMPUTATION(kNreps, "opq encode", kNtrials,
+        codes_out.data(), nrows,
+        opq_encode_8b<M>(X, centroids.data(), R, X_tmp, codes_out.data()) );
+
+    REPEATED_PROFILE_DIST_COMPUTATION(kNreps, "pairq encode", kNtrials,
+        codes_out.data(), nrows,
         opq_encode_8b<M>(X, centroids.data(), R, X_tmp, codes_out.data()) );
 }
 
@@ -109,12 +131,14 @@ TEST_CASE("pq lut encoding speed", "[pq][mcq][profile]") {
     //     lut_data_sz, nrows,
     //     pq_lut_8b<M>(Q.row(i).data(), ncols, centroids.data(), lut_out_f.data()));
 
+#ifdef PROFILE_NONFLOATS
     REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pq encode lut 8b dist", kNtrials,
         lut_out_u8.data(), lut_data_sz, nrows,
         pq_lut_8b<M>(Q.row(i).data(), ncols, centroids.data(), lut_out_u8.data()));
     REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pq encode lut 16b dist", kNtrials,
         lut_out_u16.data(), lut_data_sz, nrows,
         pq_lut_8b<M>(Q.row(i).data(), ncols, centroids.data(), lut_out_u16.data()));
+#endif
     REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pq encode lut float dist", kNtrials,
         lut_out_f.data(), lut_data_sz, nrows,
         pq_lut_8b<M>(Q.row(i).data(), ncols, centroids.data(), lut_out_f.data()));
@@ -134,21 +158,37 @@ TEST_CASE("pq lut encoding speed", "[pq][mcq][profile]") {
     //     lut_data_sz, nrows,
     //     opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_f.data()));
 
+#ifdef PROFILE_NONFLOATS
     REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "opq encode lut 8b dist", kNtrials,
         lut_out_u8.data(), lut_data_sz, nrows,
         opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_u8.data()));
     REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "opq encode lut 16b dist", kNtrials,
         lut_out_u16.data(), lut_data_sz, nrows,
         opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_u16.data()));
+#endif
     REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "opq encode lut float dist", kNtrials,
         lut_out_f.data(), lut_data_sz, nrows,
         opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_f.data()));
 
+#ifdef PROFILE_NONFLOATS
+    REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pairq encode lut 8b dist", kNtrials,
+        lut_out_u8.data(), lut_data_sz, nrows,
+        opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_u8.data()));
+    REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pairq encode lut 16b dist", kNtrials,
+        lut_out_u16.data(), lut_data_sz, nrows,
+        opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_u16.data()));
+#endif
+    REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pairq encode lut float dist", kNtrials,
+        lut_out_f.data(), lut_data_sz, nrows,
+        opq_lut_8b<M>(Q.row(i), centroids.data(), R, q_tmp, lut_out_f.data()));
+
+
 //    PROFILE_DIST_COMPUTATION("opq encode", 5, codes_out.data(), nrows,
 //                             opq_encode_8b<M>(X, centroids.data(), R, X_tmp, codes_out.data()) );
 }
+#endif
 
-
+#ifdef PROFILE_SCAN
 TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
     static constexpr int nrows = nrows_scan;
 
@@ -182,17 +222,21 @@ TEST_CASE("pq scan speed", "[pq][mcq][profile]") {
     // PROFILE_DIST_COMPUTATION("pq scan float", 5, dists_f.data(), nrows,
     //     pq_scan_8b<M>(codes.data(), luts_f.data(), dists_f.data(), nrows));
 
+#ifdef PROFILE_NONFLOATS
     REPEATED_PROFILE_DIST_COMPUTATION(kNreps, "pq scan uint8", kNtrials,
         dists_u8.data(), nrows,
         pq_scan_8b<M>(codes.data(), luts_u8.data(), dists_u8.data(), nrows));
     REPEATED_PROFILE_DIST_COMPUTATION(kNreps, "pq scan uint16", kNtrials,
         dists_u16.data(), nrows,
         pq_scan_8b<M>(codes.data(), luts_u16.data(), dists_u16.data(), nrows));
+#endif
     REPEATED_PROFILE_DIST_COMPUTATION(kNreps, "pq scan float", kNtrials,
         dists_f.data(), nrows,
         pq_scan_8b<M>(codes.data(), luts_f.data(), dists_f.data(), nrows));
 }
+#endif
 
+#ifdef PROFILE_QUERY
 template<int M, class dist_t>
 void _run_query(const uint8_t* codes, int nrows,
     const float* q, int ncols,
@@ -235,6 +279,7 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
     R.setRandom();
     RowVector<float> q_tmp(ncols);
 
+#ifdef PROFILE_NONFLOATS
     SECTION("uint8_t") {
         ColMatrix<uint8_t> luts(ncentroids, ncodebooks);
         RowVector<uint8_t> dists(nrows);
@@ -253,6 +298,11 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
         //     _run_query_opq<M>(codes.data(), nrows, Q.row(i),
         //         centroids.data(), R, q_tmp, luts.data(), dists.data()) );
         REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "opq query u8", kNtrials,
+            dists.data(), nrows, nqueries,
+            _run_query_opq<M>(codes.data(), nrows, Q.row(i),
+                centroids.data(), R, q_tmp, luts.data(), dists.data()) );
+
+        REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pairq query u8", kNtrials,
             dists.data(), nrows, nqueries,
             _run_query_opq<M>(codes.data(), nrows, Q.row(i),
                 centroids.data(), R, q_tmp, luts.data(), dists.data()) );
@@ -277,7 +327,12 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
             dists.data(), nrows, nqueries,
             _run_query_opq<M>(codes.data(), nrows, Q.row(i),
                 centroids.data(), R, q_tmp, luts.data(), dists.data()) );
+        REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pairq query u16", kNtrials,
+            dists.data(), nrows, nqueries,
+            _run_query_opq<M>(codes.data(), nrows, Q.row(i),
+                centroids.data(), R, q_tmp, luts.data(), dists.data()) );
     }
+#endif
     SECTION("float") {
         ColMatrix<float> luts(ncentroids, ncodebooks);
         RowVector<float> dists(nrows);
@@ -298,7 +353,12 @@ TEST_CASE("pq query (lut + scan) speed", "[pq][mcq][profile]") {
             dists.data(), nrows, nqueries,
             _run_query_opq<M>(codes.data(), nrows, Q.row(i),
                 centroids.data(), R, q_tmp, luts.data(), dists.data()) );
+        REPEATED_PROFILE_DIST_COMPUTATION_LOOP(kNreps, "pairq query float", kNtrials,
+            dists.data(), nrows, nqueries,
+            _run_query_opq<M>(codes.data(), nrows, Q.row(i),
+                centroids.data(), R, q_tmp, luts.data(), dists.data()) );
     }
 }
+#endif //PROFILE_QUERY
 
 

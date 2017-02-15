@@ -246,13 +246,13 @@ def query_speed_fig(fake_data=False):
 
             df = pd.DataFrame.from_records(dicts)
     else:
-        ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ', 'Matmul 1', # 'Matmul 16',
-                 'Matmul 64', 'Matmul 256', 'Matmul 1024']
-        # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ',
-        #      # 'Matmul Batch 1', 'Matmul Batch 16', 'Matmul Batch 64', 'Matmul Batch 256']
-        #      # 'Matmul Batch1', 'Matmul Batch16', 'Matmul Batch64', 'Matmul Batch256']
-        #      'Matmul 1', 'Matmul 16', 'Matmul 64', 'Matmul 256']
+        # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ', 'Matmul 1', # 'Matmul 16',
+        #          'Matmul 64', 'Matmul 256', 'Matmul 1024']
+        ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ', 'PairQ']
+        # ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ', 'PairQ',
+                # 'Matmul 1', 'Matmul 256', 'Matmul 1024']
         df = results.query_speed_results()
+        df['y'] = df['y'] / 1e9  # convert to billions
 
     print "df cols: ", df.columns
     df.rename(columns={'algo': ' '}, inplace=True)  # hide from legend
@@ -279,18 +279,25 @@ def query_speed_fig(fake_data=False):
     start = -end
     # start = -.5 + 1. / (len(ALGOS) + 1) + .2
     # end = .5 - 1. / (len(ALGOS) + 1) + .2
+    # tick_positions = np.linspace(start + .00, end - .01, len(ALGOS))
     # tick_positions = np.linspace(start + .05, end - .05, len(ALGOS))
-    tick_positions = np.linspace(start + .04, end - .07, len(ALGOS))
+    tick_positions = np.linspace(start + .02, end - .05, len(ALGOS))
+    # tick_positions = np.linspace(start + .1, end - .1, len(ALGOS))
     # print tick_positions
     # return
 
     for ax in axes:
         ax.set_xlim([start - .02, end + .02])
-        ax.set_ylabel('Millions of Distances/s')
+        # ax.set_ylabel('Millions of Distances/s')
+        # ax.set_ylabel('Distances/sec')
+        ax.set_ylabel('Billions of Distances/s')
         ax.legend_.remove()
         if not fake_data:
-            ax.set_yscale("log")
-            ax.set_ylim(10, 3.0e3)
+            # ax.set_yscale("log")
+            # ax.set_ylim(10, 3.0e3)
+            # ax.set_ylim(1e7, 3.0e9)
+            # ax.set_ylim(0, 2.5e9)
+            ax.set_ylim(0, 2.5)
 
     # add byte counts on the right
     sb.set_style("white")  # adds border (spines) we have to remove
@@ -307,12 +314,19 @@ def query_speed_fig(fake_data=False):
 
     # ------------------------ have bottom / top axes print title, x info
 
-    axes[0].set_title('Query Speed', y=1.02)
+    axes[0].set_title('Distance Computations per Second', y=1.02)
 
-    axes[-1].set_xticks(tick_positions)
-    # xlabels = ["\n".join(name.split(' ')) for name in ALGOS]
+    # axes[-1].set_xticks(tick_positions)
+    for ax in axes:
+        axes[-1].set_xticks(tick_positions)
+        ax.set_xlim(-.4, .4)  # no idea why this makes the bars fit right...
+    xlabels = ["\n".join(name.split(' ')) for name in ALGOS]
+    for i, lbl in enumerate(xlabels):
+        if '\n' in lbl:
+            # shift label up by adding another line
+            xlabels[i] = xlabels[i] + '\n'
     # xlabels = ["\nBatch".join(name.split(' Batch')) for name in ALGOS]
-    xlabels = ALGOS
+    # xlabels = ALGOS
     axes[-1].set_xticklabels(xlabels, rotation=70)
     axes[-1].set_xlabel("", labelpad=-20)
     # plt.setp(axes[-1].get_xlabel(), visible=False)  # doesn't work
@@ -321,6 +335,149 @@ def query_speed_fig(fake_data=False):
 
     plt.tight_layout()
     save_fig('query_speed')
+    # plt.show()
+
+
+def matmul_fig(fake_data=False, fname='matmul'):
+    # two line graphs
+    # lines in both top and bottom = bolt {8,16,32}B, matmul
+    # just use square mats of power-of-two lengths cuz best case for matmuls
+    # in top one, one mat already encoded and Bolt just has to do queries
+    # in bottom one, Bolt has encode one of the mats as data before queries
+
+
+    sb.set_context("talk")
+    # sb.set_palette("Set1", n_colors=len(ALGOS))
+    pal = set_palette(ncolors=8)
+    fig, axes = plt.subplots(2, 1, figsize=(6, 6))
+    # axes = axes.reshape((2, 1))
+
+    if fake_data:  # for debuging / prototyping fig
+        SIZES = np.array([64, 128, 256, 512, 1024, 2048, 4096], dtype=np.float32)
+        matmul_times = (SIZES ** 2.5).reshape((-1, 1))  # strassen-ish scaling
+        bolt_times = ((SIZES ** 3) / 100 + 400).reshape((-1, 1))
+
+        # pretend we had 5 trials; each trial gets a col, so rows are lengths
+        matmul_times = np.tile(matmul_times, (1, 5))
+        bolt_times = np.tile(bolt_times, (1, 5))
+        matmul_times += np.random.randn(*matmul_times.shape) * SIZES.T.reshape((-1, 1)) / 10.
+        bolt_times += np.random.randn(*bolt_times.shape) * SIZES.T.reshape((-1, 1)) / 10.
+
+        matmul_times /= 1e9
+        bolt8_times = bolt_times / 2e9
+        bolt16_times = bolt_times / 1e9
+        bolt32_times = bolt_times / .5e9
+
+        dicts = []
+        ALGOS = ['Bolt 8B', 'Bolt 16B', 'Bolt 32B', 'Floats']
+        algo_times = [bolt8_times, bolt16_times, bolt32_times, matmul_times]
+        for all_times, algo in zip(algo_times, ALGOS):
+            for sz, times_for_sz in zip(SIZES, all_times):
+                dicts += [{'algo': algo, 'trial': i, 'size': sz, 'y': t} \
+                    for i, t in enumerate(times_for_sz)]
+
+        df = pd.DataFrame.from_records(dicts)
+        df_enc = df
+        df_no_enc = df
+        # print df
+        # return
+
+        sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+                  data=df_no_enc, ax=axes[0], n_boot=100)
+        sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+                  data=df_enc, ax=axes[1], n_boot=100)
+
+    else:
+        # ALGOS = ['Bolt 8B', 'Bolt 16B', 'Bolt 32B', 'Floats']
+        # ALGOS = ['Bolt 32B', 'Bolt 32B + Encode', 'Floats']
+        # ALGOS = ['Bolt 8B', 'Bolt 32B', 'Bolt 32B + Encode', 'Floats']
+        ALGOS = ['Bolt 8B', 'Bolt 8B + Encode', 'Bolt 32B', 'Bolt 32B + Encode', 'Floats']
+        # df = results.matmul_results_square()
+
+        def clean_df(df):
+            df = df.loc[df['algo'].isin(ALGOS)]
+            non_encode_algos = ['Bolt 8B', 'Bolt 16B', 'Bolt 32B']
+            # rm_idxs = (df['algo'] == 'Bolt 32B') * (df['enc'] == 1)
+            rm_idxs = (df['algo'].isin(non_encode_algos)) * (df['enc'] == 1)
+            return df.loc[~rm_idxs]
+
+        df = results.matmul_results(which='square')
+        df = clean_df(df)
+
+        colors = {
+            'Bolt 8B': pal[0], 'Bolt 8B + Encode': pal[0],
+            # 'Bolt 16B': pal[2], 'Bolt 16B + Encode': pal[2],
+            'Bolt 32B': pal[1], 'Bolt 32B + Encode': pal[1],
+            'Floats': 'k'
+        }
+        df_no_enc = df.loc[df['enc'] != 1]
+        sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+                  data=df_no_enc, ax=axes[0], n_boot=100, color=colors, linestyle='solid')
+        df_enc = df.loc[df['enc'] == 1]
+        sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+                  data=df_enc, ax=axes[0], n_boot=100, color=colors, linestyle='dotted', lw=4)
+
+        df = results.matmul_results(which='tall')
+        df = clean_df(df)
+
+        # print df
+        # return
+
+        # sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+        #           data=df, ax=axes[1], n_boot=100, color=colors)
+        df_no_enc = df.loc[df['enc'] != 1]
+        sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+                  data=df_no_enc, ax=axes[1], n_boot=100, color=colors, linestyle='solid')
+        df_enc = df.loc[df['enc'] == 1]
+        sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+                  data=df_enc, ax=axes[1], n_boot=100, color=colors, linestyle='dotted', lw=4)
+
+
+        # axes[1].set_ylim(1, 1e3)
+
+    # without encoding at the top; with encoding on the bottom
+    # sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+    # sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+    #     data=df_no_enc, ax=axes[0], n_boot=100)
+    # sb.tsplot(time='size', value='y', condition='algo', unit='trial',
+    #     data=df_enc, ax=axes[1], n_boot=100)
+
+    # ------------------------ legend
+
+    ax = axes.ravel()[-1]
+    leg_lines, leg_labels = ax.get_legend_handles_labels()
+    # for some reason, each algo appears 3x, so just take first
+    leg_lines, leg_labels = leg_lines[:len(ALGOS)], leg_labels[:len(ALGOS)]
+
+    plt.figlegend(leg_lines, leg_labels, loc='lower center',
+                  ncol=len(ALGOS)/2, labelspacing=0)
+
+    # ------------------------ axis cleanup / formatting
+
+    # axes[0].set_title('Matrix Multiply Time, One Matrix Encoded', y=1.03, fontsize=16)
+    # axes[1].set_title('Matrix Multiply Time, Neither Matrix Encoded', y=1.03, fontsize=16)
+    axes[0].set_title('Square Matrix Multiply Time', y=1.03, fontsize=16)
+    axes[1].set_title('Tall Matrix Multiply Time', y=1.03, fontsize=16)
+
+    for ax in axes.ravel():
+        ax.legend_.remove()
+        ax.set_xscale('log', basex=2)
+        ax.set_yscale('log', basey=10)
+        ax.set_ylabel('Wall Time (s)')
+    # for ax in axes[:-1].ravel():
+    # #     plt.setp(ax.get_xticklabels(), visible=False)
+    #     ax.set_xlabel('', labelpad=-10)
+
+    # axes[0].set_xlabel('Matrix Side Length, L', labelpad=-1)
+    axes[0].set_xlabel('Matrix Side Length, L')
+    axes[1].set_xlabel('Matrix Side Length, L')
+
+    # ------------------------ show / save plot
+
+    # plt.tight_layout(h_pad=1.4)
+    plt.tight_layout(h_pad=1.2)
+    plt.subplots_adjust(bottom=.23)
+    save_fig('matmul_speed')
     # plt.show()
 
 
@@ -615,13 +772,14 @@ def main():
     # popcount_fig()
     # encoding_fig(data_enc=True)
     # encoding_fig(data_enc=False)
-    encoding_fig()
-    # query_speed_fig()
+    # encoding_fig()
+    query_speed_fig()
     # recall_r_fig()
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Euclidean', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
     # distortion_fig(fname='l2_distortion')
     # kmeans_fig()
+    # matmul_fig()
 
 
 if __name__ == '__main__':

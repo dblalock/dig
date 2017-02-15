@@ -13,7 +13,8 @@ import pandas as pd
 # immediately upcasts LUT entries to 16 bits
 
 
-MCQ_RESULTS_DIR = '../results/mcq/'
+MCQ_RESULTS_DIR = '../results/timing/'
+MATMUL_RESULTS_DIR = '../results/matmul/'
 
 
 def get_mcq_path(D, nbytes):
@@ -33,7 +34,8 @@ class McqResults(object):
         with open(self.path, 'r') as f:
             self.lines = f.readlines()
 
-        self.stats = {line.split(':')[0].strip(): line.split(':')[1].strip() for line in self.lines if ':' in line}
+        self.stats = {line.split(':')[0].strip(): line.split(':')[1].strip()
+                      for line in self.lines if ':' in line}
         self.bolt_nbytes = int(self.stats['bolt M'])
         self.pq_nbytes = int(self.stats['pq M'])
         self.bolt_D = int(self.stats['bolt subvect_len']) * self.bolt_nbytes * 2
@@ -53,7 +55,6 @@ class McqResults(object):
             print "expected path, path = ", expected_path, path
             assert expected_path == path
 
-
     def __str__(self):  # for debugging
         s = ""
         sorted_keys = sorted(self.stats.keys())
@@ -72,6 +73,13 @@ def _extract_thruput(profile_str):
     thruput_parens = [s.strip(' ').split(' ')[1] for s in rep_strs]
     # print thruput_parens
     return np.array([int(s.strip('()s/')) for s in thruput_parens])
+
+
+def _extract_times(profile_str):
+    result_strs = profile_str.split(':')[-1]
+    rep_strs = result_strs.strip(' ,').split(',')
+    time_strs = [s.strip(' ').split(' ')[0] for s in rep_strs]
+    return np.array([float(s) for s in time_strs])
 
 
 def popcount_results_256():
@@ -126,19 +134,64 @@ def encode_results():
                     key = abbrev + ' encode lut float dist (10x5)'
                 thruputs = _extract_thruput(res.stats[key])
                 dicts += [{'task': 'encode_q', 'D': D, 'nbytes': nbytes,
-                           'algo': name, 'trial': i, 'y': t} \
-                           for i, t in enumerate(thruputs)]
+                           'algo': name, 'trial': i, 'y': t}
+                          for i, t in enumerate(thruputs)]
 
     return pd.DataFrame.from_records(dicts)
 
-            # bolt_vals = _extract_thruput(res['bolt encode (10x5)'])
-            # dicts += [{'D': D, 'nbytes': nbytes, 'algo': 'Bolt',
-            #            'trial': i, 'y': t} for i, t in enumerate(bolt_vals)]
 
-            # pq_vals = _extract_thruput(res['pq encode (10x5)'])
-            # dicts += [{'D': D, 'nbytes': nbytes, 'algo': 'PQ',
-            #            'trial': i, 'y': t} for i, t in enumerate(pq_vals)]
+def matmul_results(which='square'):
+    if which == 'square':
+        SIZES = [64, 128, 256, 512, 1024, 4096, 8192]
+        data_fname = 'square_matmul_results.txt'
+    elif which == 'tall':
+        # SIZES = [1, 16, 32, 64, 128, 256, 512, 1024]
+        SIZES = [32, 64, 128, 256, 512, 1024]
+        data_fname = 'tall_matmul_results.txt'
 
+    with open(MATMUL_RESULTS_DIR + data_fname) as f:
+        lines = f.readlines()
+
+    stats = {line.split(':')[0].strip(): line.split(':')[1].strip()
+             for line in lines if ':' in line}
+    # stats = [(line.split(':')[0].strip(), line.split(':')[1].strip())
+    #          for line in lines if ':' in line]
+
+    # SIZES = [64, 128]
+
+    dicts = []
+
+    # add in results from bolt
+    for nbytes in [8, 16, 32]:
+        prefix = 'bolt<{}>'.format(nbytes)
+        algo = 'Bolt {}B'.format(nbytes)
+        for sz in SIZES:
+            for enc in (0, 1):  # don't vs do encode X at start
+                key = '{} encode={} matmul {} (10x5)'.format(prefix, enc, sz)
+                times = _extract_times(stats[key])
+                # times = _extract_times(stats[key])[:3]  # TODO rm slices
+                # offset = np.random.randn() / 1e6  # avoid exact dup times
+                dicts += [{'algo': algo, 'size': sz, 'enc': enc, 'nbytes': nbytes,
+                           'trial': i, 'y': t}
+                          for i, t in enumerate(times)]
+
+                # also add in "encode" version of bolt
+                if enc:
+                    enc_algo_name = algo + ' + Encode'
+                    dicts += [{'algo': enc_algo_name, 'size': sz, 'enc': enc,
+                               'nbytes': nbytes, 'trial': i, 'y': t}
+                              for i, t in enumerate(times)]
+
+    # add in matmul results
+    # prefix = 'matmul {}'.format(nbytes)
+    for sz in SIZES:
+        key = 'matmul {} (10x5)'.format(sz)
+        times = _extract_times(stats[key])
+        # times = _extract_times(stats[key])[:3]  # TODO rm slices
+        dicts += [{'algo': 'Floats', 'size': sz, 'enc': -1, 'trial': i, 'y': t}
+                  for i, t in enumerate(times)]
+
+    return pd.DataFrame.from_records(dicts)
 
 
 def encode_data_results_256():
@@ -220,6 +273,11 @@ def query_speed_results():
     bolt_times[16] = '8.268 (12094/s), 9.807 (10196/s), 8.389 (11920/s), 8.681 (11519/s), 8.711 (11479/s), 8.293 (12058/s), 9.797 (10207/s), 8.32 (12019/s), 9.767 (10238/s), 9.499 (10527/s)'
     bolt_times[32] = '19.385 (5158/s), 17.215 (5808/s), 18.612 (5372/s), 18.117 (5519/s), 17.323 (5772/s), 18.436 (5424/s), 18.979 (5268/s), 16.274 (6144/s), 19.696 (5077/s), 17.026 (5873/s)'
 
+    popcnt_times = {}
+    popcnt_times[8] = '2.456 (1302931596/s), 2.344 (1365187713/s), 2.125 (1505882352/s), 2.829 (1131141746/s), 2.148 (1489757914/s), 2.167 (1476695892/s), 2.327 (1375161151/s), 2.145 (1491841491/s), 2.12 (1509433962/s), 2.112 (1515151515/s)'
+    popcnt_times[16] = '4.368 (732600732/s), 4.121 (776510555/s), 3.926 (815078960/s), 4.105 (779537149/s), 4.176 (766283524/s), 4.119 (776887594/s), 4.464 (716845878/s), 4.153 (770527329/s), 4.364 (733272227/s), 4.198 (762267746/s)'
+    popcnt_times[32] = '7.612 (420388859/s), 7.347 (435551925/s), 7.694 (415908500/s), 9.122 (350800263/s), 7.343 (435789186/s), 9.344 (342465753/s), 8.148 (392734413/s), 9.046 (353747512/s), 8.455 (378474275/s), 7.685 (416395575/s)'
+
     pq_times = {}
     pq_times[8] = '36.499 (2739/s), 35.729 (2798/s), 36.521 (2738/s), 37.924 (2636/s), 37.079 (2696/s), 36.444 (2743/s), 36.115 (2768/s), 36.955 (2705/s), 35.913 (2784/s), 40.354 (2478/s)'
     pq_times[16] = '79.482 (1258/s), 82.546 (1211/s), 84.992 (1176/s), 84.996 (1176/s), 86.218 (1159/s), 84.495 (1183/s), 90.637 (1103/s), 82.164 (1217/s), 85.954 (1163/s), 82.255 (1215/s)'
@@ -244,13 +302,15 @@ def query_speed_results():
     matmul1024_times = '653.63 (156664035/s), 677.26 (151197248/s), 692.88 (147788938/s), 664.79 (154032909/s), 702.61 (145742096/s), 651.74 (157116904/s), 656.4 (156003388/s), 664.69 (154056314/s), 665.34 (153906736/s), 651.88 (157083643/s)'
 
     out_dicts = []
-    algos = ['Bolt', 'PQ', 'OPQ', 'PairQ']
-    dicts = [bolt_times, pq_times, opq_times, pairq_times]
+    algos = ['Bolt', 'PQ', 'OPQ', 'PairQ', 'Binary Embedding']
+    dicts = [bolt_times, pq_times, opq_times, pairq_times, popcnt_times]
 
     for algo, d in zip(algos, dicts):
         for nbytes, s in d.items():
             # bytes_str = "{}B".format(nbytes)
-            thruputs = _extract_thruput(s) / 10.
+            thruputs = _extract_thruput(s) * 1e5
+            if algo == 'Binary Embedding':
+                thruputs /= 1e5  # these are already dists/sec, not qps
             # out_dicts += [{'algo': algo, 'nbytes': bytes_str, 'y': t} for t in thruputs]
             out_dicts += [{'algo': algo, 'nbytes': nbytes, 'y': t} for t in thruputs]
 
@@ -260,7 +320,7 @@ def query_speed_results():
     for s, sz in zip(matmul_strs, batch_sizes):
         algo = 'Matmul {}'.format(sz)
         for nbytes in nbytes_list:
-            thruputs = _extract_thruput(s) / 1e6
+            thruputs = _extract_thruput(s)  # / 1e6
             out_dicts += [{'algo': algo, 'nbytes': nbytes, 'y': t} for r in thruputs]
 
     return pd.DataFrame.from_records(out_dicts)
