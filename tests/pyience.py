@@ -68,20 +68,25 @@ def now_as_string():
     return datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
 
-def save_data_frame(df, save_dir):
+def save_data_frame(df, save_dir, name=None, timestamp=False):
     ensure_dir_exists(save_dir)
-    fileName = "{}.csv".format(now_as_string())
+    timestamp_str = ("_" + now_as_string()) if timestamp else ""
+    name = name if name else ""
+    fileName = "{}{}.csv".format(name, timestamp_str)
     df = df.sort_index(axis=1)
     df.to_csv(os.path.join(save_dir, fileName))
 
 
-def save_dicts_as_data_frame(d, save_dir):
+def save_dicts_as_data_frame(d, save_dir, name=None, timestamp=False):
     if not isinstance(d, dict):
-        dfs = [pd.DataFrame.from_records(dd, index=[0]) for dd in d]
-        df = pd.concat(dfs, axis=0, ignore_index=True)
+        try:
+            df = pd.DataFrame.from_records(d)
+        except:
+            dfs = [pd.DataFrame.from_records(dd, index=[0]) for dd in d]
+            df = pd.concat(dfs, axis=0, ignore_index=True)
     else:
         df = pd.DataFrame.from_records(d, index=[0])
-    save_data_frame(df, save_dir)
+    save_data_frame(df, save_dir, name=name, timestamp=timestamp)
 
 
 def generate_save_path(params, savedir, subdir_keys=None):
