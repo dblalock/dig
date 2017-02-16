@@ -1546,6 +1546,93 @@ def hard_threshold_pursuit(A, y, s, init='least_squares', niters=5,
     return x.ravel()
 
 
+# ================================================================ Block OPQ
+
+def bopq_rotate(X, rotations):
+    _, D = X.shape
+    R_sz = len(rotations[0])
+    nrots = int(D / R_sz)
+    assert nrots == len(rotations)
+
+    rot_starts = R_sz * np.arange(nrots)
+    rot_ends = rot_starts + R_sz
+
+    X_out = np.copy(X)
+    for i, R in enumerate(rotations):
+        start, end = rot_starts[i], rot_ends[i]
+        X_out[:, start:end] = np.dot(X[:, start:end], R.T)
+
+    return X_out
+
+
+def learn_bopq(X_train, ncodebooks, codebook_bits=8, niters=20,
+               initial_kmeans_iters=1, init='identity', R_sz=32):
+    """init in {'gauss', 'identity', 'random'}"""
+
+    print "BOPQ: Using init '{}'".format(init)
+    assert init == 'identity'  # only identity supported for now
+
+    t0 = time.time()
+
+    X = X_train.astype(np.float32)
+    N, D = X.shape
+    ncentroids = int(2**codebook_bits)
+    subvect_len = D // ncodebooks
+    # codebook_indices = np.arange(ncodebooks, dtype=np.int)
+
+    assert D % subvect_len == 0  # equal number of dims for each codebook
+
+    # compute number of rotations and subspaces associated with each
+    nrots = int(D / R_sz)
+    rot_starts = R_sz * np.arange(nrots)
+    rot_ends = rot_starts + R_sz
+
+    # X_rotated, R = opq_initialize(X_train, ncodebooks=ncodebooks, init=init)
+    X_rotated = X  # hardcode identity init # TODO allow others
+    rotations = [np.eye(R_sz) for i in range(nrots)]
+
+    # initialize codebooks by running kmeans on each rotated dim; this way,
+    # setting niters=0 corresponds to normal PQ
+    codebooks, assignments = learn_pq(X_rotated, ncentroids=ncentroids,
+                                      nsubvects=ncodebooks,
+                                      subvect_len=subvect_len,
+                                      max_kmeans_iters=1)
+
+    for it in np.arange(niters):
+        # compute reconstruction errors
+        X_hat = reconstruct_X_pq(assignments, codebooks)
+        # err = compute_reconstruction_error(X_rotated, X_hat, subvect_len=subvect_len)
+        err = compute_reconstruction_error(X_rotated, X_hat)
+        print "---- BOPQ {}x{}b iter {}: mse / variance = {:.5f}".format(
+            ncodebooks, codebook_bits, it, err)
+
+        rotations = []
+        for i in range(nrots):
+            start, end = rot_starts[i], rot_ends[i]
+
+            X_sub = X[:, start:end]
+            X_hat_sub = X_hat[:, start:end]
+
+            # update rotation matrix based on reconstruction errors
+            U, s, V = np.linalg.svd(np.dot(X_hat_sub.T, X_sub), full_matrices=False)
+            R = np.dot(U, V)
+            rotations.append(R)
+
+            X_rotated[:, start:end] = np.dot(X_sub, R.T)
+
+        # update assignments and codebooks based on new rotations
+        assignments = _encode_X_pq(X_rotated, codebooks)
+        codebooks = _update_centroids_opq(X_rotated, assignments, ncentroids)
+
+    X_hat = reconstruct_X_pq(assignments, codebooks)
+    err = compute_reconstruction_error(X_rotated, X_hat)
+    t = time.time() - t0
+    print "---- BOPQ {}x{}b final mse / variance = {:.5f} ({:.3f}s)".format(
+        ncodebooks, codebook_bits, err, t)
+
+    return codebooks, assignments, rotations
+
+
 # ================================================================ Main
 
 def test_rpq():  # TODO put in a real unit test
@@ -1640,10 +1727,25 @@ def main():
         # datasets.Random.BLOBS, N=10000, D=32)
         # datasets.Mnist, N=10000, norm_mean=True)
         # datasets.Mnist, N=10000)
-        # datasets.Convnet1M, N=10000, norm_mean=True)
+        datasets.Convnet1M, N=10000, norm_mean=True)
         # datasets.Deep1M, N=10000, norm_mean=True)  # breaks gauss init
         # datasets.LabelMe, norm_mean=True, num_queries=500)
-        datasets.LabelMe, norm_mean=True)
+        # datasets.LabelMe, norm_mean=True)
+
+    # ------------------------ bopq
+
+    # codebooks, assignments, R = learn_bopq(X_train, ncodebooks=4, niters=0)
+
+    # codebooks, assignments, R = learn_bopq(X_train, ncodebooks=16, codebook_bits=4, niters=5)
+    # codebooks, assignments, R = learn_bopq(X_train, ncodebooks=8, niters=5)
+    # codebooks, assignments, R = learn_opq(X_train, ncodebooks=8, niters=5, init='identity')
+
+    codebooks, assignments, R = learn_bopq(X_train, ncodebooks=32, codebook_bits=4, niters=5)
+    codebooks, assignments, R = learn_bopq(X_train, ncodebooks=16, niters=5)
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=32, niters=5, codebook_bits=4, init='identity')
+    codebooks, assignments, R = learn_opq(X_train, ncodebooks=16, niters=5, init='identity')
+
+    # ------------------------ ppq, htpq, rpq
 
     # learn_ppq(X_train, ncodebooks=16, codebook_bits=4, niters=10)
 
