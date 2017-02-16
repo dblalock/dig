@@ -249,15 +249,54 @@ class PQEncoder(object):
         return np.sum(centroid_dists.reshape(X_enc.shape), axis=-1)
 
 
+def _learn_best_quantization(luts):  # luts can be a bunch of vstacked luts
+    best_loss = np.inf
+    best_alpha = None
+    best_floors = None
+    best_scale_by = None
+    for alpha in [.001, .002, .005, .01, .02, .05, .1]:
+        alpha_pct = int(100 * alpha)
+        # compute quantized luts this alpha would yield
+        floors = np.percentile(luts, alpha_pct, axis=0)
+        luts_offset = np.maximum(0, luts - floors)
+
+        ceil = np.percentile(luts_offset, 100 - alpha_pct)
+        scale_by = 255. / ceil
+        luts_quantized = np.floor(luts_offset * scale_by).astype(np.int)
+        luts_quantized = np.minimum(255, luts_quantized)
+
+        # compute err
+        # luts_hat = luts_quantized / scale_by
+        luts_ideal = (luts - luts_offset) * scale_by
+        diffs = luts_ideal - luts_quantized
+        # diffs = (luts_offset * scale_by) - luts_quantized
+        # print "diffs dtype: ", diffs.dtype  # float64
+        loss = np.sum(diffs * diffs)
+
+        # print "alpha = {}\t-> loss = {}".format(alpha, loss)
+        # # yep, almost exactly alpha saturate in either direction
+        # print "fraction of 0s, 255s = {}, {}".format(
+        #     np.mean(luts_offset == 0), np.mean(luts_quantized == 255))
+
+        if loss <= best_loss:
+            best_loss = loss
+            best_alpha = alpha
+            best_floors = floors
+            best_scale_by = scale_by
+
+    return best_floors, best_scale_by, best_alpha
+
+
 class OPQEncoder(PQEncoder):
 
     def __init__(self, dataset, code_bits=-1, bits_per_subvect=-1,
                  nsubvects=-1, elemwise_dist_func=dists_elemwise_sq,
-                 opq_iters=20, quantize_lut=False, **opq_kwargs):
+                 opq_iters=20, quantize_lut=False, algo='OPQ', **opq_kwargs):
         X = dataset.X_train
         self.elemwise_dist_func = elemwise_dist_func
         self.quantize_lut = quantize_lut
         self.opq_iters = opq_iters
+        self.algo = algo
 
         tmp = _parse_codebook_params(X.shape[1], code_bits=code_bits,
                                      bits_per_subvect=bits_per_subvect,
@@ -268,77 +307,121 @@ class OPQEncoder(PQEncoder):
         # for fast lookups via indexing into flattened array
         self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
 
-        self.centroids, _, self.R = pq.learn_opq(
-            X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
-            niters=opq_iters, **opq_kwargs)
+        if self.algo == 'Bolt':
+            self.centroids, _, self.rotations = pq.learn_bopq(
+                X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
+                niters=opq_iters, **opq_kwargs)
+        elif self.algo == 'OPQ':
+            self.centroids, _, self.R = pq.learn_opq(
+                X, ncodebooks=nsubvects, codebook_bits=bits_per_subvect,
+                niters=opq_iters, **opq_kwargs)
+        else:
+            raise ValueError("argument algo must be one of {OPQ, Bolt}")
 
         # learn appropriate offsets and shared scale factor for quantization
         self.lut_offsets = np.zeros(self.nsubvects)
         self.order_idxs = np.arange(self.nsubvects, dtype=np.int)
 
-        # print "OPQ centroids shape: ", self.centroids.shape
-
-        # for _ in range(5): # TODO rm
-        if self.quantize_lut:
-            # temporary initial values for encoding of sampled queries
-            # self.scale_by = 1
-            # self.dist_offset = 0
-
-            # TODO use more queries and rows of X
-            # X, queries = datasets.extract_random_rows(X, how_many=100)
-            # queries = dataset.q   # WAT THE **** THIS SHOULD NOT FIX THIS DISTANCE DISCREPANCIES
-            # print "dataset q:", np.mean(queries), np.std(queries), queries.shape, queries.dtype
-            # _, queries = datasets.extract_random_rows(X[10000:, :], how_many=1000)
+        if self.quantize_lut:  # TODO put this logic in separate function
+            num_rows = min(10*1000, len(X) / 2)
             _, queries = datasets.extract_random_rows(
-                X[10000:], how_many=1000, remove_from_X=False)
+                X[num_rows:], how_many=1000, remove_from_X=False)
             # print "sampled q:", np.mean(queries), np.std(queries), queries.shape, queries.dtype
-            X = X[:10000]  # limit to first 10k rows of X for now
+            X = X[:num_rows]  # limit to first 10k rows of X for now
 
-            # compute approximated nn distances between the queries
-            # and the training set
-            X_enc = self.encode_X(X)
-            num_neighbors = 10  # TODO accept as param
-            all_enc_dists = np.empty((len(queries), num_neighbors))
-            all_true_dists = np.empty((len(queries), num_neighbors))
-            for i, q in enumerate(queries):
-                # dists_true = dists_sq(X, X[i])
-                # knn_idxs = top_k_idxs(dists_true, 10, smaller_better=True)
-                # print "true knn dists opq:", dists_true[knn_idxs]
+            if True:  # learn distros of entries in each lut
+                print "learning quantization..."
 
-                self.fit_query(q, quantize=False)
-                dists_true = self.dists_true(X, q)
-                dists_enc = self.dists_enc(X_enc)
-                # if i == 0:
-                #     print "dists_true [:100]", dists_true[:100]
-                knn_idxs = top_k_idxs(dists_true, num_neighbors, smaller_better=True)
-                all_enc_dists[i] = dists_enc[knn_idxs]
-                all_true_dists[i] = dists_true[knn_idxs]  # TODO rm
+                # compute luts for all the queries
+                luts = [self._fit_query(q, quantize=False) for q in queries]
+                luts = np.vstack(luts)
+                assert luts.shape == (self.ncentroids * len(queries), self.nsubvects)
 
-            max_enc_dists_for_queries = np.max(all_enc_dists, axis=1)
-            min_enc_dists_for_queries = np.min(all_enc_dists, axis=1)
+                self.lut_offsets, self.scale_by, _ = _learn_best_quantization(luts)
 
-            lower_cutoff = np.percentile(min_enc_dists_for_queries, 5)
-            upper_cutoff = np.percentile(max_enc_dists_for_queries, 95)
+                # # assess different cutoffs for where to crop the distros
+                # best_loss = np.inf
+                # # best_alpha = None
+                # best_floors = None
+                # best_scale_by = None
+                # for alpha in [.001, .002, .005, .01, .02, .05, .1]:
+                #     alpha_pct = int(100 * alpha)
+                #     # compute quantized luts this alpha would yield
+                #     floors = np.percentile(luts, alpha_pct, axis=0)
+                #     luts_offset = np.maximum(0, luts - floors)
 
-            self.lut_offsets += (lower_cutoff / float(self.nsubvects))
-            self.scale_by = (1. / (upper_cutoff - lower_cutoff)) * 255
+                #     ceil = np.percentile(luts_offset, 100 - alpha_pct)
+                #     scale_by = 255. / ceil
+                #     luts_quantized = np.floor(luts_offset * scale_by).astype(np.int)
+                #     luts_quantized = np.minimum(255, luts_quantized)
+
+                #     # compute err
+                #     # luts_hat = luts_quantized / scale_by
+                #     luts_ideal = (luts - luts_offset) * scale_by
+                #     diffs = luts_ideal - luts_quantized
+                #     # diffs = (luts_offset * scale_by) - luts_quantized
+                #     # print "diffs dtype: ", diffs.dtype  # float64
+                #     loss = np.sum(diffs * diffs)
+
+                #     print "alpha = {}\t-> loss = {}".format(alpha, loss)
+                #     # yep, almost exactly alpha saturate in either direction
+                #     print "fraction of 0s, 255s = {}, {}".format(
+                #         np.mean(luts_offset == 0), np.mean(luts_quantized == 255))
+
+                #     if loss <= best_loss:
+                #         best_loss = loss
+                #         best_floors = floors
+                #         best_scale_by = scale_by
+
+                # # use the best offsets and scale factor
+                # self.lut_offsets = best_floors
+                # self.scale_by = best_scale_by
+
+            if False:  # learn overall true dists
+                # compute approximated nn distances between the queries
+                # and the training set
+                X_enc = self.encode_X(X)
+                # num_neighbors = 10  # TODO accept as param
+                num_neighbors = 10  # TODO accept as param
+                all_enc_dists = np.empty((len(queries), num_neighbors))
+                # all_true_dists = np.empty((len(queries), num_neighbors))
+                for i, q in enumerate(queries):
+
+                    self.fit_query(q, quantize=False)
+                    dists_true = self.dists_true(X, q)
+                    dists_enc = self.dists_enc(X_enc)
+                    # if i == 0:
+                    #     print "dists_true [:100]", dists_true[:100]
+                    knn_idxs = top_k_idxs(dists_true, num_neighbors, smaller_better=True)
+                    all_enc_dists[i] = dists_enc[knn_idxs]
+                    # all_true_dists[i] = dists_true[knn_idxs]  # TODO rm
+
+                max_enc_dists_for_queries = np.max(all_enc_dists, axis=1)
+                min_enc_dists_for_queries = np.min(all_enc_dists, axis=1)
+
+                lower_cutoff = np.percentile(min_enc_dists_for_queries, 5)
+                upper_cutoff = np.percentile(max_enc_dists_for_queries, 95)
+
+                self.lut_offsets += (lower_cutoff / float(self.nsubvects))
+                self.scale_by = (1. / (upper_cutoff - lower_cutoff)) * 255
 
     def name(self):
-        return "OPQ_{}x{}b_iters={}_quantize={}".format(
-            self.nsubvects, self.code_bits, self.opq_iters,
+        return "{}_{}x{}b_iters={}_quantize={}".format(
+            self.algo, self.nsubvects, self.code_bits, self.opq_iters,
             int(self.quantize_lut))
 
     def params(self):
-        return {'_algo': 'OPQ', '_ncodebooks': self.nsubvects,
+        return {'_algo': self.algo, '_ncodebooks': self.nsubvects,
                 '_code_bits': self.code_bits, 'opq_iters': self.opq_iters,
                 '_quantize': self.quantize_lut}
 
-    def _fit_query(self, q, quantize=False, subtract_mins=False):
-        qR = pq.opq_rotate(q, self.R).ravel()
+    def _fit_query(self, q, quantize=False):
+        if self.algo == 'OPQ':
+            qR = pq.opq_rotate(q, self.R).ravel()
+        elif self.algo == 'Bolt':
+            qR = pq.bopq_rotate(q, self.rotations).ravel()
         lut = _fit_opq_lut(qR, centroids=self.centroids,
                            elemwise_dist_func=self.elemwise_dist_func)
-        if subtract_mins:
-            lut -= np.min(lut, axis=0)
 
         if quantize:
             # print "quantizing query!"
@@ -351,7 +434,7 @@ class OPQEncoder(PQEncoder):
             # return np.floor(lut * self.scale_by)
             # print "max lut value: np.max(lut * self.scale_by)"
             lut = np.maximum(0, lut - self.lut_offsets)
-            lut = np.floor(lut * self.scale_by)
+            lut = np.floor(lut * self.scale_by).astype(np.int)
             return np.minimum(lut, 255)
             # lut = np.floor((lut - self.dist_offset) * self.scale_by)
             # return np.maximum(0, lut)
@@ -360,7 +443,11 @@ class OPQEncoder(PQEncoder):
         return lut
 
     def encode_X(self, X, **sink):
-        X = pq.opq_rotate(X, self.R)
+        if self.algo == 'OPQ':
+            X = pq.opq_rotate(X, self.R)
+        elif self.algo == 'Bolt':
+            X = pq.bopq_rotate(X, self.rotations)
+
         idxs = pq._encode_X_pq(X, codebooks=self.centroids,
                                elemwise_dist_func=self.elemwise_dist_func)
 
@@ -369,6 +456,12 @@ class OPQEncoder(PQEncoder):
     def fit_query(self, q, quantize=True, **sink):
         quantize = quantize and self.quantize_lut
         self.q_dists_ = self._fit_query(q, quantize=quantize)
+
+        if quantize:
+            # print "min, max lut values: {}, {}".format(np.min(self.q_dists_),
+            #     np.max(self.q_dists_))
+            assert np.min(self.q_dists_) >= 0
+            assert np.max(self.q_dists_) <= 255
 
         if False:
             _, axes = plt.subplots(3, figsize=(9, 11))
@@ -623,7 +716,7 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     SAVE_DIR = '../results/acc_l2/'
 
     N, D = -1, -1
-    # N = 10 * 1000
+    N = 10 * 1000
 
     # num_queries = 128
     # num_queries = 1
@@ -660,57 +753,47 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
 
     dicts = []
     detailed_dicts = []
+    nbytes_list = [8, 16, 32]
+    max_opq_iters = 5
 
-    # ------------------------------------------------ PQ 8bit
-    encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=8)
-    stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    dicts.append(stats)
-    detailed_dicts += detailed_stats
+    # ------------------------------------------------ Bolt
+    for opq_iters in (0, max_opq_iters):  # see how much rotations help
+        for nbytes in nbytes_list:
+            nsubvects = nbytes * 2
+            encoder = OPQEncoder(dataset, nsubvects=nsubvects,
+                                 bits_per_subvect=4,
+                                 opq_iters=opq_iters,
+                                 algo='Bolt', quantize_lut=True)
+            stats, detailed_stats = eval_encoder(dataset, encoder,
+                                                 eval_dists=eval_dists)
+            dicts.append(stats)
+            detailed_dicts += detailed_stats
 
-    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=8)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
+    # ------------------------------------------------ PQ
+    for codebook_bits in [4, 8]:
+        for nbytes in nbytes_list:
+            nsubvects = nbytes * (8 / codebook_bits)
+            encoder = PQEncoder(dataset, nsubvects=nsubvects,
+                                bits_per_subvect=codebook_bits)
+            stats, detailed_stats = eval_encoder(dataset, encoder,
+                                                 eval_dists=eval_dists)
+            dicts.append(stats)
+            detailed_dicts += detailed_stats
 
-    # encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=8)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
-
-    # # ------------------------------------------------ PQ 4bit
-    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
-
-    # encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=4)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
-
-    # encoder = PQEncoder(dataset, nsubvects=64, bits_per_subvect=4)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
-
-    # ------------------------------------------------ OPQ 8bit
+    # ------------------------------------------------ OPQ
     init = 'identity'
-    opq_iters = 20
+    opq_iters = max_opq_iters
     # opq_iters = 5
-    encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=opq_iters, init=init)
-    stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
-    dicts.append(stats)
-    detailed_dicts += detailed_stats
-
-    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=8, opq_iters=opq_iters, init=init)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
-
-    # encoder = OPQEncoder(dataset, nsubvects=32, bits_per_subvect=8, opq_iters=opq_iters, init=init)
-    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
-    # dicts.append(stats)
-    # detailed_dicts += detailed_stats
+    for codebook_bits in [4, 8]:
+        for nbytes in nbytes_list:
+            nsubvects = nbytes * (8 / codebook_bits)
+            encoder = OPQEncoder(dataset, nsubvects=nsubvects,
+                                 bits_per_subvect=codebook_bits,
+                                 opq_iters=opq_iters, init=init)
+            stats, detailed_stats = eval_encoder(dataset, encoder,
+                                                 eval_dists=eval_dists)
+            dicts.append(stats)
+            detailed_dicts += detailed_stats
 
     for d in dicts:
         d['dataset'] = dataset.name
@@ -759,7 +842,7 @@ def main():
     N, D = -1, -1
 
     # N = -1  # set this to not limit real datasets to first N entries
-    N = 10 * 1000
+    # N = 10 * 1000
     # N = 20 * 1000
     # N = 50 * 1000
     # N = 100 * 1000
@@ -791,20 +874,38 @@ def main():
     # dataset = dataset_func(datasets.Random.GAUSS)
     # dataset = dataset_func(datasets.Random.BLOBS)
     # dataset = dataset_func(datasets.Glove.TEST_100)
-    # dataset = dataset_func(datasets.Sift1M.TEST_100)
+    dataset = dataset_func(datasets.Sift1M.TEST_100)
     # dataset = dataset_func(datasets.Gist.TEST_100)
     # dataset = dataset_func(datasets.Mnist)
     # dataset = dataset_func(datasets.Convnet1M.TEST_100)
     # dataset = dataset_func(datasets.Deep1M.TEST_100)
-    dataset = dataset_func(datasets.LabelMe)
+    # dataset = dataset_func(datasets.LabelMe)
     print "=== Using Dataset: {} ({}x{})".format(dataset.name, N, D)
 
     dicts = []
 
-    print dataset.X_train.shape
-    print dataset.X_test.shape
-    print dataset.Q.shape
+    # print dataset.X_train.shape
+    # print dataset.X_test.shape
+    # print dataset.Q.shape
+    # return
+
+    # for quantize in (True, False):
+    #     # encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8,
+    #     #                      opq_iters=5, quantize_lut=quantize)
+    #     # eval_encoder(dataset, encoder)
+
+    #     encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8,
+    #                          opq_iters=5, quantize_lut=quantize, algo='Bolt')
+    #     eval_encoder(dataset, encoder)
+
+    for nsubvects in (32, 64):
+        for niters in (0, 5):  # how much to the rotations help?
+            encoder = OPQEncoder(dataset, nsubvects=nsubvects, bits_per_subvect=4,
+                                 opq_iters=niters, quantize_lut=True, algo='Bolt')
+            eval_encoder(dataset, encoder)
     return
+
+    # ------------------------------------------------ old stuff
 
     # ncols = dataset.X.shape[1]
     # if ncols < D:
@@ -840,9 +941,9 @@ def main():
     # # eval_encoder(dataset, encoder, plot=True)
     # eval_encoder(dataset, encoder)
 
-    print "------------------------ pq l2, 8x8 bit centroids idxs"
-    encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=8)
-    dicts.append(eval_encoder(dataset, encoder))
+    # print "------------------------ pq l2, 8x8 bit centroids idxs"
+    # encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=8)
+    # dicts.append(eval_encoder(dataset, encoder))
 
     print "------------------------ opq l2, 8x8 bit centroid idxs"
     encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=5)

@@ -1549,6 +1549,7 @@ def hard_threshold_pursuit(A, y, s, init='least_squares', niters=5,
 # ================================================================ Block OPQ
 
 def bopq_rotate(X, rotations):
+    X = np.atleast_2d(X)
     _, D = X.shape
     R_sz = len(rotations[0])
     nrots = int(D / R_sz)
@@ -1565,12 +1566,12 @@ def bopq_rotate(X, rotations):
     return X_out
 
 
+@_memory.cache  # opq with block diagonal rotations
 def learn_bopq(X_train, ncodebooks, codebook_bits=8, niters=20,
-               initial_kmeans_iters=1, init='identity', R_sz=32):
-    """init in {'gauss', 'identity', 'random'}"""
+               initial_kmeans_iters=1, R_sz=32, **sink):
 
+    init = 'identity'  # only identity supported for now
     print "BOPQ: Using init '{}'".format(init)
-    assert init == 'identity'  # only identity supported for now
 
     t0 = time.time()
 

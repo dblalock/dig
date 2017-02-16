@@ -58,7 +58,7 @@ class Deep1M:
     TEST_100    = join(DIR, 'deep1M_test_100k.npy')     # noqa
     QUERIES     = join(DIR, 'deep1M_queries.npy')       # noqa
     TRUTH_TRAIN = join(DIR, 'deep1M_truth_train.npy')   # noqa
-    TRUTH   = join(DIR, 'deep1M_groundtruth.npy')       # noqa
+    TRUTH       = join(DIR, 'deep1M_groundtruth.npy')   # noqa
 
 
 class Convnet1M:
@@ -150,9 +150,84 @@ def _ground_truth_for_dataset(which_dataset):
     return None  # TODO
 
 
+# XXX: not clear whether this function is correct in general, but works for
+# 784D with the nzeros we get for 32 and 64 codebooks
+def _insert_zeros(X, nzeros):
+    N, D = X.shape
+    D_new = D + nzeros
+    X_new = np.zeros((N, D_new), dtype=X.dtype)
+
+    step = int(D / (nzeros + 1)) - 1
+    # assert step * nzeros < D
+    # print "step = ", step
+
+    # idxs = np.arange(D_new)
+    # for i in range(nzeros):
+
+    # in_idx = 0
+    # out_idx = 0
+    # out_offset = 0
+    # for i, in_idx in enumerate(range(0, D - step, step)):
+    for i in range(nzeros):
+        in_start = step * i
+        in_end = in_start + step
+        out_start = in_start + i + 1
+        out_end = out_start + step
+        X_new[:, out_start:out_end] = X[:, in_start:in_end]
+        # print "in start, out start = ", in_start, out_start
+
+    remaining_len = D - in_end
+    out_remaining_len = D_new - out_end
+    # print "remaining_len:", remaining_len
+    # print "out remaining len: ", D_new - out_end
+    assert remaining_len == out_remaining_len
+
+    assert remaining_len >= 0
+    if remaining_len:
+        X_new[:, out_end:out_end+remaining_len] = X[:, in_end:D]
+
+    # zero_idxs = np.linspace(0, D_new, nzeros).astype(np.int)
+
+    # gaps = (zero_idxs[1:] - zero_idxs[:-1])
+
+    # print "_insert_zeros(): D, D_new =", D, D_new
+    # print "zero idxs:", zero_idxs
+    # print "gaps:", gaps
+    # # print "sum of gaps: ", np.sum(gaps)
+    # assert np.sum(gaps) == D_new
+
+    # in_idx = 0
+    # out_idx = 1  # fist col always 0
+    # for gap in gaps:
+    #     in_end = min(D, in_idx + gap)
+    #     out_end = min(D_new - 1, out_idx + gap)  # last col always 0
+    #     X_new[:, out_idx:out_end] = X[:, in_idx:in_end]
+    #     in_idx += gap
+    #     out_idx += gap + 1
+    #     print "in idx, out_idx: ", in_idx, out_idx
+
+    # check that we copied both the beginning and end properly
+    # assert np.array_equal(X[:, 0], X_new[:, 1])
+    assert np.array_equal(X[:, 0], X_new[:, 0])
+    assert np.array_equal(X[:, -1], X_new[:, -1])
+
+    # print "in idx, out_idx: ", in_idx, out_idx
+    # assert in_idx == D
+    # assert out_idx == D_new
+
+    return X_new
+
+
+def ensure_num_cols_multiple_of(X, multiple_of):
+    remainder = X.shape[1] % multiple_of
+    if remainder > 0:
+        return _insert_zeros(X, multiple_of - remainder)
+    return X
+
+
 @_memory.cache
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
-                 num_queries=10, Ntrain=-1):
+                 num_queries=10, Ntrain=-1, D_multiple_of=-1):
     true_nn = None
 
     # randomly generated datasets
@@ -224,7 +299,13 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
     # TODO don't convert datasets that are originally uint8s to floats
     X_train = X_train.astype(np.float32)
     X_test = X_test.astype(np.float32)
-    Q = np.squeeze(Q.astype(np.float32))
+    # Q = np.squeeze(Q.astype(np.float32))
+    Q = Q.astype(np.float32)
+
+    if D_multiple_of > 1:
+        X_train = ensure_num_cols_multiple_of(X_train, D_multiple_of)
+        X_test = ensure_num_cols_multiple_of(X_test, D_multiple_of)
+        Q = ensure_num_cols_multiple_of(Q, D_multiple_of)
 
     return X_train, Q, X_test, true_nn
 
