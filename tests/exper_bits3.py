@@ -429,10 +429,12 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     t0 = time.time()
 
     # performance metrics
-    count_in_top1 = 0.
-    count_in_top10 = 0.
-    count_in_top100 = 0.
-    count_in_top1000 = 0.
+    RECALL_Rs = [1, 5, 10, 50, 100, 500, 1000]
+    recall_counts = np.zeros(len(RECALL_Rs))
+    # count_in_top1 = 0.
+    # count_in_top10 = 0.
+    # count_in_top100 = 0.
+    # count_in_top1000 = 0.
     if eval_dists:
         fracs_below_max = []
         all_corrs = []
@@ -471,10 +473,12 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         # compute recall@R stats
         top_1000 = top_k_idxs(all_enc_dists, 1000, smaller_better=True)
         nn_idx = knn_idxs[0]
-        count_in_top1 += nn_idx == top_1000[0]
-        count_in_top10 += nn_idx in top_1000[:10]
-        count_in_top100 += nn_idx in top_1000[:100]
-        count_in_top1000 += nn_idx in top_1000
+        for i, r in enumerate(RECALL_Rs):
+            recall_counts[i] += nn_idx in top_1000[:r]
+        # count_in_top1 += nn_idx == top_1000[0]
+        # count_in_top10 += nn_idx in top_1000[:10]
+        # count_in_top100 += nn_idx in top_1000[:100]
+        # count_in_top1000 += nn_idx in top_1000
 
         # compute distortion in distances, quantified by corr and rel err
         if eval_dists:
@@ -535,15 +539,19 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     stats['X_rows'] = X.shape[0]
     stats['X_cols'] = X.shape[1]
     stats['nqueries'] = len(queries)
-    stats['eval_duration_secs'] = t
+    stats['eval_time_secs'] = t
     stats['fracs_below_max_mean'] = np.mean(fracs_below_max)
     stats['fracs_below_max_std'] = np.std(fracs_below_max)
     stats['fracs_below_max_50th'] = np.median(fracs_below_max)
     stats['fracs_below_max_90th'] = np.percentile(frac_below_max, q=90)
-    stats['recall@1'] = count_in_top1 / len(queries)
-    stats['recall@10'] = count_in_top10 / len(queries)
-    stats['recall@100'] = count_in_top100 / len(queries)
-    stats['recall@1000'] = count_in_top1000 / len(queries)
+    for i, r in enumerate(RECALL_Rs):
+        key = 'recall@{}'.format(r)
+        val = float(recall_counts[i]) / len(queries)
+        stats[key] = val
+    # stats['recall@1'] = count_in_top1 / len(queries)
+    # stats['recall@10'] = count_in_top10 / len(queries)
+    # stats['recall@100'] = count_in_top100 / len(queries)
+    # stats['recall@1000'] = count_in_top1000 / len(queries)
     if eval_dists:
         corrs = np.hstack(all_corrs)
         rel_errs = np.hstack(all_rel_errs)
@@ -617,7 +625,7 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     N, D = -1, -1
     # N = 10 * 1000
 
-    num_queries = 128
+    # num_queries = 128
     # num_queries = 1
     # num_queries = 3
     # num_queries = 8
@@ -628,7 +636,6 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     max_ncodebooks = 64
 
     dataset_func = functools.partial(load_dataset_object, N=N, D=D,
-                                     num_queries=num_queries,
                                      norm_len=norm_len, norm_mean=norm_mean,
                                      D_multiple_of=max_ncodebooks)
 
@@ -660,22 +667,17 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     dicts.append(stats)
     detailed_dicts += detailed_stats
 
-    encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=8)
-    stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    dicts.append(stats)
-    detailed_dicts += detailed_stats
-
-    encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=8)
-    stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
-    dicts.append(stats)
-    detailed_dicts += detailed_stats
-
-    # # ------------------------------------------------ PQ 4bit
-    # encoder = PQEncoder(dataset, nsubvects=8, bits_per_subvect=4)
+    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=8)
     # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
     # dicts.append(stats)
     # detailed_dicts += detailed_stats
 
+    # encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=8)
+    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
+    # dicts.append(stats)
+    # detailed_dicts += detailed_stats
+
+    # # ------------------------------------------------ PQ 4bit
     # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
     # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
     # dicts.append(stats)
@@ -686,22 +688,29 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     # dicts.append(stats)
     # detailed_dicts += detailed_stats
 
+    # encoder = PQEncoder(dataset, nsubvects=64, bits_per_subvect=4)
+    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=True)
+    # dicts.append(stats)
+    # detailed_dicts += detailed_stats
+
     # ------------------------------------------------ OPQ 8bit
-    opq_iters = 5
-    encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=opq_iters)
+    init = 'identity'
+    opq_iters = 20
+    # opq_iters = 5
+    encoder = OPQEncoder(dataset, nsubvects=8, bits_per_subvect=8, opq_iters=opq_iters, init=init)
     stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
     dicts.append(stats)
     detailed_dicts += detailed_stats
 
-    encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=8, opq_iters=opq_iters)
-    stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
-    dicts.append(stats)
-    detailed_dicts += detailed_stats
+    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=8, opq_iters=opq_iters, init=init)
+    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
+    # dicts.append(stats)
+    # detailed_dicts += detailed_stats
 
-    encoder = OPQEncoder(dataset, nsubvects=32, bits_per_subvect=8, opq_iters=opq_iters)
-    stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
-    dicts.append(stats)
-    detailed_dicts += detailed_stats
+    # encoder = OPQEncoder(dataset, nsubvects=32, bits_per_subvect=8, opq_iters=opq_iters, init=init)
+    # stats, detailed_stats = eval_encoder(dataset, encoder, eval_dists=eval_dists)
+    # dicts.append(stats)
+    # detailed_dicts += detailed_stats
 
     for d in dicts:
         d['dataset'] = dataset.name
@@ -713,61 +722,26 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     savedir = os.path.join(SAVE_DIR, dataset.name)
 
     pyn.save_dicts_as_data_frame(dicts, savedir, name='summary')
-    pyn.save_dicts_as_data_frame(detailed_dicts, savedir, name='all_results')
-
     # also just save versions with timestamps to recover from clobbering
     pyn.save_dicts_as_data_frame(dicts, savedir, name='summary',
                                  timestamp=True)
-    pyn.save_dicts_as_data_frame(detailed_dicts, savedir, name='all_results',
-                                 timestamp=True)
+    if eval_dists:
+        pyn.save_dicts_as_data_frame(detailed_dicts, savedir, name='all_results')
+        pyn.save_dicts_as_data_frame(detailed_dicts, savedir, name='all_results',
+                                     timestamp=True)
 
     return dicts, detailed_dicts
 
 
 def experiment(eval_dists=False):
 
-    # which_datasets = [datasets.Mnist]
-
+    which_datasets = [datasets.Mnist]
     # which_datasets = [datasets.Convnet1M, datasets.Mnist]
-    which_datasets = [datasets.LabelMe, datasets.Sift1M,
-                      datasets.Convnet1M, datasets.Mnist]
-
-    # dataset = dataset_func(datasets.Random.WALK)
-    # dataset = dataset_func(datasets.Random.UNIF)
-    # dataset = dataset_func(datasets.Random.GAUSS)
-    # dataset = dataset_func(datasets.Random.BLOBS)
-    # dataset = dataset_func(datasets.Glove.TEST_100)
-    # dataset = dataset_func(datasets.Sift1M.TEST_100)
-    # dataset = dataset_func(datasets.Gist.TEST_100)
-    # dataset = dataset_func(datasets.Mnist)
-    # dataset = dataset_func(datasets.Convnet1M.TEST_100)
-    # dataset = dataset_func(datasets.Deep1M.TEST_100)
-    # dataset = dataset_func(datasets.LabelMe)
-    # which_dataset = datasets.Convnet1M
-
-    # dicts = []
-    # detailed_dicts = []
+    # which_datasets = [datasets.LabelMe, datasets.Sift1M,
+    #                   datasets.Convnet1M, datasets.Mnist]
 
     for which_dataset in which_datasets:
         _dicts, _details = _experiment_one_dataset(which_dataset, eval_dists=eval_dists)
-        # dicts += _dicts
-        # detailed_dicts += _details
-
-    # TODO rm
-    # print "type(detailed_dicts)", type(detailed_dicts)
-    # print "isinstance(detailed_dicts, d)", type(detailed_dicts)
-    # df = pd.DataFrame.from_records(detailed_dicts)
-    # print df
-    # return
-
-    # pyn.save_dicts_as_data_frame(dicts, SAVE_DIR, name='summary')
-    # pyn.save_dicts_as_data_frame(detailed_dicts, SAVE_DIR, name='all_results')
-
-    # # also just save versions with timestamps to recover from clobbering
-    # pyn.save_dicts_as_data_frame(dicts, SAVE_DIR, name='summary',
-    #                              timestamp=True)
-    # pyn.save_dicts_as_data_frame(detailed_dicts, SAVE_DIR, name='all_results',
-    #                              timestamp=True)
 
 
 def main():

@@ -490,7 +490,8 @@ def recall_r_fig(fake_data=False, suptitle=None, l2=True, fname='l2_recall'):
     DATASETS = ['Sift1M', 'Convnet', 'LabelMe', 'MNIST']
     ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ']
     NBYTES_LIST = [8, 16, 32]
-    Rs = [1, 10, 100, 1000]
+    # Rs = [1, 10, 100, 1000]
+    Rs = [1, 5, 10, 50, 100, 500, 1000]
 
     sb.set_context("talk")
     set_palette(ncolors=len(ALGOS))
@@ -524,14 +525,18 @@ def recall_r_fig(fake_data=False, suptitle=None, l2=True, fname='l2_recall'):
 
     else:  # real data
         DATASETS = ['Sift1M', 'Convnet1M', 'LabelMe', 'MNIST']
-        ALGOS = ['PQ', 'OPQ']
+        # ALGOS = ['PQ', 'OPQ']
+        ALGOS = ['PQ4', 'PQ', 'OPQ']
         for d, dset in enumerate(DATASETS):
             if l2:
-                path = os.path.join('../results/corr_l2/', dset, 'summary.csv')
+                path = os.path.join('../results/acc_l2/', dset, 'summary.csv')
             else:
-                path = os.path.join('../results/corr_mips/', dset, 'summary.csv')
+                path = os.path.join('../results/acc_mips/', dset, 'summary.csv')
 
             df = pd.read_csv(path)
+            pq4 = (df['_algo'] == 'PQ') & (df['_code_bits'] == 4)
+            df.loc[pq4, '_algo'] = 'PQ4'
+
             df.rename(columns={'_algo': 'algo'}, inplace=True)
             all_nbytes = (df['_code_bits'] * df['_ncodebooks'] / 8).values
             # df['nbytes'] = ["{}B".format(b) for b in all_nbytes.astype(np.int)]
@@ -542,13 +547,17 @@ def recall_r_fig(fake_data=False, suptitle=None, l2=True, fname='l2_recall'):
                 data = df.loc[df['nbytes'] == nbytes]
                 for algo in ALGOS:
                     df_row = data.loc[data['algo'] == algo]  # should be 1 row
+                    # print df_row
                     assert len(df_row) == 1
+                    # if dset == 'MNIST':  # TODO rm hack once all dsets rerun
+                    #     x = np.array(Rs)
+                    # else:
+                    #     x = np.array([1, 10, 100, 1000])
+
                     x = np.array(Rs)
-                    # colnames = ['recall@{}'.format(r) for r in Rs]
-                    # print 'colnames:', colnames
-                    # print df_row['recall@1'].values[0]
-                    y = [df_row['recall@{}'.format(r)].values[0] for r in Rs]
-                    ax.plot(x, y)
+                    y = [df_row['recall@{}'.format(r)].values[0] for r in x]
+                    ax.plot(x, y, label=algo)
+                    ax.legend()
 
     # ------------------------ legend
 
@@ -669,15 +678,27 @@ def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion
         DATASETS = ['Sift1M', 'Convnet1M', 'LabelMe', 'MNIST']
         # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ']
         # DATASETS = ['Convnet1M', 'MNIST']
-        ALGOS = ['PQ', 'OPQ']
+        # ALGOS = ['PQ', 'OPQ']
+        ALGOS = ['PQ4', 'PQ', 'OPQ']
         for d, dset in enumerate(DATASETS):
             if l2:
-                path = os.path.join('../results/corr_l2/', dset, 'all_results.csv')
+                path = os.path.join('../results/acc_l2/', dset, 'all_results.csv')
             else:
-                path = os.path.join('../results/corr_mips/', dset, 'all_results.csv')
+                path = os.path.join('../results/acc_mips/', dset, 'all_results.csv')
 
             df = pd.read_csv(path)
+
+            print "path: ", path
+
+            pq4 = (df['_algo'] == 'PQ') & (df['_code_bits'] == 4)
+            df.loc[pq4, '_algo'] = 'PQ4'
+
+            # print df.loc[df['_algo'] == 'PQ4']
+            # print df.loc[df['_algo'] == 'PQ4']
+            # return
+
             df.rename(columns={'_algo': ' '}, inplace=True)
+
             # df['nbytes'] = df['_code_bits'] * df['_ncodebooks'] / 8
             all_nbytes = (df['_code_bits'] * df['_ncodebooks'] / 8).values
             df['nbytes'] = ["{}B".format(b) for b in all_nbytes.astype(np.int)]
@@ -687,20 +708,6 @@ def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion
 
             ax.set_title(dset)
 
-        # for b, nbytes in enumerate(NBYTES_LIST):
-        #     ax = axes_row[b]
-        #     # df_nbytes = df_dataset.loc[data['nbytes'] == nbytes]
-        #     df = df_dataset.loc[data['nbytes'] == nbytes]
-
-            # data_tmp = df.loc[(df['algo'] == algo) * (df['algo'] == algo) ]
-
-            # assert np.max(data_tmp) <= 1.
-            # for algo in ALGOS:
-            #     df = df_nbytes.loc[data['algo'] == algo]
-                # # x = np.log10(Rs).astype(np.int32)
-                # x = Rs
-                # sb.tsplot(data=data_tmp, condition=ALGOS, time=x, ax=ax, n_boot=100,
-                #           ls=line_styles_for_nbytes[nbytes])
 
     # ------------------------ legend
 
@@ -781,7 +788,8 @@ def kmeans_fig(data=None, fname='kmeans'):
         df.rename(columns={'algo': ' '}, inplace=True)  # hide from legend
 
         # sb.tsplot(value='err', condition=' ', unit='k', time='t', data=df, ax=ax, n_boot=100)
-        sb.tsplot(value='err', condition=' ', unit='trial', time='t', data=df, ax=ax, ci=95, n_boot=500)
+        sb.tsplot(value='err', condition=' ', unit='trial', time='t', data=df,
+                  ax=ax, ci=95, n_boot=500)
 
     # ------------------------ configure axes
 
@@ -818,7 +826,7 @@ def main():
     # query_speed_fig()
     # matmul_fig()
     # recall_r_fig()
-    recall_r_fig(suptitle='Nearest Neighbor Recall, Euclidean', fname='l2_recall')
+    recall_r_fig(suptitle='Nearest Neighbor Recall', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
     # distortion_fig(fake_data=True, fname='l2_distortion_')
     # distortion_fig(fake_data=False, fname='l2_distortion')
