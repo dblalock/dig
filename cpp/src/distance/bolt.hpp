@@ -100,39 +100,6 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
             uint64_t mask = mask0 + (static_cast<uint64_t>(mask1) << 32);
             uint8_t min_idx = __tzcnt_u64(mask) >> 2; // div by 4 since 4B objs
 
-            // TODO rm after debug
-//            min_idx++;
-
-            // find where the minimum value happens
-            // auto min_broadcast = _mm256_set1_epi32(min_val);
-
-            // // compute argmin; we just write out the array and iterate thru
-            // // it because max reduction, then broadcast, then movemask, then
-            // // clz, is like 25 cycles and uses the ymm registers
-            // //
-            // // TODO see if SIMD version is faster
-            // //
-            // // TODO try hybrid; reduce to 8f, then shuffle / check within
-            // // 128bit lanes, then check get max directly from the 2 possible
-            // // vals in low floats of each 128bit lane
-            // //
-            // // TODO try storing val < min_val in a bit, with
-            // // minval = min(minval, val) to get min, then find last 1
-            // auto min_val = argmin_storage[0];
-            // uint32_t indicators = 1;
-            // // printf("(0: %.0f)", min_val);
-            // for (int i = 1; i < lut_sz; i++) {
-            //     auto val = argmin_storage[i];
-            //     // printf("(%d: %.0f)", i, val);
-            //     bool less = val < min_val;
-            //     min_val = less ? val : min_val;
-            //     indicators = indicators | (static_cast<uint32_t>(less) << i);
-            // }
-            // uint8_t min_idx = msb_idx_u32(indicators);
-            // // printf("\nindicator bits: ");
-            // // dumpEndianBits(indicators);
-            // // printf("\nmin idx, min val = %d, %.0f\n", min_idx, min_val);
-
             if (m % 2) {
                 // odds -> store in upper 4 bits
                 out[m / 2] |= min_idx << 4;
@@ -141,11 +108,11 @@ void bolt_encode(const float* X, int64_t nrows, int ncols,
                 // mask because odd iter will clobber upper 4 bits anyway
                 out[m / 2] = min_idx;
             }
-            // printf("out[m/2] = %d\n", out[m / 2]);
         }
         out += NBytes;
     }
 }
+
 
 /**
  * @brief Create a lookup table (LUT) containing the distances from the
@@ -274,6 +241,94 @@ void bolt_lut(const float* q, int len, const float* centroids, uint8_t* out) {
             // auto dists_perm = _mm256_permute4x64_epi64(
             //     dists_uint8, _MM_SHUFFLE(3,1,2,0));
             // auto dists = _mm256_shuffle_epi8(dists_perm, shuffle_idxs);
+            auto dists = packed_epu16_to_unpacked_epu8(
+                dists_uint16_0, dists_uint16);
+
+            _mm256_store_si256((__m256i*)out, dists);
+            out += 32;
+        } else {
+            // if even-numbered codebook, just store these dists to be combined
+            // when we look at the next codebook
+            dists_uint16_0 = dists_uint16;
+        }
+    }
+}
+
+template<int NBytes, int Reduction=Reductions::DistL2>
+void bolt_lut(const float* q, int len, const float* centroids,
+    // const float* offsets, int scaleby, uint8_t* out)
+    const float* offsets, float scaleby, uint8_t* out)
+{
+    static_assert(
+        Reduction == Reductions::DistL2 ||
+        Reduction == Reductions::DotProd,
+        "Only reductions {DistL2, DotProd} supported");
+    static constexpr int lut_sz = 16;
+    static constexpr int packet_width = 8; // objs per simd register
+    static constexpr int nstripes = lut_sz / packet_width;
+    static constexpr int ncodebooks = 2 * NBytes;
+    static_assert(NBytes > 0, "Code length <= 0 is not valid");
+    const int subvect_len = len / ncodebooks;
+    const int trailing_subvect_len = len % ncodebooks;
+    assert(trailing_subvect_len == 0); // TODO remove this constraint
+
+    __m256 accumulators[nstripes];
+    __m256i dists_uint16_0 = _mm256_undefined_si256();
+
+    __m256 scaleby_vect = _mm256_set1_ps(scaleby);
+    // __m256i scaleby_vect = _mm256_set1_ps(scaleby);
+
+    for (int m = 0; m < ncodebooks; m++) { // for each codebook
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = _mm256_setzero_ps();
+        }
+        for (int j = 0; j < subvect_len; j++) { // for each dim in subvect
+            float q_j = q[(m * subvect_len) + j];
+            if (Reduction == Reductions::DotProd) {
+                q_j = (q_j - offsets[j]) * scaleby;
+            }
+            auto q_broadcast = _mm256_set1_ps(q_j);
+            for (int i = 0; i < nstripes; i++) { // for upper 8, lower 8 floats
+                auto centroids_col = _mm256_load_ps(centroids);
+                centroids += packet_width;
+
+                if (Reduction == Reductions::DotProd) {
+                    accumulators[i] = fma(q_broadcast, centroids_col, accumulators[i]);
+                } else if (Reduction == Reductions::DistL2) {
+                    auto diff = _mm256_sub_ps(q_broadcast, centroids_col);
+                    accumulators[i] = fma(diff, diff, accumulators[i]);
+                }
+            }
+        }
+
+        // apply scale factor (if not already applied, because dotprod)
+        __m256i dists_int32_low, dists_int32_high;
+        // __m256i dists_uint16;
+        if (Reduction == Reductions::DotProd) {
+            // convert the floats to ints
+            dists_int32_low = _mm256_cvtps_epi32(accumulators[0]);
+            dists_int32_high = _mm256_cvtps_epi32(accumulators[1]);
+        } else {
+            // scale dists and add offsets
+            auto offset_vect = _mm256_set1_ps(offsets[m]);
+            auto dist0 = fma(accumulators[0], scaleby_vect, offset_vect);
+            auto dist1 = fma(accumulators[1], scaleby_vect, offset_vect);
+            // convert the floats to ints
+            dists_int32_low = _mm256_cvtps_epi32(dist0);
+            dists_int32_high = _mm256_cvtps_epi32(dist1);
+        }
+
+        // convert the floats to ints
+        // auto dists_int32_low = _mm256_cvtps_epi32(dist0);
+        // auto dists_int32_high = _mm256_cvtps_epi32(dist1);
+
+        // because we saturate to uint8s, we only get 32 objs to write after
+        // two 16-element codebooks
+        auto dists_uint16 = _mm256_packus_epi32(dists_int32_low, dists_int32_high);
+        if (m % 2) {
+            // if odd-numbered codebook, combine dists from previous codebook
+
+            // undo the weird shuffling caused by the pack operations
             auto dists = packed_epu16_to_unpacked_epu8(
                 dists_uint16_0, dists_uint16);
 
@@ -463,6 +518,225 @@ inline void bolt_scan(const uint8_t* codes,
         dists_out += 16;
     }
 }
+
+// ================================================================ Bolt
+
+template<int RotationSz=32>
+void boltR_rotate(const float* x, int ncols, const float* rotations, float* x_out)
+{
+    static constexpr int packet_width = 8; // objs per simd register
+    static constexpr int nstripes = RotationSz / packet_width;
+    static_assert(RotationSz % packet_width == 0,
+        "Rotation size must be a multiple of float packet width (i.e., 8)");
+    int nrotations = ncols / RotationSz;
+    int nrot_cols = nrotations * RotationSz;
+    int ntrailing_cols = ncols - nrot_cols;
+    assert(ntrailing_cols == 0); // TODO rm constraint after debug
+
+    // TODO rm
+    // for (int j = 0; j < ncols; j++) { x_out[j] = x[j]; } // TODO rm
+
+    __m256 accumulators[nstripes];
+    __m256 x_segments[nstripes];
+
+    for (int r = 0; r < nrotations; r++) { // for each rotation
+        for (int s = 0; s < nstripes; s++) { // reset dot prods and load x
+            accumulators[s] = _mm256_setzero_ps();
+            x_segments[s] = _mm256_load_ps(x);
+            x += packet_width;
+        }
+        // for (int i = 0; i < 1; i++ ) {
+        for (int i = 0; i < RotationSz; i++ ) { // TODO uncomment
+            for (int s = 0; s < nstripes; s++) { // for each stripe
+                auto partial_row = _mm256_load_ps(rotations);
+                rotations += packet_width;
+                accumulators[s] = fma(partial_row, x_segments[s], accumulators[s]);
+            }
+        }
+        for (int s = 0; s < nstripes; s++) {
+            _mm256_store_ps(x_out, accumulators[s]);
+            x_out += packet_width;
+        }
+    }
+    // deal with ncols not a multiple of RotationSz
+    for (int j = 0; j < ntrailing_cols; j++) {
+        x_out[j] = x[j];
+    }
+}
+
+// template<int NBytes, class data_t>
+// void boltR_encode_centroids(const data_t* centroids, int ncols, data_t* out) {
+//     bolt_encode_centroids<NBytes>(centroids, ncols, out);
+// }
+
+// template<int NBytes> // just calls safe version bolt scan
+// inline void boltR_scan(const uint8_t* codes,
+//     const uint8_t* luts, uint16_t* dists_out, int64_t nblocks)
+// {
+//     bolt_scan<NBytes, true>(codes, luts, dists_out, nblocks);
+// }
+
+
+/**
+ * @brief Encode a matrix of floats using Bolt.
+ * @details [long description]
+ *
+ * @param X Contiguous, row-major matrix whose rows are the vectors to encode
+ * @param nrows Number of rows in X
+ * @param ncols Number of columns in X; must be divisible by 2 * NBytes
+ * @param centroids A set of 16 * 2 * NBytes centroids in contiguous vertical
+ *  layout, as returned by bolt_encode_centroids.
+ * @param out Array in which to store the codes; must be of length
+ *  nrows * NBytes
+ * @tparam NBytes Byte length of Bolt encoding for each row
+ */
+template<int NBytes, int RotationSz=32>
+void boltR_encode(const float* X, int64_t nrows, int ncols,
+    const float* centroids, const float* rotations, uint8_t* out)
+{
+    static constexpr int lut_sz = 16;
+    static constexpr int packet_width = 8; // objs per simd register
+    static constexpr int nstripes = lut_sz / packet_width;
+    static constexpr int ncodebooks = 2 * NBytes;
+    static_assert(NBytes > 0, "Code length <= 0 is not valid");
+    const int subvect_len = ncols / ncodebooks;
+    const int trailing_subvect_len = ncols % ncodebooks;
+    assert(trailing_subvect_len == 0); // TODO remove this constraint
+    assert(ncols <= 8192);  // TODO rm once x_storage not static
+
+    __m256 accumulators[lut_sz / packet_width];
+    alignas(32) static float x_storage[8192];  // TODO not static or fixed sz
+
+    for (int64_t n = 0; n < nrows; n++) { // for each row of X
+
+        // these are the 3 lines that are different from bolt_encode (aside
+        // from the addition of x_storage)
+        auto x_row_ptr = X + n * ncols;
+        boltR_rotate<RotationSz>(x_row_ptr, ncols, rotations, &x_storage[0]);
+        // for (int j = 0; j < ncols; j++) { x_storage[j] = x_row_ptr[j]; } // TODO rm
+        auto x_ptr = &x_storage[0];
+
+        auto centroids_ptr = centroids;
+        for (int m = 0; m < ncodebooks; m++) { // for each codebook
+            for (int i = 0; i < nstripes; i++) {
+                accumulators[i] = _mm256_setzero_ps();
+            }
+            // compute distances to each of the centroids, which we assume
+            // are in column major order; this takes 2 packets per col
+            for (int j = 0; j < subvect_len; j++) { // for each encoded dim
+                auto x_j_broadcast = _mm256_set1_ps(*x_ptr);
+                for (int i = 0; i < nstripes; i++) { // for upper and lower 8
+                    auto centroids_half_col = _mm256_load_ps((float*)centroids_ptr);
+                    centroids_ptr += packet_width;
+                    auto diff = _mm256_sub_ps(x_j_broadcast, centroids_half_col);
+                    accumulators[i] = fma(diff, diff, accumulators[i]);
+                }
+                x_ptr++;
+            }
+
+            // convert the floats to ints
+            // XXX distances *must* be >> 0 for this to preserve correctness
+            auto dists_int32_low = _mm256_cvtps_epi32(accumulators[0]);
+            auto dists_int32_high = _mm256_cvtps_epi32(accumulators[1]);
+
+            // find the minimum value
+            auto dists = _mm256_min_epi32(dists_int32_low, dists_int32_high);
+            auto min_broadcast = broadcast_min(dists);
+
+            // mask where the minimum happens
+            auto mask_low = _mm256_cmpeq_epi32(dists_int32_low, min_broadcast);
+            auto mask_high = _mm256_cmpeq_epi32(dists_int32_high, min_broadcast);
+
+            // find first int where mask is set
+            uint32_t mask0 = _mm256_movemask_epi8(mask_low); // extracts MSBs
+            uint32_t mask1 = _mm256_movemask_epi8(mask_high);
+            uint64_t mask = mask0 + (static_cast<uint64_t>(mask1) << 32);
+            uint8_t min_idx = __tzcnt_u64(mask) >> 2; // div by 4 since 4B objs
+
+            if (m % 2) {
+                // odds -> store in upper 4 bits
+                out[m / 2] |= min_idx << 4;
+            } else {
+                // evens -> store in lower 4 bits; we don't actually need to
+                // mask because odd iter will clobber upper 4 bits anyway
+                out[m / 2] = min_idx;
+            }
+        }
+        out += NBytes;
+    }
+}
+
+template<int NBytes, int Reduction=Reductions::DistL2, int RotationSz=32>
+void boltR_lut(const float* q, int len, const float* centroids,
+    const float* rotations, const float* offsets, uint8_t* out)
+{
+    static_assert(
+        Reduction == Reductions::DistL2 ||
+        Reduction == Reductions::DotProd,
+        "Only reductions {DistL2, DotProd} supported");
+    static constexpr int lut_sz = 16;
+    static constexpr int packet_width = 8; // objs per simd register
+    static constexpr int nstripes = lut_sz / packet_width;
+    static constexpr int ncodebooks = 2 * NBytes;
+    static_assert(NBytes > 0, "Code length <= 0 is not valid");
+    const int subvect_len = len / ncodebooks;
+    const int trailing_subvect_len = len % ncodebooks;
+    assert(trailing_subvect_len == 0); // TODO remove this constraint
+
+    __m256 accumulators[nstripes];
+    __m256i dists_uint16_0 = _mm256_undefined_si256();
+
+    alignas(32) static float q_storage[1024];  // TODO not static or fixed sz
+    boltR_rotate<RotationSz>(q, len, rotations, &q_storage[0]);
+
+    for (int m = 0; m < ncodebooks; m++) { // for each codebook
+        for (int i = 0; i < nstripes; i++) {
+            accumulators[i] = _mm256_setzero_ps();
+        }
+        for (int j = 0; j < subvect_len; j++) { // for each dim in subvect
+
+            // these are the other two lines that differ from bolt v1 (aside
+            // from the addition of q_storage and rotating)
+            float q_j = q[(m * subvect_len) + j] - offsets[j];
+            auto q_broadcast = _mm256_set1_ps(q_j);
+
+            for (int i = 0; i < nstripes; i++) { // for upper 8, lower 8 floats
+                auto centroids_col = _mm256_load_ps(centroids);
+                centroids += packet_width;
+
+                if (Reduction == Reductions::DotProd) {
+                    accumulators[i] = fma(q_broadcast, centroids_col, accumulators[i]);
+                } else if (Reduction == Reductions::DistL2) {
+                    auto diff = _mm256_sub_ps(q_broadcast, centroids_col);
+                    accumulators[i] = fma(diff, diff, accumulators[i]);
+                }
+            }
+        }
+
+        // convert the floats to ints
+        auto dists_int32_low = _mm256_cvtps_epi32(accumulators[0]);
+        auto dists_int32_high = _mm256_cvtps_epi32(accumulators[1]);
+
+        // because we saturate to uint8s, we only get 32 objs to write after
+        // two 16-element codebooks
+        auto dists_uint16 = _mm256_packus_epi32(dists_int32_low, dists_int32_high);
+        if (m % 2) {
+            // if odd-numbered codebook, combine dists from previous codebook
+
+            // undo the weird shuffling caused by the pack operations
+            auto dists = packed_epu16_to_unpacked_epu8(
+                dists_uint16_0, dists_uint16);
+
+            _mm256_store_si256((__m256i*)out, dists);
+            out += 32;
+        } else {
+            // if even-numbered codebook, just store these dists to be combined
+            // when we look at the next codebook
+            dists_uint16_0 = dists_uint16;
+        }
+    }
+}
+
 
 } // anon namespace
 
