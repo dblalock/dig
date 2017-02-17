@@ -65,7 +65,7 @@ def sq_dists_to_vectors(X, queries, rowNorms=None, queryNorms=None):
         queryNorms = np.sum(queries * queries, axis=1)
 
     dotProds = np.dot(X, queries.T)
-    return (-2 * dotProds) + rowNorms + queryNorms
+    return (-2 * dotProds) + rowNorms + queryNorms  # len(X) x len(queries)
 
 
 def all_eq(x, y):
@@ -93,8 +93,10 @@ def compute_true_knn(X, Q, k=1000, print_every=5, block_sz=128):
 
     if nqueries <= block_sz:
         dists = sq_dists_to_vectors(Q, X)
+        assert dists.shape == (Q.shape[0], X.shape[0])
         for i in range(nqueries):
             truth[i, :] = top_k_idxs(dists[i, :], k)
+            # truth[i, :] = top_k_idxs(dists[:, i], k)
         return truth
 
     for b in range(nblocks):

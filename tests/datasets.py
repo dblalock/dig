@@ -84,6 +84,7 @@ class LabelMe:
     DIR     = join(DATA_DIR, 'labelme')         # noqa
     TRAIN   = join(DIR, 'labelme_train.npy')    # noqa
     TEST    = join(DIR, 'labelme_train.npy')    # noqa
+    QUERIES = join(DIR, 'labelme_test.npy')     # noqa
     TRUTH   = join(DIR, 'labelme_truth.npy')    # noqa
 
 
@@ -96,6 +97,8 @@ class Glove:
     TRUTH    = join(DIR, 'glove_truth.npy')     # noqa
 
 
+# note that we've only run the real experiments on the ones reported
+# in the paper(i.e., no cherrypicking)
 ALL_REAL_DATASETS = [
     Gist, Sift1M, Sift10M, Deep1M, Convnet1M, Mnist, LabelMe, Glove]
 
@@ -133,15 +136,21 @@ def _load_complete_dataset(which_dataset, num_queries=10):
         print "using separate test set!"
     except AttributeError:
         print "No training set found for dataset {}".format(str(which_dataset))
-        X_train = X_test
+        X_train = np.copy(X_test)
     try:
         Q = np.load(which_dataset.QUERIES)
     except AttributeError:
+        assert False # TODO rm
+        assert num_queries > 1
         X_train, Q = extract_random_rows(X_train, how_many=num_queries)
     try:
         true_nn = np.load(which_dataset.TRUTH)
     except AttributeError:
         true_nn = None
+
+    # np.set_printoptions(precision=6)
+    # print "start of Q:", Q[:5, :5]
+    # print "start of X_test:", X_test[:5, :5]
 
     return X_train, Q, X_test, true_nn
 
@@ -225,7 +234,7 @@ def ensure_num_cols_multiple_of(X, multiple_of):
     return X
 
 
-@_memory.cache
+# @_memory.cache
 def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
                  num_queries=10, Ntrain=-1, D_multiple_of=-1):
     true_nn = None
@@ -242,7 +251,7 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
     elif which_dataset == Random.WALK:
         X_test = np.random.randn(N, D)
         X_test = np.cumsum(X_test, axis=1)
-        X_train = X_test
+        X_train = np.copy(X_test)
         if Ntrain > 0:
             X_train = np.random.randn(Ntrain, D)
             X_train = np.cumsum(X_train)
@@ -253,16 +262,17 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
         centers = np.arange(D)
         centers = np.sum(np.meshgrid(centers, centers), axis=0)
         X_test, _ = make_blobs(n_samples=N, centers=centers)
-        X_train = X_test
+        X_train = np.copy(X_test)
         if Ntrain > 0:
             X_train, _ = make_blobs(n_samples=Ntrain, centers=centers)
         Q, true_nn = make_blobs(n_samples=num_queries, centers=centers)
 
     # datasets that are just one block of a "real" dataset
     elif isinstance(which_dataset, str):
+        # assert False # TODO rm after real experiments
         X_test = load_file(which_dataset)
         X_test, Q = extract_random_rows(X_test, how_many=num_queries)
-        X_train = X_test
+        X_train = np.copy(X_test)
         true_nn = _ground_truth_for_dataset(which_dataset)
 
     # "real" datasets with predefined train, test, queries, truth
@@ -275,7 +285,7 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
 
     N = X_test.shape[0] if N < 1 else N
     D = X_test.shape[1] if D < 1 else D
-    X_test, X_train = X_test[:N, :D], X_train[:N, :D]
+    X_test, X_train = np.copy(X_test)[:N, :D], X_train[:N, :D]
     Q = Q[:, :D] if len(Q.shape) > 1 else Q[:D]
 
     train_is_test = X_train.base is X_test or X_test.base is X_train
@@ -284,17 +294,28 @@ def load_dataset(which_dataset, N=-1, D=-1, norm_mean=False, norm_len=False,
     if train_is_test:
         print "WARNING: Training data is also the test data!"
 
+    # np.set_printoptions(precision=6)
+    # print "start of Q:", Q[:5, :5]
+    # print "start of X_test:", X_test[:5, :5]
+
     if norm_mean:
         means = np.mean(X_train, axis=0)
         X_train -= means
-        if not train_is_test:
-            X_test -= means
+        X_test -= means
+        # if not train_is_test:
+        #     X_test -= means
         Q -= means
     if norm_len:
+        assert False # TODO rm
         X_test /= np.linalg.norm(X_test, axis=1, keepdims=True)
-        if not train_is_test:
-            X_train /= np.linalg.norm(X_train, axis=1, keepdims=True)
+        X_train /= np.linalg.norm(X_train, axis=1, keepdims=True)
+        # if not train_is_test:
+        #     X_train /= np.linalg.norm(X_train, axis=1, keepdims=True)
         Q /= np.linalg.norm(Q, axis=-1, keepdims=True)
+
+    # np.set_printoptions(precision=6)
+    # print "start of Q:", Q[:5, :5]
+    # print "start of X_test:", X_test[:5, :5]
 
     # TODO don't convert datasets that are originally uint8s to floats
     X_train = X_train.astype(np.float32)

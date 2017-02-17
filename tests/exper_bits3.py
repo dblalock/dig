@@ -17,8 +17,8 @@ import files
 import product_quantize as pq
 import pyience as pyn
 
-# from utils import dists_sq, kmeans, top_k_idxs
-from utils import kmeans, top_k_idxs
+from utils import dists_sq, kmeans, top_k_idxs
+# from utils import kmeans, top_k_idxs
 
 from joblib import Memory
 _memory = Memory('.', verbose=0)
@@ -463,6 +463,17 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     queries = dataset.Q
     true_nn = dataset.true_nn
 
+    if true_nn is not None:
+        print "eval encoder(): got true_nn with shape: ", true_nn.shape
+
+    queries = queries[:200] # TODO rm for tables; fine for plots
+
+    # print "queries.shape", queries.shape
+    # queries = queries[:20, :] # TODO rm after debug
+    print "queries.shape", queries.shape
+    # assert smaller_better # TODO rm
+    # assert true_nn is not None # TODO rm
+
     need_true_dists = eval_dists or plot or true_nn is None
 
     if len(queries.shape) == 1:
@@ -482,8 +493,8 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     # count_in_top10 = 0.
     # count_in_top100 = 0.
     # count_in_top1000 = 0.
+    fracs_below_max = []
     if eval_dists:
-        fracs_below_max = []
         all_corrs = []
         all_rel_errs = []
         all_errs = []
@@ -494,8 +505,15 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         queries = queries[:256, :]
         # queries = queries[:2, :]  # TODO rm
 
+    assert not need_true_dists # TODO rm
+
+    print "encoding X..."
     X_enc = encoder.encode_X(X)
+    print "trying queries..."
     for i, q in enumerate(queries):
+
+        if i % 50 == 0:
+            print "trying query {}...".format(i)
 
         q_enc = encoder.encode_q(q)
         encoder.fit_query(q)
@@ -506,6 +524,10 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         #     dotprods = np.sum(X * q, axis=-1)
         #     assert np.array_equal(all_true_dists, dotprods)
         # assert need_true_dists  # TODO rm
+
+        # # TODO rm
+        # sq_dists = dists_sq(X, q)
+        # assert np.array_equal(all_true_dists, sq_dists)
 
         all_enc_dists = dist_func_enc(X_enc, q_enc)
 
@@ -600,10 +622,11 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     stats['X_cols'] = X.shape[1]
     stats['nqueries'] = len(queries)
     stats['eval_time_secs'] = t
+    # print "fracs_below_max", fracs_below_max
     stats['fracs_below_max_mean'] = np.mean(fracs_below_max)
     stats['fracs_below_max_std'] = np.std(fracs_below_max)
     stats['fracs_below_max_50th'] = np.median(fracs_below_max)
-    stats['fracs_below_max_90th'] = np.percentile(frac_below_max, q=90)
+    stats['fracs_below_max_90th'] = np.percentile(fracs_below_max, q=90)
     for i, r in enumerate(RECALL_Rs):
         key = 'recall@{}'.format(r)
         val = float(recall_counts[i]) / len(queries)
@@ -656,10 +679,10 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
 
     stats.update(encoder_params(encoder))
 
-    if eval_dists:
-        return stats, detailed_stats
-
-    return stats
+    # if eval_dists:
+    #     return stats, detailed_stats
+    # return stats
+    return stats, detailed_stats  # detailed_stats empty unless `eval_dists`
 
 
 def name_for_encoder(encoder):
@@ -686,10 +709,14 @@ def _experiment_one_dataset(which_dataset, eval_dists=False, dotprods=False,
     smaller_better = not dotprods
 
     N, D = -1, -1
-    # N = 10 * 1000
+    # N = 10 * 1000 # TODO rm after debug
 
-    # num_queries = 128  # no effect for "real" datasets
     num_queries = -1  # no effect for "real" datasets
+    if isinstance(which_dataset, str):
+        assert False # TODO rm; want to be certain using real queries for now
+        print "WARNING: sampling queries from data file"
+        num_queries = 128  # if just loading one file, need to sample queries
+        # assert False
     # num_queries = 1
     # num_queries = 3
     # num_queries = 8
@@ -707,18 +734,24 @@ def _experiment_one_dataset(which_dataset, eval_dists=False, dotprods=False,
     dataset = dataset_func(which_dataset)
     print "=== Using Dataset: {} ({}x{})".format(dataset.name, N, D)
 
+    # print "dataset.Q.shape", dataset.Q.shape
+    # print "dataset.X_train.shape", dataset.X_train.shape
+    # import sys; sys.exit()
+
     dicts = []
     detailed_dicts = []
     nbytes_list = [8, 16, 32]
     # nbytes_list = [8, 32]
-    # max_opq_iters = 5
+    # max_opq_iters = 5 # TODO uncomment below
     max_opq_iters = 20
 
     # ------------------------------------------------ Bolt
+    # rotation_sizes = [8, 16, 32]
+    rotation_sizes = [32]
     # rotation_sizes = [16]
-    rotation_sizes = [8, 16, 32]
     for nbytes in nbytes_list:
-        for opq_iters in (0, max_opq_iters):  # see how much rotations help
+        # for opq_iters in (0, max_opq_iters):  # see how much rotations help
+        for opq_iters in [0]:  # nope, no rotations
             rot_sizes = rotation_sizes if opq_iters > 0 else [16]
             for rot_sz in rot_sizes:
                 nsubvects = nbytes * 2
@@ -739,6 +772,7 @@ def _experiment_one_dataset(which_dataset, eval_dists=False, dotprods=False,
 
     # ------------------------------------------------ PQ
     # for codebook_bits in [4]:
+    # for codebook_bits in [8]:
     for codebook_bits in [4, 8]:
         for nbytes in nbytes_list:
             nsubvects = nbytes * (8 / codebook_bits)
@@ -755,8 +789,9 @@ def _experiment_one_dataset(which_dataset, eval_dists=False, dotprods=False,
     init = 'identity'
     opq_iters = max_opq_iters
     # opq_iters = 5
+    # for codebook_bits in [4, 8]:
     # for codebook_bits in [4]:
-    for codebook_bits in [4, 8]:
+    for codebook_bits in [8]:
         for nbytes in nbytes_list:
             nsubvects = nbytes * (8 / codebook_bits)
             encoder = OPQEncoder(dataset, nsubvects=nsubvects,
@@ -794,13 +829,16 @@ def experiment(eval_dists=False, dotprods=False):
 
     # which_datasets = [datasets.Mnist]
     # which_datasets = [datasets.Sift1M.TEST_100]
+    # which_datasets = [datasets.Sift1M]
     # which_datasets = [datasets.Convnet1M.TEST_100]
+    # which_datasets = [datasets.Convnet1M]
     # which_datasets = [datasets.LabelMe]
     # which_datasets = [datasets.Convnet1M, datasets.Mnist]
-    which_datasets = [datasets.LabelMe, datasets.Sift1M,
+    # which_datasets = [datasets.LabelMe, datasets.Sift1M,
+    which_datasets = [datasets.Sift1M,
                       datasets.Convnet1M, datasets.Mnist]
 
-    save_dir = '../results/acc_dotprods/' if dotprods else '../results/acc_l2_2'
+    save_dir = '../results/acc_dotprods/' if dotprods else '../results/acc_l2_3'
 
     for which_dataset in which_datasets:
         _dicts, _details = _experiment_one_dataset(
@@ -820,10 +858,10 @@ def main():
     # print dataset.name
     # return
 
-    print ">>>>>>>> eval-ing l2 dists"
-    experiment(eval_dists=True, dotprods=False)
-    print ">>>>>>>> eval-ing dot prods"
-    experiment(eval_dists=True, dotprods=True)
+    # print ">>>>>>>> eval-ing l2 dists"
+    # experiment(eval_dists=True, dotprods=False)
+    # print ">>>>>>>> eval-ing dot prods"
+    # experiment(eval_dists=True, dotprods=True)
     print ">>>>>>>> eval-ing recall@R"
     experiment(eval_dists=False, dotprods=False)
     return
@@ -863,13 +901,45 @@ def main():
     # dataset = dataset_func(datasets.Random.GAUSS)
     # dataset = dataset_func(datasets.Random.BLOBS)
     # dataset = dataset_func(datasets.Glove.TEST_100)
-    dataset = dataset_func(datasets.Sift1M.TEST_100)
+    # dataset = dataset_func(datasets.Sift1M.TEST_100)
     # dataset = dataset_func(datasets.Gist.TEST_100)
-    # dataset = dataset_func(datasets.Mnist)
+    dataset = dataset_func(datasets.Mnist)
     # dataset = dataset_func(datasets.Convnet1M.TEST_100)
     # dataset = dataset_func(datasets.Deep1M.TEST_100)
     # dataset = dataset_func(datasets.LabelMe)
+    # dataset = dataset_func(datasets.Convnet1M)
+    # dataset = dataset_func(datasets.Sift1M)
     print "=== Using Dataset: {} ({}x{})".format(dataset.name, N, D)
+
+    # print "dataset.X_train.mean():", dataset.X_train.mean()
+    # return
+
+    # if False:
+    #     nrows = 5
+    #     X_test = dataset.X_test
+    #     Q = dataset.Q
+
+    #     np.set_printoptions(precision=6)
+    #     print X_test[:5, :5]
+    #     print Q[:5, :5]
+    #     # return
+
+    #     true_nn = dataset.true_nn
+    #     for i in range(nrows):
+    #         dists = dists_sq(X_test, Q[i, :])
+    #         print np.argsort(dists, axis=-1)[:10]
+    #         print true_nn[i, :10]
+
+    #     import utils
+    #     truth2 = utils.compute_true_knn(X_test, Q[:nrows])
+    #     print
+    #     print truth2[:, :10]
+
+    #     # print utils.sq_dists_to_vectors(X_test[:8, :10], Q[:nrows, :10])
+    #     # for i in range(nrows):
+    #     #     print dists_sq(X_test[:8, :10], Q[i, :10])
+
+    #     return
 
     dicts = []
 

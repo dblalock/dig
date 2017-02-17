@@ -680,19 +680,22 @@ def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion
         # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ']
         # DATASETS = ['Convnet1M', 'MNIST']
         # ALGOS = ['PQ', 'OPQ']
-        ALGOS = ['PQ4', 'PQ', 'OPQ']
+        # ALGOS = ['PQ4', 'PQ', 'OPQ']
+        ALGOS = ['Bolt No Quantize', 'PQ', 'OPQ']
         for d, dset in enumerate(DATASETS):
             if l2:
-                path = os.path.join('../results/acc_l2/', dset, 'all_results.csv')
+                path = os.path.join('../results/distortion_l2/', dset, 'all_results.csv')
             else:
-                path = os.path.join('../results/acc_mips/', dset, 'all_results.csv')
+                path = os.path.join('../results/distortion_dotprods/', dset, 'all_results.csv')
 
             df = pd.read_csv(path)
 
             print "path: ", path
 
             pq4 = (df['_algo'] == 'PQ') & (df['_code_bits'] == 4)
-            df.loc[pq4, '_algo'] = 'PQ4'
+            df.loc[pq4, '_algo'] = 'Bolt No Quantize'
+            bolt_rot = (df['_algo'] == 'Bolt') & (df['opq_iters'] > 0)
+            df = df.loc[~bolt_rot]
 
             # print df.loc[df['_algo'] == 'PQ4']
             # print df.loc[df['_algo'] == 'PQ4']
@@ -709,13 +712,12 @@ def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion
 
             ax.set_title(dset)
 
-
     # ------------------------ legend
 
     ax = axes.ravel()[-1]
     leg_lines, leg_labels = ax.get_legend_handles_labels()
     plt.figlegend(leg_lines, leg_labels, loc='lower center',
-                  ncol=len(ALGOS), labelspacing=0)
+                  ncol=2, labelspacing=0)
 
     # ------------------------ axis cleanup / formatting
 
@@ -725,7 +727,10 @@ def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion
         # ax.set_title(title, y=1.01) # TODO uncomment
         ax.set_ylim([0, 1])
         ax.set_xlabel('', labelpad=-10)
-        ax.set_ylabel('Correlation With\nTrue Distance')
+        if l2:
+            ax.set_ylabel('Correlation With\nTrue Distance')
+        else:
+            ax.set_ylabel('Correlation With\nTrue Dot Product')
         if ax.legend_:
             ax.legend_.remove()
 
@@ -735,7 +740,8 @@ def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion
     plt.tight_layout(h_pad=.8)
     plt.suptitle(suptitle, fontsize=16)
     # plt.subplots_adjust(top=.92, bottom=.08)  # for fig size 6x9
-    plt.subplots_adjust(top=.90, bottom=.08)
+    # plt.subplots_adjust(top=.90, bottom=.08)
+    plt.subplots_adjust(top=.90, bottom=.1)
     save_fig(fname)
     # plt.show()
 
@@ -825,12 +831,14 @@ def main():
     # encoding_fig(data_enc=False)
     # encoding_fig()
     # query_speed_fig()
-    matmul_fig()
+    # matmul_fig()
     # recall_r_fig()
     # recall_r_fig(suptitle='Nearest Neighbor Recall', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
     # distortion_fig(fake_data=True, fname='l2_distortion_')
-    # distortion_fig(fake_data=False, fname='l2_distortion')
+    distortion_fig(fake_data=False, fname='l2_distortion')
+    distortion_fig(fake_data=False, fname='dotprod_distortion',
+                   suptitle='Quality of Approximate Dot Products', l2=False)
     # kmeans_fig()
 
 
