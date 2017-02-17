@@ -13,8 +13,8 @@ import pandas as pd
 # immediately upcasts LUT entries to 16 bits
 
 
-MCQ_RESULTS_DIR = '../results/timing/'
-MATMUL_RESULTS_DIR = '../results/matmul/'
+MCQ_RESULTS_DIR = '../results/timing2/'
+MATMUL_RESULTS_DIR = '../results/matmul2/'
 
 
 def get_mcq_path(D, nbytes):
@@ -108,7 +108,6 @@ def popcount_results_256():
     return pd.DataFrame.from_records(out_dicts)
 
 
-
 def encode_results():
     dicts = []
     # for D in [64, 128, 256]:
@@ -124,12 +123,12 @@ def encode_results():
                 key = abbrev + ' encode (10x5)'
                 thruputs = _extract_thruput(res.stats[key])
                 dicts += [{'task': 'encode_x', 'D': D, 'nbytes': nbytes,
-                           'algo': name, 'trial': i, 'y': t} \
-                           for i, t in enumerate(thruputs)]
+                           'algo': name, 'trial': i, 'y': t}
+                          for i, t in enumerate(thruputs)]
 
                 # results for encoding query
                 if abbrev == 'bolt':
-                    key = abbrev + ' encode (10x5)'
+                    key = abbrev + ' encode lut (10x5)'
                 else:
                     key = abbrev + ' encode lut float dist (10x5)'
                 thruputs = _extract_thruput(res.stats[key])

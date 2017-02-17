@@ -17,7 +17,8 @@ import files
 import product_quantize as pq
 import pyience as pyn
 
-from utils import dists_sq, kmeans, top_k_idxs
+# from utils import dists_sq, kmeans, top_k_idxs
+from utils import kmeans, top_k_idxs
 
 from joblib import Memory
 _memory = Memory('.', verbose=0)
@@ -26,8 +27,8 @@ np.set_printoptions(precision=3)
 
 SAVE_DIR = '../results'
 
-# ================================================================ Distances
 
+# ================================================================ Distances
 
 def dists_elemwise_sq(x, q):
     diffs = x - q
@@ -36,6 +37,10 @@ def dists_elemwise_sq(x, q):
 
 def dists_elemwise_l1(x, q):
     return np.abs(x - q)
+
+
+def dists_elemwise_dot(x, q):
+    return x * q
 
 
 # ================================================================ Clustering
@@ -89,9 +94,9 @@ class EncoderMixin(object):
         return self.encode_X(q, **kwargs).ravel()
 
     def dists_true(self, X, q):
-        # return np.sum(self.elemwise_dist_func(X, q), axis=-1)
+        return np.sum(self.elemwise_dist_func(X, q), axis=-1)
         # return np.sum(dists_sq(X, q), axis=-1)
-        return dists_sq(X, q)
+        # return dists_sq(X, q)
 
     def fit_query(self, q, **sink):
         pass
@@ -179,13 +184,17 @@ def _parse_codebook_params(D, code_bits=-1, bits_per_subvect=-1, nsubvects=-1):
     return nsubvects, ncentroids, subvect_len
 
 
-def _fit_opq_lut(q, centroids, elemwise_dist_func):
+def _fit_pq_lut(q, centroids, elemwise_dist_func):
     _, nsubvects, subvect_len = centroids.shape
     assert len(q) == nsubvects * subvect_len
 
     q = q.reshape((1, nsubvects, subvect_len))
     q_dists_ = elemwise_dist_func(centroids, q)
     q_dists_ = np.sum(q_dists_, axis=-1)
+
+    # assert elemwise_dist_func == dists_elemwise_dot
+    # assert np.array_equal(q_dists_, np.sum(centroids * q, axis=-1)) # TODO rm
+
     return np.asfortranarray(q_dists_)  # ncentroids, nsubvects, col-major
 
 
@@ -205,9 +214,6 @@ class PQEncoder(object):
         # for fast lookups via indexing into flattened array
         self.offsets = np.arange(self.nsubvects, dtype=np.int) * self.ncentroids
 
-        # self.centroids, _, _ = pq.learn_opq(
-        #     X, ncodebooks=nsubvects, niters=0)
-
         self.centroids = _learn_centroids(X, self.ncentroids, self.nsubvects,
                                           self.subvect_len)
 
@@ -219,10 +225,8 @@ class PQEncoder(object):
                 '_code_bits': self.code_bits}
 
     def encode_X(self, X, **sink):
-        idxs = pq._encode_X_pq(X, codebooks=self.centroids,
-                               elemwise_dist_func=self.elemwise_dist_func)
+        idxs = pq._encode_X_pq(X, codebooks=self.centroids)
         return idxs + self.offsets  # offsets let us index into raveled dists
-        # return idxs
 
     def encode_q(self, q, **sink):
         return None  # we use fit_query() instead, so fail fast
@@ -231,8 +235,8 @@ class PQEncoder(object):
         return np.sum(self.elemwise_dist_func(X, q), axis=-1)
 
     def fit_query(self, q, **sink):
-        self.q_dists_ = _fit_opq_lut(q, centroids=self.centroids,
-                                     elemwise_dist_func=self.elemwise_dist_func)
+        self.q_dists_ = _fit_pq_lut(q, centroids=self.centroids,
+                                    elemwise_dist_func=self.elemwise_dist_func)
 
     # def dists_enc(self, X_enc, q_unused):
     #     dists = np.zeros(X_enc.shape[0])
@@ -266,7 +270,6 @@ def _learn_best_quantization(luts):  # luts can be a bunch of vstacked luts
         luts_quantized = np.minimum(255, luts_quantized)
 
         # compute err
-        # luts_hat = luts_quantized / scale_by
         luts_ideal = (luts - luts_offset) * scale_by
         diffs = luts_ideal - luts_quantized
         # diffs = (luts_offset * scale_by) - luts_quantized
@@ -339,44 +342,6 @@ class OPQEncoder(PQEncoder):
 
                 self.lut_offsets, self.scale_by, _ = _learn_best_quantization(luts)
 
-                # # assess different cutoffs for where to crop the distros
-                # best_loss = np.inf
-                # # best_alpha = None
-                # best_floors = None
-                # best_scale_by = None
-                # for alpha in [.001, .002, .005, .01, .02, .05, .1]:
-                #     alpha_pct = int(100 * alpha)
-                #     # compute quantized luts this alpha would yield
-                #     floors = np.percentile(luts, alpha_pct, axis=0)
-                #     luts_offset = np.maximum(0, luts - floors)
-
-                #     ceil = np.percentile(luts_offset, 100 - alpha_pct)
-                #     scale_by = 255. / ceil
-                #     luts_quantized = np.floor(luts_offset * scale_by).astype(np.int)
-                #     luts_quantized = np.minimum(255, luts_quantized)
-
-                #     # compute err
-                #     # luts_hat = luts_quantized / scale_by
-                #     luts_ideal = (luts - luts_offset) * scale_by
-                #     diffs = luts_ideal - luts_quantized
-                #     # diffs = (luts_offset * scale_by) - luts_quantized
-                #     # print "diffs dtype: ", diffs.dtype  # float64
-                #     loss = np.sum(diffs * diffs)
-
-                #     print "alpha = {}\t-> loss = {}".format(alpha, loss)
-                #     # yep, almost exactly alpha saturate in either direction
-                #     print "fraction of 0s, 255s = {}, {}".format(
-                #         np.mean(luts_offset == 0), np.mean(luts_quantized == 255))
-
-                #     if loss <= best_loss:
-                #         best_loss = loss
-                #         best_floors = floors
-                #         best_scale_by = scale_by
-
-                # # use the best offsets and scale factor
-                # self.lut_offsets = best_floors
-                # self.scale_by = best_scale_by
-
             if False:  # learn overall true dists
                 # compute approximated nn distances between the queries
                 # and the training set
@@ -420,8 +385,8 @@ class OPQEncoder(PQEncoder):
             qR = pq.opq_rotate(q, self.R).ravel()
         elif self.algo == 'Bolt':
             qR = pq.bopq_rotate(q, self.rotations).ravel()
-        lut = _fit_opq_lut(qR, centroids=self.centroids,
-                           elemwise_dist_func=self.elemwise_dist_func)
+        lut = _fit_pq_lut(qR, centroids=self.centroids,
+                          elemwise_dist_func=self.elemwise_dist_func)
 
         if quantize:
             # print "quantizing query!"
@@ -448,8 +413,9 @@ class OPQEncoder(PQEncoder):
         elif self.algo == 'Bolt':
             X = pq.bopq_rotate(X, self.rotations)
 
-        idxs = pq._encode_X_pq(X, codebooks=self.centroids,
-                               elemwise_dist_func=self.elemwise_dist_func)
+        idxs = pq._encode_X_pq(X, codebooks=self.centroids)
+        # idxs = pq._encode_X_pq(X, codebooks=self.centroids,
+                               # elemwise_dist_func=self.elemwise_dist_func)
 
         return idxs + self.offsets  # offsets let us index into raveled dists
 
@@ -491,25 +457,13 @@ class OPQEncoder(PQEncoder):
 # ================================================================ Main
 
 def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
-                 # eval_dists=False, verbosity=1, plot=False):
-                 eval_dists=True, verbosity=1, plot=False):
-    # X, queries, centroids, groups = dataset
+                 eval_dists=True, verbosity=1, plot=False, smaller_better=True):
+
     X = dataset.X_test
     queries = dataset.Q
     true_nn = dataset.true_nn
 
     need_true_dists = eval_dists or plot or true_nn is None
-
-    # centroids = dataset.centroids
-    # groups = dataset.groups
-
-    # X, q = datasets.extract_random_rows(X, how_many=100)
-
-    # for i, q in enumerate(queries[:1]):
-    #     dists_true = encoder.dists_true(X[:100], q)
-    #     print "dists_true[:100] eval", dists_true
-    # print "X[:20, :20]", X[:20, :20]
-    # return
 
     if len(queries.shape) == 1:
         queries = [queries]
@@ -538,6 +492,7 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     if need_true_dists:
         X = X[:10000]  # limit to 10k points because otherwise it takes forever
         queries = queries[:256, :]
+        # queries = queries[:2, :]  # TODO rm
 
     X_enc = encoder.encode_X(X)
     for i, q in enumerate(queries):
@@ -545,26 +500,42 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         q_enc = encoder.encode_q(q)
         encoder.fit_query(q)
         if need_true_dists:
-            all_true_dists = dists_sq(X, q)
+            all_true_dists = dist_func_true(X, q)
+
+        #     # TODO rm
+        #     dotprods = np.sum(X * q, axis=-1)
+        #     assert np.array_equal(all_true_dists, dotprods)
+        # assert need_true_dists  # TODO rm
+
         all_enc_dists = dist_func_enc(X_enc, q_enc)
+
+        # print "enc dists, true dists:"
+        # print all_enc_dists[:10]
+        # print all_true_dists[:10]
+        # continue
 
         # ------------------------ begin analysis / reporting code
 
         # find true knn
         if need_true_dists:
-            knn_idxs = top_k_idxs(all_true_dists, 10, smaller_better=True)
+            knn_idxs = top_k_idxs(all_true_dists, 10, smaller_better=smaller_better)
         else:
             knn_idxs = true_nn[i, :10]
 
         # compute fraction of points with enc dists as close as 10th nn
         knn_enc_dists = all_enc_dists[knn_idxs]
-        max_enc_dist = np.max(knn_enc_dists)
-        num_below_max = np.sum(all_enc_dists <= max_enc_dist)
+        if smaller_better:
+            max_enc_dist = np.max(knn_enc_dists)
+            num_below_max = np.sum(all_enc_dists <= max_enc_dist)
+        else:
+            max_enc_dist = np.min(knn_enc_dists)
+            num_below_max = np.sum(all_enc_dists >= max_enc_dist)
+
         frac_below_max = float(num_below_max) / len(all_enc_dists)
         fracs_below_max.append(frac_below_max)
 
         # compute recall@R stats
-        top_1000 = top_k_idxs(all_enc_dists, 1000, smaller_better=True)
+        top_1000 = top_k_idxs(all_enc_dists, 1000, smaller_better=smaller_better)
         nn_idx = knn_idxs[0]
         for i, r in enumerate(RECALL_Rs):
             recall_counts[i] += nn_idx in top_1000[:r]
@@ -584,8 +555,8 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
             rel_errs = (all_enc_dists - all_true_dists) / all_true_dists
             all_rel_errs.append(rel_errs)
             all_errs.append(all_enc_dists - all_true_dists)
-            assert np.all(all_enc_dists >= 0)
-            assert np.all(all_true_dists >= 0)
+            # assert np.all(all_enc_dists >= 0)
+            # assert np.all(all_true_dists >= 0)
             assert not np.any(np.isinf(all_enc_dists))
             assert not np.any(np.isnan(all_enc_dists))
             assert not np.any(np.isinf(all_true_dists))
@@ -622,10 +593,6 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
 
     t = time.time() - t0
 
-        # for i in range(len(all_corrs)):
-        #     detailed_stats.append({'corr': all_corrs[i], 'rel_err': rel_errs[i],
-        #                            'err': all_errs[i]})
-
     detailed_stats = []  # list of dicts
     stats = {}
     # stats['encoder'] = name_for_encoder(encoder)
@@ -648,7 +615,7 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
     if eval_dists:
         corrs = np.hstack(all_corrs)
         rel_errs = np.hstack(all_rel_errs)
-        assert np.all(rel_errs >= -1)
+        # assert np.all(rel_errs >= -1)
         # print "rel_errs[:20]", rel_errs[:20]
         # print "rel_errs inf idxs: ", np.where(np.isinf(rel_errs))[0]
         # print "rel_errs nan idxs: ", np.where(np.isnan(rel_errs))[0]
@@ -711,14 +678,17 @@ def encoder_params(encoder):
 
 
 # @_memory.cache
-def _experiment_one_dataset(which_dataset, eval_dists=False):
-    # SAVE_DIR = '../results/corr_l2/'
-    SAVE_DIR = '../results/acc_l2/'
+def _experiment_one_dataset(which_dataset, eval_dists=False, dotprods=False,
+                            save_dir=None):
+    SAVE_DIR = save_dir if save_dir else '../results/acc/'
+
+    elemwise_dist_func = dists_elemwise_dot if dotprods else dists_elemwise_sq
+    smaller_better = not dotprods
 
     N, D = -1, -1
-    N = 10 * 1000
+    # N = 10 * 1000
 
-    # num_queries = 128
+    num_queries = 128  # no effect for "real" datasets
     # num_queries = 1
     # num_queries = 3
     # num_queries = 8
@@ -729,54 +699,54 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     max_ncodebooks = 64
 
     dataset_func = functools.partial(load_dataset_object, N=N, D=D,
+                                     num_queries=num_queries,
                                      norm_len=norm_len, norm_mean=norm_mean,
                                      D_multiple_of=max_ncodebooks)
 
     dataset = dataset_func(which_dataset)
     print "=== Using Dataset: {} ({}x{})".format(dataset.name, N, D)
 
-    # D = dataset.X_train.shape[1]
-    # remainder = D % max_ncodebooks
-
-    # print "X last col sums: ", np.sum(dataset.X_train[:, -10:], axis=0)
-
-    # if remainder > 0:
-    #     nzeros = max_ncodebooks - remainder
-    #     dataset = dataset._replace(X_train=_insert_zeros(dataset.X_train, nzeros))
-    #     dataset = dataset._replace(X_test=_insert_zeros(dataset.X_test, nzeros))
-    #     dataset = dataset._replace(Q=_insert_zeros(dataset.Q, nzeros))
-
-    # X_train = dataset.X_train
-    # print "dataset.X_train.shape", X_train.shape
-    # print "last col sums: ", np.sum(X_train[:, -10:], axis=0)
-    # import sys; sys.exit(0)
-
     dicts = []
     detailed_dicts = []
     nbytes_list = [8, 16, 32]
-    max_opq_iters = 5
+    # nbytes_list = [8, 32]
+    # max_opq_iters = 5
+    max_opq_iters = 20
 
     # ------------------------------------------------ Bolt
-    for opq_iters in (0, max_opq_iters):  # see how much rotations help
-        for nbytes in nbytes_list:
-            nsubvects = nbytes * 2
-            encoder = OPQEncoder(dataset, nsubvects=nsubvects,
-                                 bits_per_subvect=4,
-                                 opq_iters=opq_iters,
-                                 algo='Bolt', quantize_lut=True)
-            stats, detailed_stats = eval_encoder(dataset, encoder,
-                                                 eval_dists=eval_dists)
-            dicts.append(stats)
-            detailed_dicts += detailed_stats
+    # rotation_sizes = [16]
+    rotation_sizes = [8, 16, 32]
+    for nbytes in nbytes_list:
+        for opq_iters in (0, max_opq_iters):  # see how much rotations help
+            rot_sizes = rotation_sizes if opq_iters > 0 else [16]
+            for rot_sz in rot_sizes:
+                nsubvects = nbytes * 2
+                encoder = OPQEncoder(dataset, nsubvects=nsubvects,
+                                     bits_per_subvect=4,
+                                     opq_iters=opq_iters,
+                                     R_sz=rot_sz,
+                                     elemwise_dist_func=elemwise_dist_func,
+                                     algo='Bolt', quantize_lut=True)
+                stats, detailed_stats = eval_encoder(
+                    dataset, encoder, eval_dists=eval_dists,
+                    smaller_better=smaller_better)
+                stats['rot_sz'] = rot_sz
+                for d in detailed_dicts:
+                    d['rot_sz'] = rot_sz
+                dicts.append(stats)
+                detailed_dicts += detailed_stats
 
     # ------------------------------------------------ PQ
+    # for codebook_bits in [4]:
     for codebook_bits in [4, 8]:
         for nbytes in nbytes_list:
             nsubvects = nbytes * (8 / codebook_bits)
             encoder = PQEncoder(dataset, nsubvects=nsubvects,
-                                bits_per_subvect=codebook_bits)
-            stats, detailed_stats = eval_encoder(dataset, encoder,
-                                                 eval_dists=eval_dists)
+                                bits_per_subvect=codebook_bits,
+                                elemwise_dist_func=elemwise_dist_func)
+            stats, detailed_stats = eval_encoder(
+                dataset, encoder, eval_dists=eval_dists,
+                smaller_better=smaller_better)
             dicts.append(stats)
             detailed_dicts += detailed_stats
 
@@ -784,14 +754,17 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     init = 'identity'
     opq_iters = max_opq_iters
     # opq_iters = 5
+    # for codebook_bits in [4]:
     for codebook_bits in [4, 8]:
         for nbytes in nbytes_list:
             nsubvects = nbytes * (8 / codebook_bits)
             encoder = OPQEncoder(dataset, nsubvects=nsubvects,
                                  bits_per_subvect=codebook_bits,
-                                 opq_iters=opq_iters, init=init)
-            stats, detailed_stats = eval_encoder(dataset, encoder,
-                                                 eval_dists=eval_dists)
+                                 opq_iters=opq_iters, init=init,
+                                 elemwise_dist_func=elemwise_dist_func)
+            stats, detailed_stats = eval_encoder(
+                dataset, encoder, eval_dists=eval_dists,
+                smaller_better=smaller_better)
             dicts.append(stats)
             detailed_dicts += detailed_stats
 
@@ -816,15 +789,25 @@ def _experiment_one_dataset(which_dataset, eval_dists=False):
     return dicts, detailed_dicts
 
 
-def experiment(eval_dists=False):
+def experiment(eval_dists=False, dotprods=False):
 
-    which_datasets = [datasets.Mnist]
+    # which_datasets = [datasets.Mnist]
+    # which_datasets = [datasets.Sift1M.TEST_100]
+    # which_datasets = [datasets.Convnet1M.TEST_100]
+    # which_datasets = [datasets.LabelMe]
     # which_datasets = [datasets.Convnet1M, datasets.Mnist]
-    # which_datasets = [datasets.LabelMe, datasets.Sift1M,
-    #                   datasets.Convnet1M, datasets.Mnist]
+    which_datasets = [datasets.LabelMe, datasets.Sift1M,
+                      datasets.Convnet1M, datasets.Mnist]
+
+    save_dir = '../results/acc_dotprods/' if dotprods else '../results/acc_l2_2'
 
     for which_dataset in which_datasets:
-        _dicts, _details = _experiment_one_dataset(which_dataset, eval_dists=eval_dists)
+        _dicts, _details = _experiment_one_dataset(
+            which_dataset, eval_dists=eval_dists, dotprods=dotprods,
+            save_dir=save_dir)
+            # save_dir='../results/tmp/')
+            # save_dir='../results/acc/')
+            # which_dataset, eval_dists=eval_dists, save_dir='../results/acc_l2/')
 
 
 def main():
@@ -836,7 +819,9 @@ def main():
     # print dataset.name
     # return
 
-    experiment(eval_dists=True)
+    experiment(eval_dists=True, dotprods=False)
+    # experiment(eval_dists=True, dotprods=True)
+    # experiment(eval_dists=False, dotprods=False)
     return
 
     N, D = -1, -1

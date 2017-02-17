@@ -1567,11 +1567,8 @@ def bopq_rotate(X, rotations):
 
 
 @_memory.cache  # opq with block diagonal rotations
-def learn_bopq(X_train, ncodebooks, codebook_bits=8, niters=20,
-               initial_kmeans_iters=1, R_sz=32, **sink):
-
-    init = 'identity'  # only identity supported for now
-    print "BOPQ: Using init '{}'".format(init)
+def learn_bopq(X_train, ncodebooks, codebook_bits=4, niters=20,
+               initial_kmeans_iters=1, R_sz=16, **sink):
 
     t0 = time.time()
 
@@ -1604,8 +1601,8 @@ def learn_bopq(X_train, ncodebooks, codebook_bits=8, niters=20,
         X_hat = reconstruct_X_pq(assignments, codebooks)
         # err = compute_reconstruction_error(X_rotated, X_hat, subvect_len=subvect_len)
         err = compute_reconstruction_error(X_rotated, X_hat)
-        print "---- BOPQ {}x{}b iter {}: mse / variance = {:.5f}".format(
-            ncodebooks, codebook_bits, it, err)
+        print "---- BOPQ {} {}x{}b iter {}: mse / variance = {:.5f}".format(
+            R_sz, ncodebooks, codebook_bits, it, err)
 
         rotations = []
         for i in range(nrots):
@@ -1628,8 +1625,8 @@ def learn_bopq(X_train, ncodebooks, codebook_bits=8, niters=20,
     X_hat = reconstruct_X_pq(assignments, codebooks)
     err = compute_reconstruction_error(X_rotated, X_hat)
     t = time.time() - t0
-    print "---- BOPQ {}x{}b final mse / variance = {:.5f} ({:.3f}s)".format(
-        ncodebooks, codebook_bits, err, t)
+    print "---- BOPQ {} {}x{}b final mse / variance = {:.5f} ({:.3f}s)".format(
+        R_sz, ncodebooks, codebook_bits, err, t)
 
     return codebooks, assignments, rotations
 

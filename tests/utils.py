@@ -168,3 +168,12 @@ def hamming_dist(v1, v2):
 
 def hamming_dists(X, q):
     return np.array([hamming_dist(row, q) for row in X])
+
+
+if __name__ == '__main__':
+
+    a = np.random.randn(10)
+    sort_idxs = np.argsort(a)[::-1]
+    print a
+    print top_k_idxs(a, 3, smaller_better=False)
+    print sort_idxs[:3]
