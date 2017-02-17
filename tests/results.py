@@ -320,16 +320,23 @@ def query_speed_results():
         algo = 'Matmul {}'.format(sz)
         for nbytes in nbytes_list:
             thruputs = _extract_thruput(s)  # / 1e6
-            out_dicts += [{'algo': algo, 'nbytes': nbytes, 'y': t} for r in thruputs]
+            print "thruputs:", thruputs
+            out_dicts += [{'algo': algo, 'nbytes': nbytes, 'y': t} for t in thruputs]
 
     return pd.DataFrame.from_records(out_dicts)
 
 
 def main():
+    pass
     # print _extract_thruput('foo (10x5): 2.456 (1302931596/s), 2.344 (1365187713/s), 2.125 (1505882352/s), 2.829 (1131141746/s), 2.148 (1489757914/s), 2.167 (1476695892/s), 2.327 (1375161151/s), 2.145 (1491841491/s), 2.12 (1509433962/s), 2.112 (1515151515/s)')
 
     # print McqResults('../results/tmp.txt')
-    print McqResults('../results/mcq/mcq_D=256_M=8.txt')
+    # print McqResults('../results/mcq/mcq_D=256_M=8.txt')
+
+    # res = query_speed_results()
+    # print res.loc[res['algo'] == 'Matmul 1']
+    # print res.loc[res['algo'] == 'Matmul 256']
+
 
 if __name__ == '__main__':
     main()

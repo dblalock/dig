@@ -505,7 +505,7 @@ def eval_encoder(dataset, encoder, dist_func_true=None, dist_func_enc=None,
         queries = queries[:256, :]
         # queries = queries[:2, :]  # TODO rm
 
-    assert not need_true_dists # TODO rm
+    # assert not need_true_dists # TODO rm
 
     print "encoding X..."
     X_enc = encoder.encode_X(X)
@@ -832,11 +832,11 @@ def experiment(eval_dists=False, dotprods=False):
     # which_datasets = [datasets.Sift1M]
     # which_datasets = [datasets.Convnet1M.TEST_100]
     # which_datasets = [datasets.Convnet1M]
-    # which_datasets = [datasets.LabelMe]
+    which_datasets = [datasets.LabelMe]
     # which_datasets = [datasets.Convnet1M, datasets.Mnist]
     # which_datasets = [datasets.LabelMe, datasets.Sift1M,
-    which_datasets = [datasets.Sift1M,
-                      datasets.Convnet1M, datasets.Mnist]
+    # which_datasets = [datasets.Sift1M,
+    #                   datasets.Convnet1M, datasets.Mnist]
 
     save_dir = '../results/acc_dotprods/' if dotprods else '../results/acc_l2_3'
 
@@ -858,12 +858,12 @@ def main():
     # print dataset.name
     # return
 
-    # print ">>>>>>>> eval-ing l2 dists"
-    # experiment(eval_dists=True, dotprods=False)
-    # print ">>>>>>>> eval-ing dot prods"
-    # experiment(eval_dists=True, dotprods=True)
-    print ">>>>>>>> eval-ing recall@R"
-    experiment(eval_dists=False, dotprods=False)
+    print ">>>>>>>> eval-ing l2 dists"
+    experiment(eval_dists=True, dotprods=False)
+    print ">>>>>>>> eval-ing dot prods"
+    experiment(eval_dists=True, dotprods=True)
+    # print ">>>>>>>> eval-ing recall@R"
+    # experiment(eval_dists=False, dotprods=False)
     return
 
     N, D = -1, -1

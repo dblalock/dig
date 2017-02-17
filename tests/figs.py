@@ -214,7 +214,7 @@ def encoding_fig(fake_data=False):
     # plt.show()
 
 
-def query_speed_fig(fake_data=False):
+def query_speed_fig(fake_data=False, fname='query_speed', with_matmuls=True):
     # experiment params: fixed N = 100k, D = 256, Q = 1024;
     # layout: rows = 8B, 16B, 32B; bar graph in each row
     #   alternative: plot in each row vs batch size
@@ -249,9 +249,12 @@ def query_speed_fig(fake_data=False):
     else:
         # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ', 'Matmul 1', # 'Matmul 16',
         #          'Matmul 64', 'Matmul 256', 'Matmul 1024']
-        ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ']
-        # ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ', 'PairQ',
-                # 'Matmul 1', 'Matmul 256', 'Matmul 1024']
+
+        if with_matmuls:
+            ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ', 'PairQ',
+                    'Matmul 1', 'Matmul 256', 'Matmul 1024']
+        else:
+            ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ']
         df = results.query_speed_results()
         df['y'] = df['y'] / 1e9  # convert to billions
 
@@ -335,7 +338,7 @@ def query_speed_fig(fake_data=False):
     # ------------------------ show / save plot
 
     plt.tight_layout()
-    save_fig('query_speed')
+    save_fig(fname)
     # plt.show()
 
 
@@ -527,29 +530,39 @@ def recall_r_fig(fake_data=False, suptitle=None, l2=True, fname='l2_recall'):
     else:  # real data
         DATASETS = ['Sift1M', 'Convnet1M', 'LabelMe', 'MNIST']
         # ALGOS = ['PQ', 'OPQ']
-        ALGOS = ['PQ4', 'PQ', 'OPQ']
+        ALGOS = ['Bolt', 'Bolt No Quantize', 'PQ', 'OPQ']
         for d, dset in enumerate(DATASETS):
             if l2:
-                path = os.path.join('../results/acc_l2/', dset, 'summary.csv')
+                path = os.path.join('../results/acc_l2_3/', dset, 'summary.csv')
             else:
                 path = os.path.join('../results/acc_mips/', dset, 'summary.csv')
 
             df = pd.read_csv(path)
             pq4 = (df['_algo'] == 'PQ') & (df['_code_bits'] == 4)
-            df.loc[pq4, '_algo'] = 'PQ4'
+            df.loc[pq4, '_algo'] = 'Bolt No Quantize'
+
+            # rm results with bolt rotations
+            bolt_rot = (df['_algo'] == 'Bolt') & (df['opq_iters'] > 0)
+            df = df.loc[~bolt_rot]
 
             df.rename(columns={'_algo': 'algo'}, inplace=True)
             all_nbytes = (df['_code_bits'] * df['_ncodebooks'] / 8).values
             # df['nbytes'] = ["{}B".format(b) for b in all_nbytes.astype(np.int)]
             df['nbytes'] = all_nbytes.astype(np.int)
 
+
             for b, nbytes in enumerate(NBYTES_LIST):
                 ax = axes[d, b]
                 data = df.loc[df['nbytes'] == nbytes]
                 for algo in ALGOS:
                     df_row = data.loc[data['algo'] == algo]  # should be 1 row
-                    # print df_row
+                    if len(df_row) != 1:
+                        print df_row
+                        print "dset = ", dset
+                        print "algo = ", algo
+                        assert len(df_row) == 1
                     assert len(df_row) == 1
+                    # return
                     # if dset == 'MNIST':  # TODO rm hack once all dsets rerun
                     #     x = np.array(Rs)
                     # else:
@@ -618,8 +631,8 @@ def recall_r_fig(fake_data=False, suptitle=None, l2=True, fname='l2_recall'):
     # plt.subplots_adjust(top=.88, bottom=.21, hspace=.4)
     plt.suptitle(suptitle, fontsize=16)
     plt.subplots_adjust(top=.91, bottom=.11)
-    # save_fig(fname)
-    plt.show()
+    save_fig(fname)
+    # plt.show()
 
 
 def distortion_fig(fake_data=False, l2=True, suptitle=None, fname='l2_distortion'):
@@ -830,7 +843,7 @@ def main():
     # encoding_fig(data_enc=True)
     # encoding_fig(data_enc=False)
     # encoding_fig()
-    # query_speed_fig()
+    # query_speed_fig(fname='query_speed_with_matmuls')
     # matmul_fig()
     # recall_r_fig()
     # recall_r_fig(suptitle='Nearest Neighbor Recall', fname='l2_recall')

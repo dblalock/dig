@@ -1618,6 +1618,9 @@ def learn_bopq(X_train, ncodebooks, codebook_bits=4, niters=20,
 
             X_rotated[:, start:end] = np.dot(X_sub, R.T)
 
+        # # TODO rm
+        # X_rotated = bopq_rotate(X, rotations)
+
         # update assignments and codebooks based on new rotations
         assignments = _encode_X_pq(X_rotated, codebooks)
         codebooks = _update_centroids_opq(X_rotated, assignments, ncentroids)
