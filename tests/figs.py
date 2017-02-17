@@ -84,7 +84,8 @@ def encoding_fig(fake_data=False):
     # fig, axes = plt.subplots(3, 1)
     fig, axes = plt.subplots(3, 2)
 
-    ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ']
+    # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ']
+    ALGOS = ['Bolt', 'PQ', 'OPQ']
     algo2offset = {'Bolt': 100, 'PQ': 50, 'OPQ': 30, 'PairQ': 25}
     lengths = [64, 128, 256, 512, 1024]
     # results_for_algos_lengths =
@@ -155,8 +156,9 @@ def encoding_fig(fake_data=False):
             for b, nbytes in enumerate(NBYTES_LIST):  # for each row in subplots
                 ax = ax_col[b]
                 plot_df = df.loc[df['nbytes'] == nbytes]
+                plot_df = plot_df.loc[plot_df['algo'].isin(ALGOS)]
                 sb.tsplot(value='y', condition='algo', unit='trial', time='D',
-                    data=plot_df, ax=ax, ci=95, n_boot=500)
+                          data=plot_df, ax=ax, ci=95, n_boot=500)
                     # data=plot_df, ax=ax, legend=False, ci=95, n_boot=500)
 
     # ------------------------ legend
@@ -218,10 +220,9 @@ def query_speed_fig(fake_data=False):
     #   alternative: plot in each row vs batch size
     # algos: Bolt; PQ; OPQ; PairQ; Matmul, batch={1, 16, 64, 256}
 
-    sb.set_context("talk", rc={"figure.figsize": (6, 8)})
-    # sb.set_palette("Set1", n_colors=len(ALGOS))
+    sb.set_context("talk")
     set_palette(ncolors=8)
-    fig, axes = plt.subplots(3, 1)
+    fig, axes = plt.subplots(3, 1, figsize=(6, 8))
 
     if fake_data:  # for debugging
         ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ',
@@ -248,7 +249,7 @@ def query_speed_fig(fake_data=False):
     else:
         # ALGOS = ['Bolt', 'PQ', 'OPQ', 'PairQ', 'Matmul 1', # 'Matmul 16',
         #          'Matmul 64', 'Matmul 256', 'Matmul 1024']
-        ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ', 'PairQ']
+        ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ']
         # ALGOS = ['Bolt', 'Binary Embedding', 'PQ', 'OPQ', 'PairQ',
                 # 'Matmul 1', 'Matmul 256', 'Matmul 1024']
         df = results.query_speed_results()
@@ -824,9 +825,9 @@ def main():
     # encoding_fig(data_enc=False)
     # encoding_fig()
     # query_speed_fig()
-    # matmul_fig()
+    matmul_fig()
     # recall_r_fig()
-    recall_r_fig(suptitle='Nearest Neighbor Recall', fname='l2_recall')
+    # recall_r_fig(suptitle='Nearest Neighbor Recall', fname='l2_recall')
     # recall_r_fig(suptitle='Nearest Neighbor Recall, Dot Product', fname='mips_recall')
     # distortion_fig(fake_data=True, fname='l2_distortion_')
     # distortion_fig(fake_data=False, fname='l2_distortion')
