@@ -1187,9 +1187,9 @@ def main():
     N, D = -1, -1
 
     # N = -1  # set this to not limit real datasets to first N entries
-    # N = 10 * 1000
+    N = 10 * 1000
     # N = 20 * 1000
-    N = 50 * 1000
+    # N = 50 * 1000
     # N = 100 * 1000
     # N = 1000 * 1000
     # D = 954    # for 6 and 9 subvects on Gist
@@ -1272,17 +1272,17 @@ def main():
     # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=6, opq_iters=5)
     # eval_encoder(dataset, encoder)
 
-    print "------------------------ pq l2, 16x4 bit centroid idxs"
-    encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
-    dicts.append(eval_encoder(dataset, encoder))
+    # print "------------------------ pq l2, 16x4 bit centroid idxs"
+    # encoder = PQEncoder(dataset, nsubvects=16, bits_per_subvect=4)
+    # dicts.append(eval_encoder(dataset, encoder))
 
-    print "------------------------ opq l2, 16x4 bit centroid idxs"
-    encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
-    dicts.append(eval_encoder(dataset, encoder))
+    # print "------------------------ opq l2, 16x4 bit centroid idxs"
+    # encoder = OPQEncoder(dataset, nsubvects=16, bits_per_subvect=4, opq_iters=5)
+    # dicts.append(eval_encoder(dataset, encoder))
 
-    print "------------------------ pq l2, 32x4 bit centroid idxs"
-    encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=4)
-    dicts.append(eval_encoder(dataset, encoder))
+    # print "------------------------ pq l2, 32x4 bit centroid idxs"
+    # encoder = PQEncoder(dataset, nsubvects=32, bits_per_subvect=4)
+    # dicts.append(eval_encoder(dataset, encoder))
 
     # print "------------------------ opq l2, 24x4 bit centroid idxs"
     # encoder = OPQEncoder(dataset, nsubvects=24, bits_per_subvect=4, opq_iters=5)

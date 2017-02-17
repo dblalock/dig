@@ -688,7 +688,8 @@ def _experiment_one_dataset(which_dataset, eval_dists=False, dotprods=False,
     N, D = -1, -1
     # N = 10 * 1000
 
-    num_queries = 128  # no effect for "real" datasets
+    # num_queries = 128  # no effect for "real" datasets
+    num_queries = -1  # no effect for "real" datasets
     # num_queries = 1
     # num_queries = 3
     # num_queries = 8
@@ -819,9 +820,12 @@ def main():
     # print dataset.name
     # return
 
+    print ">>>>>>>> eval-ing l2 dists"
     experiment(eval_dists=True, dotprods=False)
-    # experiment(eval_dists=True, dotprods=True)
-    # experiment(eval_dists=False, dotprods=False)
+    print ">>>>>>>> eval-ing dot prods"
+    experiment(eval_dists=True, dotprods=True)
+    print ">>>>>>>> eval-ing recall@R"
+    experiment(eval_dists=False, dotprods=False)
     return
 
     N, D = -1, -1

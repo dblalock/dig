@@ -2358,6 +2358,11 @@ static inline void print(const Container<data_t>& data, std::string name) {
 // Randomness
 // ================================================================
 
+// TODO sample without replacement using:
+// http://lemire.me/blog/2013/08/16/picking-n-distinct-numbers-at-random-how-to-do-it-fast/
+// TODO use PCG for random number generation
+// https://github.com/imneme/pcg-cpp
+
 // ================================ Random Number Generation
 
 // utility func for rand_ints
